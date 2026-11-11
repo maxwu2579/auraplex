@@ -1,0 +1,32 @@
+{
+  "string": {
+    "Whatsapp": "WhatsApp Business",
+    "Description": "连接公司号码，在这里接收和回复客户消息。",
+    "Connect": "连接",
+    "Disconnect": "断开",
+    "Save": "保存",
+    "Cancel": "取消",
+    "PhoneNumberId": "公司号码编号（Phone Number ID）",
+    "WabaId": "商业账户编号（WABA ID）",
+    "AccessToken": "访问令牌",
+    "TokenHint": "留空则保留已保存的令牌。",
+    "Webhook": "消息回调地址",
+    "Connected": "已连接",
+    "LocalMode": "本地模拟器",
+    "TokenStored": "令牌已保存在服务器",
+    "Unavailable": "连接不到后台服务，请稍后再试。",
+    "InvalidParameters": "请填写纯数字的账户编号和访问令牌。",
+    "Forbidden": "只有工作区所有者或管理员可以管理这个连接。",
+    "Conflict": "这个工作区或号码已经连接，请先断开原连接。",
+    "Failed": "保存连接失败，请稍后再试。",
+    "Message": "WhatsApp 消息",
+    "Content": "内容",
+    "Direction": "方向",
+    "Status": "状态",
+    "SentOn": "消息时间",
+    "Phone": "手机号码",
+    "Error": "错误",
+    "Pending": "待发送",
+    "Incoming": "收到"
+  }
+}

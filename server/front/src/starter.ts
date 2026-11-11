@@ -38,6 +38,8 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     process.exit(1)
   }
 
+  const whatsappUrl = process.env.WHATSAPP_URL
+
   const gmailUrl = process.env.GMAIL_URL
   if (gmailUrl === undefined) {
     console.error('please provide gmail url')
@@ -140,6 +142,7 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     modelVersion,
     version,
     gmailUrl,
+    whatsappUrl,
     telegramUrl,
     rekoniUrl,
     calendarUrl,

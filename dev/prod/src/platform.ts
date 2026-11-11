@@ -46,6 +46,7 @@ import onboard, { onboardId } from '@hcengineering/onboard'
 import presence, { presenceId } from '@hcengineering/presence'
 import print, { printId } from '@hcengineering/print'
 import { shareId } from '@hcengineering/share'
+import whatsapp, { whatsappId } from '@hcengineering/whatsapp'
 import { processId } from '@hcengineering/process'
 import { productsId } from '@hcengineering/products'
 import { questionsId } from '@hcengineering/questions'
@@ -111,6 +112,7 @@ import '@hcengineering/notification-assets'
 import '@hcengineering/preference-assets'
 import '@hcengineering/print-assets'
 import '@hcengineering/share-assets'
+import '@hcengineering/whatsapp-assets'
 import '@hcengineering/process-assets'
 import '@hcengineering/products-assets'
 import '@hcengineering/questions-assets'
@@ -167,6 +169,7 @@ export interface Config {
   REKONI_URL: string
   TELEGRAM_URL: string
   GMAIL_URL: string
+  WHATSAPP_URL?: string
   CALENDAR_URL: string
   PUSH_PUBLIC_KEY: string
   APP_PROTOCOL?: string
@@ -383,6 +386,7 @@ function configureI18n(): void {
   addStringsLoader(loveId, async (lang: string) => await import(`@hcengineering/love-assets/lang/${lang}.json`))
   addStringsLoader(printId, async (lang: string) => await import(`@hcengineering/print-assets/lang/${lang}.json`))
   addStringsLoader(shareId, async (lang: string) => await import(`@hcengineering/share-assets/lang/${lang}.json`))
+  addStringsLoader(whatsappId, async (lang: string) => await import(`@hcengineering/whatsapp-assets/lang/${lang}.json`))
   addStringsLoader(exportId, async (lang: string) => await import(`@hcengineering/export-assets/lang/${lang}.json`))
   addStringsLoader(
     analyticsCollectorId,
@@ -518,6 +522,7 @@ export async function configurePlatform() {
   setMetadata(telegram.metadata.TelegramURL, config.TELEGRAM_URL ?? 'http://localhost:8086')
   setMetadata(telegram.metadata.BotUrl, config.TELEGRAM_BOT_URL ?? 'http://huly.local:4020')
   setMetadata(gmail.metadata.GmailURL, config.GMAIL_URL ?? 'http://localhost:8087')
+  setMetadata(whatsapp.metadata.WhatsappURL, config.WHATSAPP_URL ?? '')
   setMetadata(calendar.metadata.CalendarServiceURL, config.CALENDAR_URL ?? 'http://localhost:8095')
   setMetadata(calendar.metadata.PublicScheduleURL, config.PUBLIC_SCHEDULE_URL)
   setMetadata(calendar.metadata.CalDavServerURL, config.CALDAV_SERVER_URL)
@@ -672,6 +677,7 @@ export async function configurePlatform() {
   addLocation(loveId, async () => await import(/* webpackChunkName: "love" */ '@hcengineering/love-resources'))
   addLocation(printId, async () => await import(/* webpackChunkName: "print" */ '@hcengineering/print-resources'))
   addLocation(shareId, async () => await import(/* webpackChunkName: "share" */ '@hcengineering/share-resources'))
+  addLocation(whatsappId, async () => await import(/* webpackChunkName: "whatsapp" */ '@hcengineering/whatsapp-resources'))
   addLocation(exportId, async () => await import(/* webpackChunkName: "export" */ '@hcengineering/export-resources'))
   addLocation(
     textEditorId,

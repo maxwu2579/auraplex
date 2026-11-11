@@ -262,6 +262,7 @@ export function start (
     rekoniUrl: string
     telegramUrl: string
     gmailUrl: string
+    whatsappUrl?: string
     calendarUrl: string
     collaborator?: string
     collaboratorUrl: string
@@ -341,6 +342,7 @@ export function start (
       REKONI_URL: config.rekoniUrl,
       TELEGRAM_URL: config.telegramUrl,
       GMAIL_URL: config.gmailUrl,
+      WHATSAPP_URL: config.whatsappUrl,
       CALENDAR_URL: config.calendarUrl,
       COLLABORATOR: config.collaborator,
       LINK_PREVIEW_URL: config.linkPreviewUrl,

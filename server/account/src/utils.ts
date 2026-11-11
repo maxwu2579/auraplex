@@ -2104,6 +2104,7 @@ export async function setTimezone (
 
 // Move to config?
 export const integrationServices = [
+  'whatsapp',
   'github',
   'telegram-bot',
   'hulygram',

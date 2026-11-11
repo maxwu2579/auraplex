@@ -41,6 +41,7 @@ export interface Config {
   GITHUB_CLIENTID: string
   GITHUB_URL: string
   GMAIL_URL: string
+  WHATSAPP_URL?: string
   INITIAL_URL: string
   LINK_PREVIEW_URL?: string
   LIVEKIT_WS?: string

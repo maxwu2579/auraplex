@@ -260,6 +260,28 @@ services:
       - STATS_URL=http://huly.local:4900
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
     restart: unless-stopped
+  whatsapp:
+    image: hardcoreeng/whatsapp
+    ports:
+      - '127.0.0.1:8098:8098'
+    environment:
+      - PORT=8098
+      - ACCOUNTS_URL=http://account:3000
+      - SECRET=secret
+      - QUEUE_CONFIG=${QUEUE_CONFIG}
+      - WHATSAPP_PUBLIC_URL=http://huly.local:8098
+      - WHATSAPP_ALLOWED_ORIGINS=http://huly.local:8087,http://huly.local:8088
+      # Local simulator. Real credentials must be supplied outside this file.
+      - WHATSAPP_GRAPH_URL=http://host.docker.internal:8097
+      - WHATSAPP_GRAPH_VERSION=mock
+      - WHATSAPP_APP_SECRET=${WHATSAPP_APP_SECRET:-}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://localhost:8098/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
   front:
     image: hardcoreeng/front
     extra_hosts:
@@ -278,6 +300,7 @@ services:
       - UPLOAD_URL=/files
       - PREVIEW_URL=http://huly.local:4040
       - GMAIL_URL=http://huly.local:8093
+      - WHATSAPP_URL=http://huly.local:8098
       - CALENDAR_URL=http://huly.local:8095
       - TELEGRAM_URL=http://huly.local:8086
       - REKONI_URL=http://huly.local:4004

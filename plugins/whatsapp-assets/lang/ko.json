@@ -1,0 +1,32 @@
+{
+  "string": {
+    "Whatsapp": "WhatsApp Business",
+    "Description": "Connect your business number to receive and reply to customer messages.",
+    "Connect": "Connect",
+    "Disconnect": "Disconnect",
+    "Save": "Save",
+    "Cancel": "Cancel",
+    "PhoneNumberId": "Phone Number ID",
+    "WabaId": "WhatsApp Business Account ID",
+    "AccessToken": "Access token",
+    "TokenHint": "Leave blank to keep the saved token.",
+    "Webhook": "Webhook address",
+    "Connected": "Connected",
+    "LocalMode": "Local simulator",
+    "TokenStored": "Access token saved on server",
+    "Unavailable": "Cannot reach the service. Please try again.",
+    "InvalidParameters": "Enter numeric account IDs and an access token.",
+    "Forbidden": "Only workspace owners and administrators can manage this connection.",
+    "Conflict": "This workspace or phone number already has a connection.",
+    "Failed": "Could not save the connection. Please try again.",
+    "Message": "WhatsApp message",
+    "Content": "Content",
+    "Direction": "Direction",
+    "Status": "Status",
+    "SentOn": "Message time",
+    "Phone": "Phone number",
+    "Error": "Error",
+    "Pending": "Pending",
+    "Incoming": "Incoming"
+  }
+}
