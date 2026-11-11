@@ -15,12 +15,12 @@
 
 import contact, { type Channel } from '@hcengineering/contact'
 import core, { type Ref, type Tx, type TxCUD, type TxOperations, type WorkspaceUuid } from '@hcengineering/core'
-import whatsapp, { type WhatsappMessage } from '@hcengineering/whatsapp'
+import whatsapp, { isValidTemplateParameter, type WhatsappMessage } from '@hcengineering/whatsapp'
 import type { Config } from './config'
 import type { ConnectionStore } from './integrations'
 import type { WorkspaceReceiver } from './workspaceClient'
 import { normalizePhone } from './webhook'
-import { SendError, sendText } from './graph'
+import { SendError, sendTemplate, sendText } from './graph'
 
 export function outgoingMessageId (tx: Tx): Ref<WhatsappMessage> | undefined {
   const cud = tx as TxCUD<WhatsappMessage>
@@ -31,6 +31,19 @@ export function outgoingMessageId (tx: Tx): Ref<WhatsappMessage> | undefined {
     return cud.objectId
   }
   return undefined
+}
+
+function validTemplate (message: WhatsappMessage): boolean {
+  const parameters = message.templateParameters ?? []
+  return (
+    typeof message.templateName === 'string' &&
+    /^[a-z0-9_]{1,512}$/.test(message.templateName) &&
+    typeof message.templateLanguage === 'string' &&
+    /^[A-Za-z_]{2,15}$/.test(message.templateLanguage) &&
+    Array.isArray(parameters) &&
+    parameters.length <= 20 &&
+    parameters.every((value) => typeof value === 'string' && isValidTemplateParameter(value))
+  )
 }
 
 export class OutgoingService {
@@ -107,13 +120,27 @@ export class OutgoingService {
         typeof message.content !== 'string' ||
         message.content.trim() === '' ||
         message.content.length > 4096 ||
-        message.templateName !== undefined
+        (message.templateName !== undefined && !validTemplate(message))
       ) {
         throw new SendError('INVALID_MESSAGE', '消息或号码无效，请检查后重新发送。')
       }
       const token = await this.store.accessToken(integration)
       if (token === undefined || token === '') throw new SendError('190', '访问令牌未配置，请管理员重新连接。')
-      wamid = await sendText(this.config, token, phoneNumberId, phone, message.content, this.request)
+      wamid =
+        message.templateName !== undefined
+          ? await sendTemplate(
+            this.config,
+            token,
+            phoneNumberId,
+            phone,
+            {
+              name: message.templateName,
+              language: message.templateLanguage ?? '',
+              parameters: message.templateParameters ?? []
+            },
+            this.request
+          )
+          : await sendText(this.config, token, phoneNumberId, phone, message.content, this.request)
     } catch (err) {
       failure =
         err instanceof SendError ? err : new SendError('SERVICE_UNAVAILABLE', '发送服务暂时不可用，请稍后重新发送。')

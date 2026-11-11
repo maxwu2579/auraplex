@@ -25,6 +25,16 @@ try {
   }
 } catch { /* Docker supplies the same settings via env_file. */ }
 
+// Fake approved templates. The last two must never be offered in Huly:
+// one is still under review, one has a header variable that this version cannot fill.
+const TEMPLATES = [
+  { name: 'product_followup_zh', language: 'zh_CN', status: 'APPROVED', components: [{ type: 'BODY', text: '您好 {{1}}，您咨询的产品 {{2}} 已有新资料。' }] },
+  { name: 'product_followup_en', language: 'en_US', status: 'APPROVED', components: [{ type: 'BODY', text: 'Hello {{1}}, we have an update on {{2}}.' }] },
+  { name: 'thanks_zh', language: 'zh_CN', status: 'APPROVED', components: [{ type: 'BODY', text: '感谢您联系我们，有任何问题请直接回复这条消息。' }, { type: 'FOOTER', text: 'Auraplex' }] },
+  { name: 'draft_example', language: 'en_US', status: 'PENDING', components: [{ type: 'BODY', text: 'Draft' }] },
+  { name: 'order_header_example', language: 'en_US', status: 'APPROVED', components: [{ type: 'HEADER', format: 'TEXT', text: 'Order {{1}}' }, { type: 'BODY', text: 'Your order is ready.' }] }
+]
+
 const [command = 'start', ...args] = process.argv.slice(2)
 const options = {}
 for (let i = 0; i < args.length; i++) {
@@ -82,7 +92,7 @@ async function main () {
     const id = String(options.id ?? 'wamid.mock.' + randomUUID())
     const type = String(options.type ?? 'text')
     const data = payload({ contacts: [{ wa_id: phone, profile: { name: String(options.name ?? phone) } }],
-      messages: [{ id, from: phone, timestamp: String(options.timestamp ?? Math.floor(Date.now() / 1000)), type,
+      messages: [{ id, from: phone, timestamp: String(options.timestamp ?? Math.floor(Date.now() / 1000 - Number(options['hours-ago'] ?? 0) * 3600)), type,
         ...(type === 'text' ? { text: { body: options.text } } : {}) }] })
     for (let i = 0; i < Number(options.repeat ?? 1); i++) await push(data, options['bad-signature'] === true)
     console.log('已提交本地模拟消息，稍等几秒后到 Huly 查看。消息编号 ' + id)
@@ -125,16 +135,21 @@ async function main () {
         json(res, 401, { error: { code: 190, message: '模拟令牌无效' } }); return
       }
       if (url.pathname.endsWith('/message_templates') && req.method === 'GET') {
-        json(res, 200, { data: [
-          { name: 'product_followup_zh', language: 'zh_CN', status: 'APPROVED', components: [{ type: 'BODY', text: '您好 {{1}}，您咨询的产品 {{2}} 已有新资料。' }] },
-          { name: 'product_followup_en', language: 'en_US', status: 'APPROVED', components: [{ type: 'BODY', text: 'Hello {{1}}, we have an update on {{2}}.' }] },
-          { name: 'draft_example', language: 'en_US', status: 'PENDING', components: [] }
-        ] }); return
+        json(res, 200, { data: TEMPLATES }); return
       }
       if (url.pathname.endsWith('/messages') && req.method === 'POST') {
         const request = await body(req)
         if (errorMode === 'window' && request.type !== 'template') {
           json(res, 400, { error: { code: 131047, message: '模拟超过 24 小时窗口' } }); return
+        }
+        if (request.type === 'template') {
+          // Same checks Meta does: the template must exist in that language and get every variable.
+          const template = TEMPLATES.find(t => t.status === 'APPROVED' && t.name === request.template?.name && t.language === request.template?.language?.code)
+          if (template === undefined) { json(res, 404, { error: { code: 132001, message: '模拟模板不存在' } }); return }
+          const body = template.components.find(c => c.type === 'BODY')?.text ?? ''
+          const expected = Math.max(0, ...[...body.matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1])))
+          const given = request.template.components?.find(c => c.type === 'body')?.parameters?.length ?? 0
+          if (expected !== given) { json(res, 400, { error: { code: 132000, message: '模拟模板变量数量不对' } }); return }
         }
         const id = 'wamid.mock.' + randomUUID()
         received.push({ id, to: request.to, type: request.type, text: request.text?.body, template: request.template, receivedOn: new Date().toISOString() })

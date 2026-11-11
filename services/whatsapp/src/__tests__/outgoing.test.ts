@@ -184,7 +184,9 @@ it('recovers pending messages and marks interrupted sends uncertain without rese
   pending.sender.start()
   interrupted.sender.start()
   try {
-    for (let i = 0; i < 50 && interrupted.message.status !== 'failed'; i++) { await new Promise((resolve) => setTimeout(resolve, 10)) }
+    for (let i = 0; i < 50 && interrupted.message.status !== 'failed'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
     expect(pending.request).toHaveBeenCalledTimes(1)
     expect(pending.message.status).toBe('sent')
     expect(interrupted.request).not.toHaveBeenCalled()
@@ -193,4 +195,65 @@ it('recovers pending messages and marks interrupted sends uncertain without rese
     await pending.sender.close()
     await interrupted.sender.close()
   }
+})
+
+it('sends approved templates with body variables and validates them first', async () => {
+  const f = fixture()
+  Object.assign(f.message, {
+    content: '您好 王先生，您咨询的产品 A1 已有新资料。',
+    templateName: 'product_followup_zh',
+    templateLanguage: 'zh_CN',
+    templateParameters: ['王先生', 'A1']
+  })
+  await f.sender.handle(workspace, f.message._id)
+  expect(f.request).toHaveBeenCalledTimes(1)
+  const [, init] = f.request.mock.calls[0] as unknown as [string, RequestInit]
+  expect(JSON.parse(String(init.body))).toEqual({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: '6588880001',
+    type: 'template',
+    template: {
+      name: 'product_followup_zh',
+      language: { code: 'zh_CN' },
+      components: [
+        {
+          type: 'body',
+          parameters: [
+            { type: 'text', text: '王先生' },
+            { type: 'text', text: 'A1' }
+          ]
+        }
+      ]
+    }
+  })
+  expect(f.message.status).toBe('sent')
+
+  const bad = fixture()
+  Object.assign(bad.message, { templateName: 'x', templateLanguage: 'zh_CN', templateParameters: ['a\nb'] })
+  await bad.sender.handle(workspace, bad.message._id)
+  expect(bad.request).not.toHaveBeenCalled()
+  expect(bad.message).toMatchObject({ status: 'failed', errorCode: 'INVALID_MESSAGE' })
+})
+
+it('sends templates without variables without a components list', async () => {
+  const f = fixture()
+  Object.assign(f.message, {
+    content: '感谢',
+    templateName: 'thanks_zh',
+    templateLanguage: 'zh_CN',
+    templateParameters: []
+  })
+  await f.sender.handle(workspace, f.message._id)
+  const [, init] = f.request.mock.calls[0] as unknown as [string, RequestInit]
+  expect(JSON.parse(String(init.body)).template).toEqual({ name: 'thanks_zh', language: { code: 'zh_CN' } })
+})
+
+it('maps template errors to Chinese hints', async () => {
+  const f = fixture()
+  Object.assign(f.message, { templateName: 't', templateLanguage: 'zh_CN', templateParameters: [] })
+  f.request.mockImplementation(async () => ({ ok: false, json: async () => ({ error: { code: 132000 } }) }) as any)
+  await f.sender.handle(workspace, f.message._id)
+  expect(f.message).toMatchObject({ status: 'failed', errorCode: '132000' })
+  expect(f.message.errorMessage).toContain('模板变量')
 })

@@ -51,7 +51,7 @@ test('local simulator supports templates, errors, signed status callbacks and in
     const base = 'http://127.0.0.1:' + port
     const headers = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
     const templates = await (await fetch(base + '/mock/200001/message_templates', { headers })).json()
-    assert.equal(templates.data.filter(template => template.status === 'APPROVED').length, 2)
+    assert.equal(templates.data.filter(template => template.status === 'APPROVED').length, 4)
     assert.equal((await fetch(base + '/mock/200001/message_templates')).status, 401)
     const sent = await (await fetch(base + '/mock/100001/messages', { method: 'POST', headers, body: JSON.stringify({ to: '6588880001', type: 'text', text: { body: 'test' } }) })).json()
     assert.ok(sent.messages[0].id.startsWith('wamid.mock.'))
@@ -63,6 +63,12 @@ test('local simulator supports templates, errors, signed status callbacks and in
     await fetch(base + '/control/error', { method: 'POST', headers, body: JSON.stringify({ mode: 'window' }) })
     const failed = await (await fetch(base + '/mock/100001/messages', { method: 'POST', headers, body: JSON.stringify({ type: 'text' }) })).json()
     assert.equal(failed.error.code, 131047)
+    const template = (name, code, parameters) => fetch(base + '/mock/100001/messages', { method: 'POST', headers, body: JSON.stringify({ to: '6588880001', type: 'template', template: { name, language: { code }, components: parameters === undefined ? undefined : [{ type: 'body', parameters: parameters.map(text => ({ type: 'text', text })) }] } }) })
+    assert.equal((await template('product_followup_zh', 'zh_CN', ['王先生', 'A1'])).status, 200)
+    assert.equal((await template('thanks_zh', 'zh_CN')).status, 200)
+    assert.equal((await (await template('product_followup_zh', 'zh_CN', ['王先生'])).json()).error.code, 132000)
+    assert.equal((await (await template('product_followup_zh', 'en_US', ['a', 'b'])).json()).error.code, 132001)
+    assert.equal((await (await template('draft_example', 'en_US')).json()).error.code, 132001)
     await fetch(base + '/control/error', { method: 'POST', headers, body: JSON.stringify({ mode: 'token' }) })
     assert.equal((await fetch(base + '/mock/200001/message_templates', { headers })).status, 401)
     const sender = spawn(process.execPath, [script, 'send', '--webhook', address, '--phone', '+65 (8888) 0001', '--name', '测试客户', '--text', '本地消息', '--id', 'wamid.cli', '--repeat', '2'], { env, stdio: 'ignore' })

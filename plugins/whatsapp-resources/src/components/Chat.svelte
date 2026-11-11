@@ -22,14 +22,29 @@
   import { InboxNotificationsClientImpl } from '@hcengineering/notification-resources'
   import { Button, Dialog, Label, Scroller } from '@hcengineering/ui'
   import { createEventDispatcher, onMount } from 'svelte'
-  import whatsapp, { type WhatsappMessage } from '@hcengineering/whatsapp'
+  import whatsapp, {
+    REPLY_WINDOW_MS,
+    isReplyWindowOpen,
+    isValidTemplateParameter,
+    lastIncomingAt,
+    renderTemplate,
+    type WhatsappMessage,
+    type WhatsappTemplate
+  } from '@hcengineering/whatsapp'
 
-  import { getConnection, ConnectionError, type ConnectionState } from '../api'
+  import { getConnection, getTemplates, ConnectionError, type ConnectionState } from '../api'
   import type { IntlString } from '@hcengineering/platform'
 
   export let channel: Channel
   export let embedded = false
   let messages: WhatsappMessage[] = []
+  let loaded = false
+  let now = Date.now()
+  let templates: WhatsappTemplate[] | undefined
+  let templatesError: IntlString | undefined
+  let loadingTemplates = false
+  let templateKey = ''
+  let parameters: string[] = []
   let draft = ''
   let busy = false
   let connection: ConnectionState | undefined
@@ -45,6 +60,10 @@
     received: whatsapp.string.Incoming
   }
   onMount(() => {
+    // Re-check the 24 hour window while the chat stays open.
+    const timer = setInterval(() => {
+      now = Date.now()
+    }, 30000)
     void getConnection()
       .then((value) => {
         connection = value
@@ -52,13 +71,63 @@
       .catch((err) => {
         error = err instanceof ConnectionError ? err.label : whatsapp.string.Unavailable
       })
+    return () => {
+      clearInterval(timer)
+    }
   })
 
+  const keyOf = (t: WhatsappTemplate): string => t.name + '|' + t.language
+
+  $: lastIncoming = lastIncomingAt(messages)
+  $: windowOpen = isReplyWindowOpen(lastIncoming, now, connection?.replyWindowMs ?? REPLY_WINDOW_MS)
+  $: selected = templates?.find((t) => keyOf(t) === templateKey)
+  $: if (selected !== undefined && parameters.length !== selected.parameterCount) {
+    parameters = Array.from({ length: selected.parameterCount }, (_, i) => parameters[i] ?? '')
+  }
+  $: preview = selected !== undefined ? renderTemplate(selected.body, parameters) : ''
+  $: templateReady = selected !== undefined && parameters.every((value) => isValidTemplateParameter(value))
+  $: if (
+    loaded &&
+    !windowOpen &&
+    connection?.connected === true &&
+    templates === undefined &&
+    !loadingTemplates &&
+    templatesError === undefined
+  ) {
+    void loadTemplates()
+  }
+
+  async function loadTemplates (): Promise<void> {
+    loadingTemplates = true
+    try {
+      templates = await getTemplates()
+      if (templates.length > 0 && templateKey === '') templateKey = keyOf(templates[0])
+    } catch (err) {
+      templatesError = err instanceof ConnectionError ? err.label : whatsapp.string.TemplatesFailed
+    } finally {
+      loadingTemplates = false
+    }
+  }
+
+  function retryTemplates (): void {
+    templatesError = undefined
+    templates = undefined
+  }
+
   async function send (): Promise<void> {
-    if (busy || draft.trim() === '' || draft.length > 4096) return
+    if (busy) return
+    // Outside the 24 hour window Meta only accepts approved templates.
+    const template = windowOpen ? undefined : selected
+    if (template === undefined) {
+      if (!windowOpen || draft.trim() === '' || draft.length > 4096) return
+    } else if (!templateReady) {
+      error = whatsapp.string.InvalidTemplateParameter
+      return
+    }
     busy = true
     error = undefined
-    const text = draft
+    const values = parameters.map((value) => value.trim())
+    const text = template !== undefined ? renderTemplate(template.body, values) : draft
     const target = channel
     try {
       connection = await getConnection()
@@ -81,12 +150,17 @@
           status: 'pending',
           phone: target.value.replace(/[^0-9]/g, ''),
           phoneNumberId: connection.phoneNumberId,
-          sendOn: Date.now()
+          sendOn: Date.now(),
+          ...(template !== undefined
+            ? { templateName: template.name, templateLanguage: template.language, templateParameters: values }
+            : {})
         },
         id
       )
       if (!(await ops.commit()).result) throw new Error('Message was not saved')
-      if (channel._id === target._id && draft === text) draft = ''
+      if (template !== undefined) {
+        parameters = parameters.map(() => '')
+      } else if (channel._id === target._id && draft === text) draft = ''
     } catch {
       error = whatsapp.string.SaveMessageFailed
     } finally {
@@ -103,6 +177,7 @@
     { attachedTo: channel._id },
     (result) => {
       messages = result.slice().reverse()
+      loaded = true
       void inbox.forceReadDoc(channel)
     },
     { sort: { sendOn: SortingOrder.Descending }, limit: 500 }
@@ -117,6 +192,9 @@
     <div class="messages" class:embedded>
       {#each messages as message (message._id)}
         <article class:outgoing={message.direction === 'outgoing'} class:failed={message.status === 'failed'}>
+          {#if message.templateName !== undefined}
+            <div class="tag"><Label label={whatsapp.string.Template} /> · {message.templateName}</div>
+          {/if}
           <p>{message.content}</p>
           {#if message.direction === 'outgoing'}
             <div class="status" aria-live="polite"><Label label={statusLabels[message.status]} /></div>
@@ -136,14 +214,57 @@
     </div>
   </Scroller>
   <form class="composer" on:submit|preventDefault={send}>
-    <label for="whatsapp-reply"><Label label={whatsapp.string.Reply} /></label>
-    <textarea
-      id="whatsapp-reply"
-      bind:value={draft}
-      maxlength={4096}
-      rows={3}
-      disabled={busy || connection?.connected !== true}
-    />
+    {#if !loaded}
+      <!-- Wait for the messages so the 24 hour check does not flash the wrong mode. -->
+    {:else if windowOpen}
+      <label for="whatsapp-reply"><Label label={whatsapp.string.Reply} /></label>
+      <textarea
+        id="whatsapp-reply"
+        bind:value={draft}
+        maxlength={4096}
+        rows={3}
+        disabled={busy || connection?.connected !== true}
+      />
+    {:else}
+      <p class="notice" role="status">
+        <Label label={lastIncoming === undefined ? whatsapp.string.NeverWrote : whatsapp.string.WindowClosed} />
+      </p>
+      {#if connection?.connected === true}
+        {#if templatesError !== undefined}
+          <p class="error" role="alert"><Label label={templatesError} /></p>
+          <Button label={whatsapp.string.ChooseTemplate} kind="regular" on:click={retryTemplates} />
+        {:else if templates === undefined}
+          <p><Label label={whatsapp.string.LoadingTemplates} /></p>
+        {:else if templates.length === 0}
+          <p><Label label={whatsapp.string.NoTemplates} /></p>
+        {:else}
+          <label for="whatsapp-template"><Label label={whatsapp.string.ChooseTemplate} /></label>
+          <select id="whatsapp-template" bind:value={templateKey} disabled={busy}>
+            {#each templates as template (keyOf(template))}
+              <option value={keyOf(template)}>{template.name} ({template.language})</option>
+            {/each}
+          </select>
+          {#each parameters as value, i (i)}
+            <label for={'whatsapp-param-' + i}>
+              <Label label={whatsapp.string.TemplateParameter} params={{ n: i + 1 }} />
+            </label>
+            <input
+              id={'whatsapp-param-' + i}
+              class:invalid={value !== '' && !isValidTemplateParameter(value)}
+              bind:value={parameters[i]}
+              maxlength={1024}
+              disabled={busy}
+            />
+          {/each}
+          {#if selected !== undefined}
+            <div class="preview">
+              <span><Label label={whatsapp.string.TemplatePreview} /></span>
+              <p>{preview}</p>
+            </div>
+          {/if}
+        {/if}
+      {/if}
+    {/if}
     {#if connection !== undefined && !connection.connected}<p>
         <Label label={whatsapp.string.ConnectionRequired} />
       </p>{/if}
@@ -153,7 +274,10 @@
         label={whatsapp.string.Send}
         kind="primary"
         loading={busy}
-        disabled={busy || connection?.connected !== true || draft.trim() === '' || draft.length > 4096}
+        disabled={busy ||
+          !loaded ||
+          connection?.connected !== true ||
+          (windowOpen ? draft.trim() === '' || draft.length > 4096 : !templateReady)}
         on:click={send}
       />
     </div>
@@ -201,6 +325,9 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+  input.invalid {
+    border-color: var(--theme-error-color);
+  }
   .failed {
     border-color: var(--theme-error-color);
   }
@@ -220,6 +347,38 @@
     display: flex;
     justify-content: flex-end;
     margin-top: 0.5rem;
+  }
+  .tag {
+    font-size: 0.75rem;
+    color: var(--theme-caption-color);
+    margin-bottom: 0.3rem;
+  }
+  .notice {
+    margin: 0 0 0.5rem;
+    color: var(--theme-content-color);
+  }
+  select,
+  input {
+    width: 100%;
+    margin: 0.4rem 0 0.6rem;
+    padding: 0.55rem;
+    border: 1px solid var(--theme-button-border);
+    border-radius: 0.4rem;
+    background: var(--theme-button-default);
+    color: var(--theme-content-color);
+    font: inherit;
+  }
+  .preview {
+    padding: 0.6rem 0.8rem;
+    border-left: 3px solid var(--theme-button-border);
+    background: var(--theme-button-default);
+    border-radius: 0.3rem;
+  }
+  .preview p {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0.3rem 0 0;
+    color: var(--theme-content-color);
   }
   .composer {
     padding: 1rem 1.5rem;

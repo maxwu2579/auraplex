@@ -40,6 +40,16 @@
     "Read": "Read",
     "SendFailed": "Failed",
     "SaveMessageFailed": "Could not save the message. Your draft is kept. Please try again.",
-    "ConnectionRequired": "Connect WhatsApp Business in Settings → Integrations to reply."
+    "ConnectionRequired": "Connect WhatsApp Business in Settings → Integrations to reply.",
+    "WindowClosed": "The customer's last message was more than 24 hours ago. WhatsApp only allows approved template messages now. Once the customer replies, you can type freely again.",
+    "NeverWrote": "This customer has not messaged you yet. WhatsApp only allows an approved template message to start the chat.",
+    "Template": "Template",
+    "ChooseTemplate": "Choose a template",
+    "TemplateParameter": "Variable {n}",
+    "TemplatePreview": "Preview",
+    "NoTemplates": "No approved templates. Create one in WhatsApp Manager and wait for approval.",
+    "TemplatesFailed": "Could not load templates. Please try again later.",
+    "LoadingTemplates": "Loading templates…",
+    "InvalidTemplateParameter": "Fill in every variable. Variables cannot contain line breaks, tabs or more than 4 spaces in a row."
   }
 }

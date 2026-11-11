@@ -40,6 +40,16 @@
     "Read": "已读",
     "SendFailed": "发送失败",
     "SaveMessageFailed": "消息保存失败，输入内容已保留，请重试。",
-    "ConnectionRequired": "请先到设置 → 集成连接 WhatsApp Business，再回复。"
+    "ConnectionRequired": "请先到设置 → 集成连接 WhatsApp Business，再回复。",
+    "WindowClosed": "客户最后一条消息已超过 24 小时，WhatsApp 现在只允许发送已审核的模板消息。客户回复后，就可以正常打字回复。",
+    "NeverWrote": "这个客户还没有给你发过消息，WhatsApp 只允许先发送一条已审核的模板消息。",
+    "Template": "模板",
+    "ChooseTemplate": "选择模板",
+    "TemplateParameter": "变量 {n}",
+    "TemplatePreview": "预览",
+    "NoTemplates": "还没有已审核的模板。请先在 Meta 的 WhatsApp 管理工具里建模板，等审核通过。",
+    "TemplatesFailed": "读取模板失败，请稍后再试。",
+    "LoadingTemplates": "正在读取模板…",
+    "InvalidTemplateParameter": "请填写每个变量。变量里不能有换行、制表符，也不能有连续 4 个以上的空格。"
   }
 }

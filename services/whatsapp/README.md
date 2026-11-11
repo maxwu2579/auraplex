@@ -4,9 +4,9 @@
 
 ## 当前进度
 
-已完成连接管理、接收、回复及消息状态。现在可以用本地模拟器发送客户消息，自动匹配或创建联系人，并通知连接者和关注该联系人的同事。
+第 1～4 步已完成：连接管理、接收、回复、消息状态、24 小时窗口和模板消息。现在可以用本地模拟器发送客户消息，自动匹配或创建联系人，并通知连接者和关注该联系人的同事。
 
-联系人下面的 WhatsApp 消息窗口支持文字回复。第 4 步增加模板和 24 小时规则。
+联系人下面的 WhatsApp 消息窗口支持文字回复。客户最后一条消息超过 24 小时（或客户从没发过消息）时，只能选择已审核的模板发送。第 5 步（接真实 Meta）等有账号后再做。
 
 ## 本地试用第 1 步
 
@@ -100,9 +100,36 @@ node services/whatsapp/mock/index.mjs error --mode none
 
 普通成员可以读取不含密钥的连接状态并回复。连接参数和令牌仍由管理员配置。
 
+## 本地试用第 4 步
+
+24 小时以“客户最后一条发来的消息”计算，我们自己发出的消息不算。客户从没发过消息时，也只能发模板。
+
+1. 用模拟器发一条“25 小时前”的客户消息。要用一个新号码，因为老号码已经有最近的消息，窗口还开着：
+
+```powershell
+node services/whatsapp/mock/index.mjs send --phone 6588880009 --name "老客户" --text "上次问过的产品" --hours-ago 25
+```
+
+2. 在 Huly 打开这个联系人的 WhatsApp 窗口。底部不再是输入框，而是提示“已超过 24 小时，只能发送已审核的模板消息”和模板选择。
+3. 选择 product_followup_zh，填写“变量 1”和“变量 2”，下面会显示预览。点击发送。消息上方显示“模板 · product_followup_zh”，状态同样更新到已读。
+4. 运行 `node services/whatsapp/mock/index.mjs received`，能看到 type 为 template、模板名和填写的变量。
+5. 再用这个号码发一条普通消息（不带 --hours-ago），窗口重新打开，底部恢复成普通输入框。
+
+测试窗口错误提示（模拟 Meta 那边认为已超时）：
+
+```powershell
+node services/whatsapp/mock/index.mjs error --mode window
+```
+
+然后在窗口还开着的联系人里发一条普通文字，应显示发送失败、“超过 24 小时回复窗口，请使用已审核的模板消息”和错误码 131047。模板消息不受影响。测试后运行 `error --mode none` 恢复。
+
+模拟器的模板列表里有 5 个模板：3 个可以发送；1 个还在审核（PENDING），1 个标题里有变量。后两个不会出现在 Huly 的模板选择里，因为这一版只支持正文变量（{{1}}、{{2}}…），不支持标题变量、按钮变量、图片标题和命名变量。
+
+需要临时缩短窗口做测试时，可以给 whatsapp 服务加环境变量 WHATSAPP_REPLY_WINDOW_MINUTES（例如 2，表示 2 分钟）。不设就是 24 小时。正式环境不要设置。界面提示文字仍写“24 小时”。
+
 ### Graph 模拟器
 
-本地 Graph 接口使用 mock 版本路径，提供 POST /mock/{phone_number_id}/messages 和 GET /mock/{waba_id}/message_templates。返回假的消息编号，约 1.5 秒后推送 delivered，3 秒后推送 read，所有回调带签名。包含中文和英文已审核模板及一个未审核模板。
+本地 Graph 接口使用 mock 版本路径，提供 POST /mock/{phone_number_id}/messages 和 GET /mock/{waba_id}/message_templates。返回假的消息编号，约 1.5 秒后推送 delivered，3 秒后推送 read，所有回调带签名。包含中文和英文已审核模板、一个未审核模板和一个带标题变量的模板。发送模板时，模拟器像 Meta 一样检查模板名、语言（132001）和变量数量（132000）。
 
 切换模拟错误，供第 3、4 步验证。
 
@@ -145,6 +172,7 @@ node services/whatsapp/mock/index.mjs error --mode none
 | WHATSAPP_GRAPH_VERSION | 必填，本地填 mock，正式环境按照接入时 Meta 官方文档选择受支持的版本 |
 | WHATSAPP_APP_SECRET | webhook 签名校验，只放在服务器环境 |
 | WHATSAPP_VERIFY_TOKEN | webhook 验证，只放在服务器环境 |
+| WHATSAPP_REPLY_WINDOW_MINUTES | 只用于本地测试：缩短 24 小时窗口，单位分钟，最大 1440。正式环境不要设置 |
 | WHATSAPP_INBOX_DIR | 待处理推送目录，默认 /var/lib/whatsapp/inbox |
 | QUEUE_CONFIG | 监听 Huly 的 QueueTopic.Tx，处理待发送消息 |
 | REGION | 队列区域，必须与工作区 transactor 一致；本机为 cockroach |
@@ -153,11 +181,12 @@ node services/whatsapp/mock/index.mjs error --mode none
 
 ## 换成真实账号时
 
-这次只做本地开发。完成第 2～4 步且拥有真实账号后，需要再执行独立的第 5 步验收。
+这次只做本地开发。第 1～4 步已完成，拥有真实账号后，需要再执行独立的第 5 步验收。
 
 1. 准备 Meta App、WhatsApp Business 账户和业务号码，取得 Phone Number ID、WABA ID、服务端访问令牌。
 2. 为 Huly 和 WhatsApp 服务配置可访问的 HTTPS 域名，并更新 WHATSAPP_PUBLIC_URL 和 WHATSAPP_ALLOWED_ORIGINS。
 3. 将 WHATSAPP_GRAPH_URL 改为 Meta 官方 Graph 地址，把 WHATSAPP_GRAPH_VERSION 设为当时支持的版本。代码不固定真实版本号。
 4. 在服务器安全地配置 WHATSAPP_APP_SECRET、WHATSAPP_VERIFY_TOKEN。保持 SECRET 与现有 Huly 部署一致。
 5. 在集成页使用真实编号和令牌重新连接。到 Meta 后台填入界面显示的 webhook 地址及相同的验证令牌，并配置消息订阅。
-6. 先用 Meta 测试号码验证收发、状态和模板。正式启用前另行检查权限、模板、客户许可、最新费率、备份及监控。
+6. 在 Meta 的 WhatsApp 管理工具里建模板并等审核通过。这一版只能发送“正文变量”的模板，模板标题、按钮里不要放变量，也不要用图片标题。
+7. 先用 Meta 测试号码验证收发、状态和模板。正式启用前另行检查权限、模板、客户许可、最新费率、备份及监控。

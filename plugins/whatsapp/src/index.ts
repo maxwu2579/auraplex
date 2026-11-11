@@ -39,6 +39,64 @@ export interface WhatsappMessage extends AttachedDoc {
   templateParameters?: string[]
 }
 
+/** Meta only accepts free-form replies within 24 hours of the customer's last message. */
+export const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000
+
+/** An approved message template that Huly can send (body variables only). */
+export interface WhatsappTemplate {
+  name: string
+  language: string
+  body: string
+  parameterCount: number
+}
+
+/** Time of the customer's most recent message, or `undefined` if they never wrote. */
+export function lastIncomingAt (messages: Array<Pick<WhatsappMessage, 'direction' | 'sendOn'>>): number | undefined {
+  let last: number | undefined
+  for (const message of messages) {
+    if (message.direction === 'incoming' && (last === undefined || message.sendOn > last)) last = message.sendOn
+  }
+  return last
+}
+
+/**
+ * Free-form text is allowed only while the window is open. A customer who
+ * never wrote has no open window, so only templates can start the chat.
+ */
+export function isReplyWindowOpen (
+  lastIncoming: number | undefined,
+  now: number,
+  windowMs: number = REPLY_WINDOW_MS
+): boolean {
+  return lastIncoming !== undefined && now - lastIncoming < windowMs
+}
+
+/**
+ * Number of positional variables ({{1}}, {{2}}, …) in a template body.
+ * Returns -1 for named variables ({{name}}), which this version does not support.
+ */
+export function templateParameterCount (body: string): number {
+  let max = 0
+  for (const match of body.matchAll(/\{\{\s*([^}]*?)\s*\}\}/g)) {
+    if (!/^[1-9]\d{0,1}$/.test(match[1])) return -1
+    max = Math.max(max, Number(match[1]))
+  }
+  return max
+}
+
+/** Template body with {{n}} replaced by the given values; empty values keep the placeholder. */
+export function renderTemplate (body: string, parameters: string[]): string {
+  return body.replace(/\{\{\s*([1-9]\d{0,1})\s*\}\}/g, (whole, n: string) => {
+    const value = parameters[Number(n) - 1]
+    return value !== undefined && value !== '' ? value : whole
+  })
+}
+
+/** Meta rejects template variables that contain new lines, tabs or more than 4 spaces in a row. */
+export function isValidTemplateParameter (value: string): boolean {
+  return value.trim() !== '' && value.length <= 1024 && !/[\n\r\t]/.test(value) && !/ {5,}/.test(value)
+}
+
 export default plugin(whatsappId, {
   class: { Message: '' as Ref<Class<WhatsappMessage>> },
   integrationType: { Whatsapp: '' as Ref<IntegrationType> },
@@ -92,6 +150,16 @@ export default plugin(whatsappId, {
     Read: '' as IntlString,
     SendFailed: '' as IntlString,
     SaveMessageFailed: '' as IntlString,
-    ConnectionRequired: '' as IntlString
+    ConnectionRequired: '' as IntlString,
+    WindowClosed: '' as IntlString,
+    NeverWrote: '' as IntlString,
+    Template: '' as IntlString,
+    ChooseTemplate: '' as IntlString,
+    TemplateParameter: '' as IntlString,
+    TemplatePreview: '' as IntlString,
+    NoTemplates: '' as IntlString,
+    TemplatesFailed: '' as IntlString,
+    LoadingTemplates: '' as IntlString,
+    InvalidTemplateParameter: '' as IntlString
   }
 })

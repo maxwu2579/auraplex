@@ -17,7 +17,7 @@ import { getMetadata, type IntlString } from '@hcengineering/platform'
 import presentation from '@hcengineering/presentation'
 import { getIntegrationEventBus } from '@hcengineering/integration-client'
 import { pki, md, cipher, util } from 'node-forge'
-import whatsapp from '@hcengineering/whatsapp'
+import whatsapp, { type WhatsappTemplate } from '@hcengineering/whatsapp'
 
 export interface ConnectionState {
   connected: boolean
@@ -25,6 +25,8 @@ export interface ConnectionState {
   wabaId?: string
   webhook: string
   mode: string
+  /** Free-form reply window in ms (24 hours unless shortened for local testing). */
+  replyWindowMs?: number
 }
 
 export class ConnectionError extends Error {
@@ -55,7 +57,9 @@ async function request<T> (path: string, method = 'GET', body?: object): Promise
     const labels: Record<string, IntlString> = {
       Forbidden: whatsapp.string.Forbidden,
       Conflict: whatsapp.string.Conflict,
-      InvalidParameters: whatsapp.string.InvalidParameters
+      InvalidParameters: whatsapp.string.InvalidParameters,
+      NotConnected: whatsapp.string.ConnectionRequired,
+      TemplatesFailed: whatsapp.string.TemplatesFailed
     }
     throw new ConnectionError(labels[result.code] ?? whatsapp.string.Failed)
   }
@@ -97,4 +101,9 @@ export async function saveConnection (phoneNumberId: string, wabaId: string, tok
 export async function disconnect (): Promise<void> {
   await request('connection', 'DELETE')
   getIntegrationEventBus().emit('integration:deleted', {})
+}
+
+export async function getTemplates (): Promise<WhatsappTemplate[]> {
+  const result = await request<{ templates: WhatsappTemplate[] }>('templates')
+  return result.templates
 }

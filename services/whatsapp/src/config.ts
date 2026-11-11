@@ -13,6 +13,8 @@
 // limitations under the License.
 //
 
+import { REPLY_WINDOW_MS } from '@hcengineering/whatsapp'
+
 export interface Config {
   port: number
   accountsUrl: string
@@ -24,6 +26,17 @@ export interface Config {
   appSecret?: string
   verifyToken?: string
   inboxDirectory?: string
+  /** Free-form reply window; shorten with WHATSAPP_REPLY_WINDOW_MINUTES for local testing only. */
+  replyWindowMs?: number
+}
+
+function replyWindow (minutes: string | undefined): number {
+  const value = Number(minutes ?? '')
+  // Meta's real window is 24 hours; a longer value would only produce errors from Meta.
+  if (minutes === undefined || minutes === '' || !Number.isFinite(value) || value <= 0 || value > 1440) {
+    return REPLY_WINDOW_MS
+  }
+  return Math.round(value * 60 * 1000)
 }
 
 export function readConfig (): Config {
@@ -46,6 +59,7 @@ export function readConfig (): Config {
     appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
     inboxDirectory: process.env.WHATSAPP_INBOX_DIR ?? '/var/lib/whatsapp/inbox',
-    graphVersion: WHATSAPP_GRAPH_VERSION
+    graphVersion: WHATSAPP_GRAPH_VERSION,
+    replyWindowMs: replyWindow(process.env.WHATSAPP_REPLY_WINDOW_MINUTES)
   }
 }

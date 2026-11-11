@@ -30,7 +30,8 @@ let server: Server
 let base: string
 const getLogin = jest.fn()
 const inbox = { enqueue: jest.fn().mockResolvedValue(undefined) }
-const store = { get: jest.fn(), connect: jest.fn(), disconnect: jest.fn() }
+const store = { get: jest.fn(), connect: jest.fn(), disconnect: jest.fn(), accessToken: jest.fn() }
+const graphRequest = jest.fn()
 const config: Config = {
   port: 0,
   accountsUrl: 'http://localhost:1',
@@ -44,7 +45,12 @@ const config: Config = {
 }
 
 beforeAll(async () => {
-  server = createApp(config, store as unknown as ConnectionStore, inbox).listen(0, '127.0.0.1')
+  server = createApp(
+    config,
+    store as unknown as ConnectionStore,
+    inbox,
+    graphRequest as unknown as typeof fetch
+  ).listen(0, '127.0.0.1')
   await new Promise<void>((resolve) => server.on('listening', resolve))
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('Missing server address')
@@ -166,4 +172,72 @@ it('lets members read non-secret connection settings for replies while restricti
   expect(await state.text()).not.toContain('hidden')
   expect((await fetch(base + '/api/connection', { headers, method: 'DELETE' })).status).toBe(403)
   expect(store.disconnect).not.toHaveBeenCalled()
+})
+
+it('lists only sendable approved templates with the server-side token', async () => {
+  getLogin.mockResolvedValue({ workspace: 'ws', account: 'member', role: AccountRole.User })
+  store.get.mockResolvedValue({ data: { phoneNumberId: '100001', wabaId: '200001' } })
+  store.accessToken.mockResolvedValue('server-only-token')
+  graphRequest.mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      data: [
+        {
+          name: 'b_followup',
+          language: 'zh_CN',
+          status: 'APPROVED',
+          components: [{ type: 'BODY', text: '您好 {{1}}' }]
+        },
+        { name: 'a_thanks', language: 'en_US', status: 'APPROVED', components: [{ type: 'BODY', text: 'Thanks' }] },
+        { name: 'draft', language: 'en_US', status: 'PENDING', components: [{ type: 'BODY', text: 'x' }] },
+        {
+          name: 'header_var',
+          language: 'en_US',
+          status: 'APPROVED',
+          components: [
+            { type: 'HEADER', format: 'TEXT', text: 'Order {{1}}' },
+            { type: 'BODY', text: 'Ready' }
+          ]
+        },
+        { name: 'named', language: 'en_US', status: 'APPROVED', components: [{ type: 'BODY', text: 'Hi {{name}}' }] },
+        {
+          name: 'image_header',
+          language: 'en_US',
+          status: 'APPROVED',
+          components: [
+            { type: 'HEADER', format: 'IMAGE' },
+            { type: 'BODY', text: 'x' }
+          ]
+        }
+      ]
+    })
+  })
+  const response = await fetch(base + '/api/templates', { headers: { Authorization: 'Bearer local-test' } })
+  expect(response.status).toBe(200)
+  const text = await response.text()
+  expect(text).not.toContain('server-only-token')
+  expect(JSON.parse(text).templates).toEqual([
+    { name: 'a_thanks', language: 'en_US', body: 'Thanks', parameterCount: 0 },
+    { name: 'b_followup', language: 'zh_CN', body: '您好 {{1}}', parameterCount: 1 }
+  ])
+  const [url, init] = graphRequest.mock.calls[0]
+  expect(url).toContain('http://localhost:2/mock/200001/message_templates?status=APPROVED')
+  expect(init.headers).toMatchObject({ Authorization: 'Bearer server-only-token' })
+})
+
+it('reports template errors with fixed text and refuses when not connected', async () => {
+  store.get.mockResolvedValue({ data: { phoneNumberId: '100001', wabaId: '200001' } })
+  store.accessToken.mockResolvedValue('server-only-token')
+  graphRequest.mockResolvedValue({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: { code: 190, message: 'provider text server-only-token' } })
+  })
+  const failed = await fetch(base + '/api/templates', { headers: { Authorization: 'Bearer local-test' } })
+  expect(failed.status).toBe(502)
+  const body = await failed.text()
+  expect(body).not.toContain('server-only-token')
+  expect(JSON.parse(body)).toMatchObject({ code: 'TemplatesFailed', errorCode: '190' })
+  store.get.mockResolvedValue(undefined)
+  expect((await fetch(base + '/api/templates', { headers: { Authorization: 'Bearer local-test' } })).status).toBe(409)
 })

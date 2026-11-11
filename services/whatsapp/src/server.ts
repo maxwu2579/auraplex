@@ -20,12 +20,14 @@ import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
+import { SendError, listTemplates } from './graph'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
 export function createApp (
   config: Config,
   store: ConnectionStore,
-  inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> }
+  inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
+  request: typeof fetch = fetch
 ): express.Express {
   const app = express()
   const encryption = new TokenEncryption()
@@ -110,7 +112,11 @@ export function createApp (
         res.sendStatus(401)
         return
       }
-      const readConnection = req.method === 'GET' && req.path === '/connection' && login.role === AccountRole.User
+      // Members who reply may read the (secret-free) connection and the template list.
+      const readConnection =
+        req.method === 'GET' &&
+        (req.path === '/connection' || req.path === '/templates') &&
+        login.role === AccountRole.User
       if (!readConnection && ![AccountRole.Owner, AccountRole.Admin, AccountRole.Maintainer].includes(login.role)) {
         res.status(403).json({ code: 'Forbidden' })
         return
@@ -143,12 +149,37 @@ export function createApp (
           phoneNumberId: integration?.data?.phoneNumberId,
           wabaId: integration?.data?.wabaId,
           webhook: config.publicUrl + '/webhook',
-          mode: config.graphVersion === 'mock' ? 'mock' : 'configured'
+          mode: config.graphVersion === 'mock' ? 'mock' : 'configured',
+          replyWindowMs: config.replyWindowMs
         })
       })
       .catch(() => {
         res.status(503).json({ code: 'Unavailable' })
       })
+  })
+  app.get('/api/templates', (_req, res) => {
+    void (async () => {
+      const integration = await store.get(res.locals.workspace)
+      const wabaId = integration?.data?.wabaId
+      if (integration === undefined || typeof wabaId !== 'string' || !/^\d+$/.test(wabaId)) {
+        res.status(409).json({ code: 'NotConnected' })
+        return
+      }
+      const token = await store.accessToken(integration)
+      if (token === undefined || token === '') {
+        res.status(409).json({ code: 'NotConnected' })
+        return
+      }
+      try {
+        res.json({ templates: await listTemplates(config, token, wabaId, request) })
+      } catch (err) {
+        // Only our own fixed Chinese text goes back; never the provider's message.
+        const failure = err instanceof SendError ? err : undefined
+        res.status(502).json({ code: 'TemplatesFailed', errorCode: failure?.code, message: failure?.message })
+      }
+    })().catch(() => {
+      res.status(503).json({ code: 'Unavailable' })
+    })
   })
   app.post('/api/connection', (req, res) => {
     void (async () => {
