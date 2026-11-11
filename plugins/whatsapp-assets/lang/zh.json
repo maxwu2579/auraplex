@@ -31,7 +31,15 @@
     "NewMessage": "新的 WhatsApp 消息",
     "Messages": "WhatsApp 消息",
     "NoMessages": "还没有收到消息",
-    "ReadOnlyHint": "当前可以查看收到的消息，回复功能将在下一步加入。",
-    "ChannelLabel": "WhatsApp"
+    "ChannelLabel": "WhatsApp",
+    "Send": "发送",
+    "Reply": "回复客户",
+    "Sending": "发送中",
+    "Sent": "已发送",
+    "Delivered": "已送达",
+    "Read": "已读",
+    "SendFailed": "发送失败",
+    "SaveMessageFailed": "消息保存失败，输入内容已保留，请重试。",
+    "ConnectionRequired": "请先到设置 → 集成连接 WhatsApp Business，再回复。"
   }
 }

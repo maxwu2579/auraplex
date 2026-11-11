@@ -277,6 +277,7 @@ services:
       - SECRET=secret
       - QUEUE_CONFIG=${QUEUE_CONFIG}
       - WHATSAPP_PUBLIC_URL=http://huly.local:8098
+      - REGION=cockroach
       - WHATSAPP_ALLOWED_ORIGINS=http://huly.local:8087,http://huly.local:8088
       # Local simulator. Real credentials must be supplied outside this file.
       - WHATSAPP_GRAPH_URL=http://host.docker.internal:8097

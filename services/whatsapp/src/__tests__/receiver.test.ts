@@ -52,8 +52,13 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
     findAll: async (cls: string, query: object) => records.filter((doc) => matches(doc, cls, query)),
     apply: () => {
       const changes: Array<() => void> = []
+      let matchQuery: object | undefined
       const ops: any = {
         notMatch: () => ops,
+        match: (_cls: string, query: object) => {
+          matchQuery = query
+          return ops
+        },
         createDoc: async (cls: string, space: string, data: object, id: string) => {
           changes.push(() => records.push({ _id: id, _class: cls, space, ...data }))
           return id
@@ -89,6 +94,12 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
           )
         },
         commit: async () => {
+          if (
+            matchQuery !== undefined &&
+            !records.some((doc) => Object.entries(matchQuery ?? {}).every(([key, value]) => doc[key] === value))
+          ) {
+            return { result: false }
+          }
           if (fail) {
             fail = false
             throw new Error('Retryable failure')
@@ -103,8 +114,8 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
     }
   }
   const account = { findPersonBySocialId: async () => 'owner' }
-  const store = {}
-  const receiver = new WorkspaceReceiver(account as unknown as AccountClient, store as ConnectionStore)
+  const store = { findByPhoneNumberId: async () => integration }
+  const receiver = new WorkspaceReceiver(account as unknown as AccountClient, store as unknown as ConnectionStore)
   return {
     client: client as TxOperations,
     receiver,
@@ -174,4 +185,59 @@ it('keeps contact, message and notifications consistent when commit fails and is
   expect(f.records()).toHaveLength(original)
   await f.receiver.receive(f.client, integration, { ...incoming, phone: '6012345678' })
   expect(f.records().filter((doc) => doc._class === whatsapp.class.Message)).toHaveLength(1)
+})
+
+it('updates delivery states monotonically and retries callbacks arriving before the send response', async () => {
+  const f = fixture()
+  jest.spyOn(f.receiver, 'getClient').mockResolvedValue(f.client)
+  const message = {
+    _id: 'outgoing',
+    _class: whatsapp.class.Message,
+    phoneNumberId: '100001',
+    direction: 'outgoing',
+    status: 'sending',
+    wamid: undefined
+  }
+  f.records().push(message)
+  const event = { phoneNumberId: '100001', wamid: 'wamid.sent', status: 'delivered' as const }
+  await expect(f.receiver.consume({ messages: [], statuses: [event] })).rejects.toThrow('Waiting')
+  Object.assign(message, { wamid: 'wamid.sent', status: 'sent' })
+  await f.receiver.consume({ messages: [], statuses: [event] })
+  expect(message.status).toBe('delivered')
+  await f.receiver.consume({ messages: [], statuses: [{ ...event, status: 'sent' }] })
+  expect(message.status).toBe('delivered')
+  await f.receiver.consume({ messages: [], statuses: [{ ...event, status: 'read' }] })
+  await f.receiver.consume({ messages: [], statuses: [event] })
+  expect(message.status).toBe('read')
+})
+
+it('keeps a failure when an older sent callback arrives afterwards', async () => {
+  const f = fixture()
+  jest.spyOn(f.receiver, 'getClient').mockResolvedValue(f.client)
+  const message = {
+    _id: 'outgoing-failure',
+    _class: whatsapp.class.Message,
+    phoneNumberId: '100001',
+    direction: 'outgoing',
+    status: 'sent',
+    wamid: 'wamid.failed'
+  }
+  f.records().push(message)
+  await f.receiver.consume({
+    messages: [],
+    statuses: [
+      {
+        phoneNumberId: '100001',
+        wamid: 'wamid.failed',
+        status: 'failed',
+        errorCode: '131026',
+        errorMessage: '消息发送失败，请检查账号配置或稍后重试。'
+      }
+    ]
+  })
+  await f.receiver.consume({
+    messages: [],
+    statuses: [{ phoneNumberId: '100001', wamid: 'wamid.failed', status: 'sent' }]
+  })
+  expect(message.status).toBe('failed')
 })

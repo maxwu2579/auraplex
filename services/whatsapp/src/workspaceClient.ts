@@ -44,7 +44,7 @@ export class WorkspaceReceiver {
     private readonly store: ConnectionStore
   ) {}
 
-  private async getClient (workspace: WorkspaceUuid): Promise<TxOperations> {
+  async getClient (workspace: WorkspaceUuid): Promise<TxOperations> {
     let pending = this.clients.get(workspace)
     if (pending === undefined) {
       pending = (async () => {
@@ -207,7 +207,9 @@ export class WorkspaceReceiver {
       if (
         (disabledProviders.length > 0 && disabledProviders.every((setting) => !setting.enabled)) ||
         typeSetting?.enabled === false
-      ) { continue }
+      ) {
+        continue
+      }
       const space = await client.findOne(contact.class.PersonSpace, { person: employee._id })
       if (space === undefined) throw new Error('Missing notification space')
       const context = await client.findOne(notification.class.DocNotifyContext, { objectId: channel._id, user })
@@ -266,14 +268,30 @@ export class WorkspaceReceiver {
       wamid: status.wamid,
       direction: 'outgoing'
     })
-    if (message === undefined) return
-    const rank: Record<string, number> = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 1 }
-    if (rank[message.status] > rank[status.status]) return
-    await client.update(message, {
+    if (message === undefined) {
+      // A fast status callback may arrive before the Graph response is saved.
+      if (
+        (await client.findOne(whatsapp.class.Message, {
+          phoneNumberId: status.phoneNumberId,
+          direction: 'outgoing',
+          status: 'sending'
+        })) !== undefined
+      ) {
+        throw new Error('Waiting for outgoing message ID')
+      }
+      return
+    }
+    const rank: Record<string, number> = { pending: 0, sending: 0, sent: 1, delivered: 2, read: 3, failed: 1 }
+    if (rank[message.status] > rank[status.status] || message.status === 'read') return
+    if (message.status === 'failed' && status.status === 'sent') return
+    const ops = client.apply('whatsapp-status')
+    ops.match(whatsapp.class.Message, { _id: message._id, status: message.status })
+    await ops.update(message, {
       status: status.status,
       errorCode: status.errorCode,
       errorMessage: status.errorMessage
     })
+    if (!(await ops.commit()).result) throw new Error('Concurrent status update; retry')
   }
 
   async close (): Promise<void> {

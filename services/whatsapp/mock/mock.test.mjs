@@ -55,6 +55,9 @@ test('local simulator supports templates, errors, signed status callbacks and in
     assert.equal((await fetch(base + '/mock/200001/message_templates')).status, 401)
     const sent = await (await fetch(base + '/mock/100001/messages', { method: 'POST', headers, body: JSON.stringify({ to: '6588880001', type: 'text', text: { body: 'test' } }) })).json()
     assert.ok(sent.messages[0].id.startsWith('wamid.mock.'))
+    const replies = await (await fetch(base + '/control/messages')).json()
+    assert.equal(replies.messages[0].text, 'test')
+    assert.equal(replies.messages[0].to, '6588880001')
     await statusesDone
     assert.deepEqual(received.map(event => event.entry[0].changes[0].value.statuses[0].status), ['delivered', 'read'])
     await fetch(base + '/control/error', { method: 'POST', headers, body: JSON.stringify({ mode: 'window' }) })

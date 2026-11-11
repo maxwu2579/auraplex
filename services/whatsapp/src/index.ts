@@ -14,7 +14,9 @@
 //
 
 import 'dotenv/config'
-import { systemAccountUuid } from '@hcengineering/core'
+import { systemAccountUuid, MeasureMetricsContext, type Tx } from '@hcengineering/core'
+import { getPlatformQueue } from '@hcengineering/kafka'
+import { QueueTopic } from '@hcengineering/server-core'
 import { setMetadata } from '@hcengineering/platform'
 import serverClient, { getAccountClient } from '@hcengineering/server-client'
 import serverToken, { generateToken } from '@hcengineering/server-token'
@@ -23,6 +25,7 @@ import { ConnectionStore } from './integrations'
 import { createApp } from './server'
 import { PersistentInbox } from './inbox'
 import { WorkspaceReceiver } from './workspaceClient'
+import { OutgoingService, outgoingMessageId } from './outgoing'
 
 const config = readConfig()
 setMetadata(serverClient.metadata.Endpoint, config.accountsUrl)
@@ -34,18 +37,46 @@ const receiver = new WorkspaceReceiver(account, store)
 const inbox = new PersistentInbox(
   config.inboxDirectory ?? '/var/lib/whatsapp/inbox',
   (batch) => receiver.consume(batch),
-  () => {
-    console.error('WhatsApp delivery will retry; pending events are preserved')
+  (file) => {
+    console.error(
+      file === undefined ? 'WhatsApp inbox storage unavailable' : 'WhatsApp event moved to failed folder',
+      file ?? ''
+    )
   }
 )
 async function main (): Promise<void> {
   await inbox.start()
+  const outgoing = new OutgoingService(store, receiver, config)
+  const queue = getPlatformQueue('whatsapp-service')
+  const ctx = new MeasureMetricsContext('whatsapp', {})
+  queue.createConsumer<Tx>(
+    ctx,
+    QueueTopic.Tx,
+    queue.getClientId(),
+    async (_ctx, event, control) => {
+      const id = outgoingMessageId(event.value)
+      if (id === undefined) return
+      try {
+        await outgoing.handle(event.workspace, id)
+      } catch {
+        // Recovery reads pending records from Huly. Do not let the shared queue log message bodies.
+        console.error('WhatsApp send processing interrupted', { messageId: id })
+      }
+      await control.heartbeat()
+    },
+    { fromBegining: true }
+  )
+  outgoing.start()
   const server = createApp(config, store, inbox).listen(config.port, () => {
     console.log('WhatsApp service started', { port: config.port })
   })
   const shutdown = (): void => {
     server.close(() => {
-      void inbox.close().then(() => receiver.close())
+      void queue
+        .shutdown()
+        .then(() => outgoing.close())
+        .then(() => inbox.close())
+        .then(() => receiver.close())
     })
   }
   process.on('SIGTERM', shutdown)

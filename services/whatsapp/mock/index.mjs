@@ -88,6 +88,15 @@ async function main () {
     console.log('已提交本地模拟消息，稍等几秒后到 Huly 查看。消息编号 ' + id)
     return
   }
+  if (command === 'received') {
+    const target = localUrl(String(options.url ?? 'http://127.0.0.1:8097/control/messages'))
+    const response = await fetch(target)
+    if (!response.ok) throw new Error('读取模拟器消息失败')
+    const data = await response.json()
+    if (data.messages.length === 0) console.log('模拟器还没有收到回复')
+    for (const message of data.messages) console.log(JSON.stringify(message))
+    return
+  }
   if (command === 'error') {
     const mode = String(options.mode ?? 'none')
     const target = localUrl(String(options.url ?? 'http://127.0.0.1:8097/control/error'))
@@ -96,13 +105,15 @@ async function main () {
     console.log('模拟错误模式已切换为 ' + mode)
     return
   }
-  if (command !== 'start') throw new Error('命令应为 start、send 或 error')
+  if (command !== 'start') throw new Error('命令应为 start、send、received 或 error')
   const expectedToken = process.env.WHATSAPP_MOCK_TOKEN
   if (!expectedToken) throw new Error('请设置本地测试用 WHATSAPP_MOCK_TOKEN')
   let errorMode = 'none'
+  const received = []
   const server = createServer((req, res) => {
     void (async () => {
       const url = new URL(req.url, 'http://localhost')
+      if (url.pathname === '/control/messages' && req.method === 'GET') { json(res, 200, { messages: received }); return }
       if (url.pathname === '/health') { json(res, 200, { status: 'ok', mode: errorMode }); return }
       if (url.pathname === '/control/error' && req.method === 'POST') {
         const data = await body(req)
@@ -126,6 +137,8 @@ async function main () {
           json(res, 400, { error: { code: 131047, message: '模拟超过 24 小时窗口' } }); return
         }
         const id = 'wamid.mock.' + randomUUID()
+        received.push({ id, to: request.to, type: request.type, text: request.text?.body, template: request.template, receivedOn: new Date().toISOString() })
+        if (received.length > 1000) received.shift()
         json(res, 200, { messaging_product: 'whatsapp', messages: [{ id }] })
         for (const [index, status] of ['delivered', 'read'].entries()) {
           setTimeout(() => { void push(payload({ statuses: [{ id, status, recipient_id: request.to, timestamp: String(Math.floor(Date.now() / 1000)) }] })).catch(() => console.error('本地消息状态推送失败')) }, (index + 1) * 1500)

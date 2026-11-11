@@ -18,22 +18,24 @@ import { randomUUID } from 'crypto'
 import { join } from 'path'
 import type { WebhookBatch } from './webhook'
 
-// Acknowledge only after the event is saved. Failed workspace writes remain on disk
-// and are retried after restart. Only pending delivery events live here.
+// Attempt counts live in filenames, so restarts do not reset the retry budget.
 export class PersistentInbox {
   private processing = false
   private stopped = false
   private timer: NodeJS.Timeout | undefined
   private drainPromise: Promise<void> = Promise.resolve()
+  private storageErrorReported = false
 
   constructor (
     private readonly directory: string,
     private readonly consume: (batch: WebhookBatch) => Promise<void>,
-    private readonly onError: () => void = () => {}
+    private readonly onError: (file?: string) => void = () => {},
+    private readonly maxAttempts = 5
   ) {}
 
   async start (interval = 5000): Promise<void> {
     await mkdir(this.directory, { recursive: true })
+    await mkdir(join(this.directory, 'failed'), { recursive: true })
     this.timer = setInterval(() => {
       this.schedule()
     }, interval)
@@ -60,16 +62,26 @@ export class PersistentInbox {
       const files = (await readdir(this.directory)).filter((file) => file.endsWith('.json')).sort()
       for (const file of files) {
         if (this.stopped) break
+        const filename = join(this.directory, file)
         try {
-          const filename = join(this.directory, file)
           await this.consume(JSON.parse(await readFile(filename, 'utf8')) as WebhookBatch)
           await unlink(filename)
         } catch {
-          this.onError()
+          const match = /^(.*?)(?:\.retry-(\d+))?\.json$/.exec(file)
+          if (match === null) continue
+          const attempts = Number(match[2] ?? 0) + 1
+          if (attempts >= this.maxAttempts) {
+            await rename(filename, join(this.directory, 'failed', match[1] + '.json'))
+            this.onError(match[1] + '.json')
+          } else {
+            await rename(filename, join(this.directory, match[1] + '.retry-' + attempts + '.json'))
+          }
         }
       }
+      this.storageErrorReported = false
     } catch {
-      this.onError()
+      if (!this.storageErrorReported) this.onError()
+      this.storageErrorReported = true
     }
   }
 

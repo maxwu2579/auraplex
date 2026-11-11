@@ -21,7 +21,7 @@ import type { NotificationGroup, NotificationType } from '@hcengineering/notific
 
 export const whatsappId = 'whatsapp' as Plugin
 export const whatsappIntegrationKind = 'whatsapp' as IntegrationKind
-export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'
+export type MessageStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'
 
 export interface WhatsappMessage extends AttachedDoc {
   content: string
@@ -31,6 +31,7 @@ export interface WhatsappMessage extends AttachedDoc {
   phoneNumberId: string
   sendOn: Timestamp
   wamid?: string
+  attemptOn?: Timestamp
   errorCode?: string
   errorMessage?: string
   templateName?: string
@@ -55,7 +56,6 @@ export default plugin(whatsappId, {
     NewMessage: '' as IntlString,
     Messages: '' as IntlString,
     NoMessages: '' as IntlString,
-    ReadOnlyHint: '' as IntlString,
     Whatsapp: '' as IntlString,
     Description: '' as IntlString,
     Connect: '' as IntlString,
@@ -83,6 +83,15 @@ export default plugin(whatsappId, {
     Phone: '' as IntlString,
     Error: '' as IntlString,
     Pending: '' as IntlString,
-    Incoming: '' as IntlString
+    Incoming: '' as IntlString,
+    Send: '' as IntlString,
+    Reply: '' as IntlString,
+    Sending: '' as IntlString,
+    Sent: '' as IntlString,
+    Delivered: '' as IntlString,
+    Read: '' as IntlString,
+    SendFailed: '' as IntlString,
+    SaveMessageFailed: '' as IntlString,
+    ConnectionRequired: '' as IntlString
   }
 })

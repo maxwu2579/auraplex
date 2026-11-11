@@ -57,6 +57,15 @@ export class ConnectionStore {
     return entries[0]
   }
 
+  async list (): Promise<Integration[]> {
+    return await this.account.listIntegrations({ kind: whatsappIntegrationKind })
+  }
+
+  async accessToken (integration: Integration): Promise<string | undefined> {
+    const value = await this.account.getIntegrationSecret({ ...this.key(integration), key: 'access-token' })
+    return value?.secret
+  }
+
   async connect (
     workspaceUuid: WorkspaceUuid,
     socialId: PersonId,

@@ -662,7 +662,7 @@ class Connection implements ClientConnection {
       if (this.delay < 3) {
         this.delay += 1
       }
-      console.error('client websocket error:', socketId, this.url, this.workspace, this.user)
+      console.error('client websocket error:', socketId, this.workspace, this.user)
     }
   }
 

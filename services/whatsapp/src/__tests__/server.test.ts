@@ -156,3 +156,14 @@ it('returns 503 if durable queue persistence fails so delivery can retry', async
     ).status
   ).toBe(503)
 })
+
+it('lets members read non-secret connection settings for replies while restricting configuration changes', async () => {
+  getLogin.mockResolvedValue({ workspace: 'ws', account: 'member', role: AccountRole.User })
+  store.get.mockResolvedValue({ data: { phoneNumberId: '100001', wabaId: '200001', accessToken: 'hidden' } })
+  const headers = { Authorization: 'Bearer local-test', 'Content-Type': 'application/json' }
+  const state = await fetch(base + '/api/connection', { headers })
+  expect(state.status).toBe(200)
+  expect(await state.text()).not.toContain('hidden')
+  expect((await fetch(base + '/api/connection', { headers, method: 'DELETE' })).status).toBe(403)
+  expect(store.disconnect).not.toHaveBeenCalled()
+})

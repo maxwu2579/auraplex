@@ -50,6 +50,7 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
     wamid?: string
 
   errorCode?: string
+  attemptOn?: number
   errorMessage?: string
   templateName?: string
   templateLanguage?: string

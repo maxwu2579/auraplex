@@ -31,7 +31,15 @@
     "NewMessage": "New WhatsApp message",
     "Messages": "WhatsApp messages",
     "NoMessages": "No messages yet",
-    "ReadOnlyHint": "Received messages are available here. Replying will be added in the next step.",
-    "ChannelLabel": "WhatsApp"
+    "ChannelLabel": "WhatsApp",
+    "Send": "Send",
+    "Reply": "Reply to customer",
+    "Sending": "Sending",
+    "Sent": "Sent",
+    "Delivered": "Delivered",
+    "Read": "Read",
+    "SendFailed": "Failed",
+    "SaveMessageFailed": "Could not save the message. Your draft is kept. Please try again.",
+    "ConnectionRequired": "Connect WhatsApp Business in Settings → Integrations to reply."
   }
 }

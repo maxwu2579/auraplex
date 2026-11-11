@@ -4,9 +4,9 @@
 
 ## 当前进度
 
-已完成第 1 步连接管理和第 2 步接收。现在可以用本地模拟器发送客户消息，自动匹配或创建联系人，并通知连接者和关注该联系人的同事。
+已完成连接管理、接收、回复及消息状态。现在可以用本地模拟器发送客户消息，自动匹配或创建联系人，并通知连接者和关注该联系人的同事。
 
-当前联系人下面提供只读 WhatsApp 消息窗口。第 3 步增加回复和发送状态，第 4 步增加模板和 24 小时规则。
+联系人下面的 WhatsApp 消息窗口支持文字回复。第 4 步增加模板和 24 小时规则。
 
 ## 本地试用第 1 步
 
@@ -52,7 +52,7 @@ node services/whatsapp/mock/index.mjs send --phone 6588880002 --name "测试客�
 1. 左侧 Inbox（收件箱）→ 点击通知分组标题 WhatsApp / 6588880002，直接打开会话。点击下面的“New WhatsApp message”文字会先打开客户资料。
 2. 左侧 Contacts（联系人）→ Person → 找到“测试客户”→ 点击 WhatsApp 图标 → 在号码旁点右箭头，即可打开消息窗口。也可以先打开客户资料，再用相同方式打开。
 
-目前窗口只能看消息，回复在第 3 步加入。每次运行 send 且不指定 --id，都会产生一条新的测试消息。
+每次运行 send 且不指定 --id，都会产生一条新的测试消息。
 
 找不到号码会自动新建联系人。已有号码即使带 +、空格、括号或横线，也会对应到原联系人，保持原来的号码值和姓名。没有客户昵称时用号码命名。
 
@@ -70,7 +70,37 @@ node services/whatsapp/mock/index.mjs send --phone 6588880002 --name "测试客�
 
 可选参数包括 --phone-number-id、--waba-id、--webhook、--id、--timestamp（秒）。测试其他公司号码时，必须先在对应工作区配置匹配的 Phone Number ID。模拟器仅允许向本机或本地 Docker 服务推送。
 
-### Graph 模拟器给后续步骤使用
+## 本地试用第 3 步
+
+先按第 2 步启动模拟器并保持连接。进入 Contacts → Person → 测试客户，点击 WhatsApp 图标，再点击号码右侧箭头。也可以从 Inbox 点击 WhatsApp / 号码分组标题打开。
+
+在窗口底部“Reply to customer / 回复客户”输入文字，点击“Send / 发送”。发出的消息显示在右侧，状态从 Pending / 待发送、Sending / 发送中更新为 Sent / 已发送，约 1.5 秒后变为 Delivered / 已送达，约 3 秒后变为 Read / 已读。
+
+PowerShell 在仓库根目录运行下面命令，查看模拟器实际收到的回复号码、内容及消息编号。
+
+```powershell
+node services/whatsapp/mock/index.mjs received
+```
+
+模拟器只保留最近 1000 条成功接收的请求供查看，重启模拟器后清空。Huly 里的消息继续保存在数据库。
+
+测试失败提示，先运行下面命令，再回到 Huly 发送一条文字。
+
+```powershell
+node services/whatsapp/mock/index.mjs error --mode token
+```
+
+该消息应显示 Failed / 发送失败，以及“访问令牌无效或已过期”的中文原因和错误码 190。测试后恢复正常，再发一条新的文字。
+
+```powershell
+node services/whatsapp/mock/index.mjs error --mode none
+```
+
+队列重复通知不会重复发送同一条消息。服务重启后会检查待发送记录，继续处理。发送中断超过两分钟、请求超时或确认响应丢失时，显示无法确认结果的失败提示，需先核实客户是否收到，再决定是否新发一条。为避免客户收到重复内容，这类消息不会自动重发。
+
+普通成员可以读取不含密钥的连接状态并回复。连接参数和令牌仍由管理员配置。
+
+### Graph 模拟器
 
 本地 Graph 接口使用 mock 版本路径，提供 POST /mock/{phone_number_id}/messages 和 GET /mock/{waba_id}/message_templates。返回假的消息编号，约 1.5 秒后推送 delivered，3 秒后推送 read，所有回调带签名。包含中文和英文已审核模板及一个未审核模板。
 
@@ -98,7 +128,8 @@ node services/whatsapp/mock/index.mjs error --mode none
 - 健康检查为 GET /health。返回 {"status":"ok"} 表示服务已启动。
 - WhatsApp ChannelProvider 已移到 models/whatsapp，保留原编号。旧 Channel 数据沿用原号码和原联系人。
 - 每次推送先对原始请求体校验 HMAC-SHA256 签名。错误签名返回 401。验证回调要求 subscribe 模式和匹配的验证令牌。
-- 返回 200 前，推送先写入 whatsapp_events 数据卷。后台按顺序写入 Huly，失败保留并重试，重启后继续。消息、联系人、通知用同一批操作提交，消息使用按公司号码和 wamid 生成的固定编号，重复推送不会重复入库。
+- 返回 200 前，推送先写入 whatsapp_events 数据卷。后台写入 Huly，失败最多尝试 5 次，间隔通常为 5 秒。尝试次数保存在文件名中，重启后继续累计。达到上限后移入 /var/lib/whatsapp/inbox/failed，保留内容并记录一次文件名，不再自动重试。损坏的文件也按相同规则隔离，其他推送继续处理。消息、联系人、通知用同一批操作提交，消息使用按公司号码和 wamid 生成的固定编号，重复推送不会重复入库。
+- 排查失败推送可运行 docker exec dev-whatsapp-1 ls /var/lib/whatsapp/inbox/failed。修复工作区等原因后，管理员可以把选定的文件复制回 inbox 根目录以重新尝试，并保留 failed 原件；不要直接清空文件夹。
 - 待处理推送属于临时传输记录，成功后清理对应文件。业务数据始终在 Huly 数据模型中。备份时保留该数据卷可避免丢失尚未完成的推送。
 
 ## 配置
@@ -115,9 +146,10 @@ node services/whatsapp/mock/index.mjs error --mode none
 | WHATSAPP_APP_SECRET | webhook 签名校验，只放在服务器环境 |
 | WHATSAPP_VERIFY_TOKEN | webhook 验证，只放在服务器环境 |
 | WHATSAPP_INBOX_DIR | 待处理推送目录，默认 /var/lib/whatsapp/inbox |
-| QUEUE_CONFIG | 后续用于监听待发送消息 |
+| QUEUE_CONFIG | 监听 Huly 的 QueueTopic.Tx，处理待发送消息 |
+| REGION | 队列区域，必须与工作区 transactor 一致；本机为 cockroach |
 
-使用 compose.mock.yaml 时 Graph API 指向本地 whatsapp-mock 容器。第 2 步接收推送，Graph 发送接口由模拟器提供给后续步骤使用。
+使用 compose.mock.yaml 时 Graph API 指向本地 whatsapp-mock 容器，接收 Huly 的回复并推送状态。
 
 ## 换成真实账号时
 

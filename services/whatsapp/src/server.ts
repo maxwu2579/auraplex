@@ -110,7 +110,8 @@ export function createApp (
         res.sendStatus(401)
         return
       }
-      if (![AccountRole.Owner, AccountRole.Admin, AccountRole.Maintainer].includes(login.role)) {
+      const readConnection = req.method === 'GET' && req.path === '/connection' && login.role === AccountRole.User
+      if (!readConnection && ![AccountRole.Owner, AccountRole.Admin, AccountRole.Maintainer].includes(login.role)) {
         res.status(403).json({ code: 'Forbidden' })
         return
       }
