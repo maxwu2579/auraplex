@@ -836,17 +836,6 @@ export function createModel (builder: Builder): void {
     contact.class.ChannelProvider,
     core.space.Model,
     {
-      label: contact.string.Whatsapp,
-      icon: contact.icon.Whatsapp,
-      placeholder: contact.string.WhatsappPlaceholder
-    },
-    contact.channelProvider.Whatsapp
-  )
-
-  builder.createDoc(
-    contact.class.ChannelProvider,
-    core.space.Model,
-    {
       label: contact.string.Skype,
       icon: contact.icon.Skype,
       placeholder: contact.string.SkypePlaceholder

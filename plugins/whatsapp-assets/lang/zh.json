@@ -27,6 +27,11 @@
     "Phone": "手机号码",
     "Error": "错误",
     "Pending": "待发送",
-    "Incoming": "收到"
+    "Incoming": "收到",
+    "NewMessage": "新的 WhatsApp 消息",
+    "Messages": "WhatsApp 消息",
+    "NoMessages": "还没有收到消息",
+    "ReadOnlyHint": "当前可以查看收到的消息，回复功能将在下一步加入。",
+    "ChannelLabel": "WhatsApp"
   }
 }

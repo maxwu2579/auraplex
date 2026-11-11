@@ -13,10 +13,12 @@
 // limitations under the License.
 //
 
-import type { Domain } from '@hcengineering/core'
-import { type Builder, Model, Prop, TypeString, TypeTimestamp } from '@hcengineering/model'
+import { type Domain, IndexKind } from '@hcengineering/core'
+import { type Builder, Model, Prop, TypeString, TypeTimestamp, Index } from '@hcengineering/model'
 import core, { TAttachedDoc } from '@hcengineering/model-core'
 import setting from '@hcengineering/setting'
+import contact from '@hcengineering/contact'
+import notification from '@hcengineering/notification'
 import whatsapp, { whatsappIntegrationKind, type WhatsappMessage } from '@hcengineering/whatsapp'
 
 export { whatsappId } from '@hcengineering/whatsapp'
@@ -43,7 +45,10 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
   @Prop(TypeTimestamp(), whatsapp.string.SentOn)
     sendOn!: number
 
-  wamid?: string
+  @Prop(TypeString(), whatsapp.string.Message)
+  @Index(IndexKind.Indexed)
+    wamid?: string
+
   errorCode?: string
   errorMessage?: string
   templateName?: string
@@ -53,6 +58,44 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
 
 export function createModel (builder: Builder): void {
   builder.createModel(TWhatsappMessage)
+  builder.createDoc(
+    contact.class.ChannelProvider,
+    core.space.Model,
+    {
+      label: whatsapp.string.ChannelLabel,
+      icon: contact.icon.Whatsapp,
+      placeholder: whatsapp.string.Phone,
+      presenter: whatsapp.component.Chat,
+      integrationType: whatsapp.integrationType.Whatsapp
+    },
+    contact.channelProvider.Whatsapp
+  )
+  builder.createDoc(
+    notification.class.NotificationGroup,
+    core.space.Model,
+    {
+      label: whatsapp.string.Whatsapp,
+      icon: contact.icon.Whatsapp
+    },
+    whatsapp.ids.NotificationGroup
+  )
+  // The receiver explicitly targets the integration owner and contact followers.
+  // Empty txClasses avoids a second automatic notification for the same message.
+  builder.createDoc(
+    notification.class.NotificationType,
+    core.space.Model,
+    {
+      label: whatsapp.string.NewMessage,
+      generated: false,
+      allowedForAuthor: true,
+      hidden: false,
+      txClasses: [],
+      objectClass: whatsapp.class.Message,
+      group: whatsapp.ids.NotificationGroup,
+      defaultEnabled: true
+    },
+    whatsapp.ids.NewMessageNotification
+  )
   builder.createDoc(
     setting.class.IntegrationType,
     core.space.Model,

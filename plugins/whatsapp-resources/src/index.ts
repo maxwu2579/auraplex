@@ -17,9 +17,10 @@ import type { Resources } from '@hcengineering/platform'
 import Connect from './components/Connect.svelte'
 import State from './components/State.svelte'
 import Icon from './components/Icon.svelte'
+import Chat from './components/Chat.svelte'
 import { disconnect } from './api'
 
 export default async (): Promise<Resources> => ({
-  component: { Connect, State, Icon },
+  component: { Connect, State, Icon, Chat },
   handler: { Disconnect: disconnect }
 })

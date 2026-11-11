@@ -17,6 +17,7 @@ import type { AttachedDoc, Class, IntegrationKind, Ref, Timestamp } from '@hceng
 import { plugin, type Plugin, type IntlString, type Metadata } from '@hcengineering/platform'
 import type { IntegrationType, Handler } from '@hcengineering/setting'
 import type { AnyComponent } from '@hcengineering/ui'
+import type { NotificationGroup, NotificationType } from '@hcengineering/notification'
 
 export const whatsappId = 'whatsapp' as Plugin
 export const whatsappIntegrationKind = 'whatsapp' as IntegrationKind
@@ -41,13 +42,20 @@ export default plugin(whatsappId, {
   class: { Message: '' as Ref<Class<WhatsappMessage>> },
   integrationType: { Whatsapp: '' as Ref<IntegrationType> },
   metadata: { WhatsappURL: '' as Metadata<string> },
+  ids: { NotificationGroup: '' as Ref<NotificationGroup>, NewMessageNotification: '' as Ref<NotificationType> },
   component: {
+    Chat: '' as AnyComponent,
     Connect: '' as AnyComponent,
     State: '' as AnyComponent,
     Icon: '' as AnyComponent
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    ChannelLabel: '' as IntlString,
+    NewMessage: '' as IntlString,
+    Messages: '' as IntlString,
+    NoMessages: '' as IntlString,
+    ReadOnlyHint: '' as IntlString,
     Whatsapp: '' as IntlString,
     Description: '' as IntlString,
     Connect: '' as IntlString,

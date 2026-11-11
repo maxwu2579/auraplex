@@ -43,6 +43,15 @@ export class ConnectionStore {
     return await result
   }
 
+  async findByPhoneNumberId (phoneNumberId: string): Promise<Integration | undefined> {
+    const entries = await this.account.listIntegrations({ kind: whatsappIntegrationKind })
+    const matches = entries.filter(
+      (entry) => entry.workspaceUuid != null && entry.data?.phoneNumberId === phoneNumberId
+    )
+    if (matches.length > 1) throw new Error('Ambiguous phone number integration')
+    return matches[0]
+  }
+
   async get (workspaceUuid: WorkspaceUuid): Promise<Integration | undefined> {
     const entries = await this.account.listIntegrations({ kind: whatsappIntegrationKind, workspaceUuid })
     return entries[0]

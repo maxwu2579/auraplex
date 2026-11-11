@@ -1,0 +1,16 @@
+# Copyright © 2026 Auraplex
+# Licensed under EPL-2.0. Development tools only.
+services:
+  whatsapp:
+    environment:
+      - WHATSAPP_GRAPH_URL=http://whatsapp-mock:8097
+  whatsapp-mock:
+    image: hardcoreeng/whatsapp
+    command: ['node', '/mock/index.mjs', 'start', '--bind', '0.0.0.0', '--webhook', 'http://whatsapp:8098/webhook']
+    env_file:
+      - .env.whatsapp.local
+    ports:
+      - '127.0.0.1:8097:8097'
+    volumes:
+      - ../services/whatsapp/mock:/mock:ro
+    restart: unless-stopped

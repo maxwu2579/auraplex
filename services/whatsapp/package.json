@@ -64,7 +64,9 @@
     "express": "^4.21.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "@hcengineering/whatsapp": "workspace:^0.7.0"
+    "@hcengineering/whatsapp": "workspace:^0.7.0",
+    "@hcengineering/contact": "workspace:^0.7.0",
+    "@hcengineering/notification": "workspace:^0.7.0"
   },
   "license": "EPL-2.0"
 }

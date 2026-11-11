@@ -20,8 +20,13 @@ import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
+import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
-export function createApp (config: Config, store: ConnectionStore): express.Express {
+export function createApp (
+  config: Config,
+  store: ConnectionStore,
+  inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> }
+): express.Express {
   const app = express()
   const encryption = new TokenEncryption()
   app.disable('x-powered-by')
@@ -32,13 +37,58 @@ export function createApp (config: Config, store: ConnectionStore): express.Expr
       allowedHeaders: ['Authorization', 'Content-Type']
     })
   )
-  app.use(express.json({ limit: '24kb' }))
+  // The raw bytes belong to this request, not shared state between requests.
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify: (req, _res, bytes) => {
+        ;(req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(bytes)
+      }
+    })
+  )
   app.use((_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store')
     next()
   })
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' })
+  })
+
+  app.get('/webhook', (req, res) => {
+    if (
+      !verifyChallenge(req.query['hub.mode'], req.query['hub.verify_token'], config.verifyToken ?? '') ||
+      typeof req.query['hub.challenge'] !== 'string'
+    ) {
+      res.sendStatus(403)
+      return
+    }
+    res.type('text/plain').send(req.query['hub.challenge'])
+  })
+  app.post('/webhook', (req, res) => {
+    const raw = (req as Request & { rawBody?: Buffer }).rawBody
+    if (raw === undefined || !verifySignature(raw, req.get('X-Hub-Signature-256'), config.appSecret ?? '')) {
+      res.sendStatus(401)
+      return
+    }
+    let batch: WebhookBatch
+    try {
+      batch = parseWebhook(req.body)
+    } catch {
+      res.status(400).json({ code: 'InvalidWebhook' })
+      return
+    }
+    if (inbox === undefined) {
+      res.sendStatus(503)
+      return
+    }
+    void inbox
+      .enqueue(batch)
+      .then(() => {
+        res.sendStatus(200)
+      })
+      .catch(() => {
+        res.sendStatus(503)
+      })
   })
 
   app.use('/api', (req, res, next) => {

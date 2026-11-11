@@ -21,14 +21,37 @@ import serverToken, { generateToken } from '@hcengineering/server-token'
 import { readConfig } from './config'
 import { ConnectionStore } from './integrations'
 import { createApp } from './server'
+import { PersistentInbox } from './inbox'
+import { WorkspaceReceiver } from './workspaceClient'
 
 const config = readConfig()
 setMetadata(serverClient.metadata.Endpoint, config.accountsUrl)
 setMetadata(serverToken.metadata.Secret, config.secret)
 setMetadata(serverToken.metadata.Service, 'whatsapp')
 const account = getAccountClient(generateToken(systemAccountUuid, undefined, { service: 'whatsapp' }))
-const server = createApp(config, new ConnectionStore(account)).listen(config.port, () => {
-  console.log('WhatsApp service started', { port: config.port })
+const store = new ConnectionStore(account)
+const receiver = new WorkspaceReceiver(account, store)
+const inbox = new PersistentInbox(
+  config.inboxDirectory ?? '/var/lib/whatsapp/inbox',
+  (batch) => receiver.consume(batch),
+  () => {
+    console.error('WhatsApp delivery will retry; pending events are preserved')
+  }
+)
+async function main (): Promise<void> {
+  await inbox.start()
+  const server = createApp(config, store, inbox).listen(config.port, () => {
+    console.log('WhatsApp service started', { port: config.port })
+  })
+  const shutdown = (): void => {
+    server.close(() => {
+      void inbox.close().then(() => receiver.close())
+    })
+  }
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
+}
+void main().catch(() => {
+  console.error('WhatsApp service could not start')
+  process.exitCode = 1
 })
-process.on('SIGTERM', () => server.close())
-process.on('SIGINT', () => server.close())

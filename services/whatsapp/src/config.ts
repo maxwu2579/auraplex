@@ -21,6 +21,9 @@ export interface Config {
   allowedOrigins: string[]
   graphUrl: string
   graphVersion: string
+  appSecret?: string
+  verifyToken?: string
+  inboxDirectory?: string
 }
 
 export function readConfig (): Config {
@@ -40,6 +43,9 @@ export function readConfig (): Config {
     publicUrl: WHATSAPP_PUBLIC_URL.replace(/\/$/, ''),
     allowedOrigins: (process.env.WHATSAPP_ALLOWED_ORIGINS ?? '').split(',').filter(Boolean),
     graphUrl: process.env.WHATSAPP_GRAPH_URL ?? 'https://graph.facebook.com',
+    appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
+    verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
+    inboxDirectory: process.env.WHATSAPP_INBOX_DIR ?? '/var/lib/whatsapp/inbox',
     graphVersion: WHATSAPP_GRAPH_VERSION
   }
 }

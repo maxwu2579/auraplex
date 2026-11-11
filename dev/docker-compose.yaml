@@ -262,6 +262,13 @@ services:
     restart: unless-stopped
   whatsapp:
     image: hardcoreeng/whatsapp
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    env_file:
+      - path: .env.whatsapp.local
+        required: false
+    volumes:
+      - whatsapp_events:/var/lib/whatsapp
     ports:
       - '127.0.0.1:8098:8098'
     environment:
@@ -274,8 +281,6 @@ services:
       # Local simulator. Real credentials must be supplied outside this file.
       - WHATSAPP_GRAPH_URL=http://host.docker.internal:8097
       - WHATSAPP_GRAPH_VERSION=mock
-      - WHATSAPP_APP_SECRET=${WHATSAPP_APP_SECRET:-}
-      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-}
     healthcheck:
       test: ['CMD', 'node', '-e', "fetch('http://localhost:8098/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -748,6 +753,7 @@ services:
       - BADGER_DIRECTORY_KEY=/badger/key
     restart: unless-stopped
 volumes:
+  whatsapp_events:
   db:
   dbpg:
   files:
