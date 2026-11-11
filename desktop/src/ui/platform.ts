@@ -113,6 +113,7 @@ import '@hcengineering/love-assets'
 import '@hcengineering/notification-assets'
 import '@hcengineering/preference-assets'
 import '@hcengineering/print-assets'
+import '@hcengineering/share-assets'
 import '@hcengineering/process-assets'
 import '@hcengineering/products-assets'
 import '@hcengineering/questions-assets'
@@ -151,6 +152,7 @@ import { coreId } from '@hcengineering/core'
 import love, { loveId } from '@hcengineering/love'
 import presentation, { createFileStorage, presentationId } from '@hcengineering/presentation'
 import print, { printId } from '@hcengineering/print'
+import { shareId } from '@hcengineering/share'
 import sign from '@hcengineering/sign'
 import textEditor, { textEditorId } from '@hcengineering/text-editor'
 
@@ -274,6 +276,7 @@ function configureI18n (): void {
   )
   addStringsLoader(loveId, async (lang: string) => await import(`@hcengineering/love-assets/lang/${lang}.json`))
   addStringsLoader(printId, async (lang: string) => await import(`@hcengineering/print-assets/lang/${lang}.json`))
+  addStringsLoader(shareId, async (lang: string) => await import(`@hcengineering/share-assets/lang/${lang}.json`))
   addStringsLoader(exportId, async (lang: string) => await import(`@hcengineering/export-assets/lang/${lang}.json`))
   addStringsLoader(
     analyticsCollectorId,
@@ -491,6 +494,7 @@ export async function configurePlatform (onWorkbenchConnect?: () => Promise<void
   )
   addLocation(loveId, () => import(/* webpackChunkName: "love" */ '@hcengineering/love-resources'))
   addLocation(printId, () => import(/* webpackChunkName: "print" */ '@hcengineering/print-resources'))
+  addLocation(shareId, () => import(/* webpackChunkName: "share" */ '@hcengineering/share-resources'))
   addLocation(exportId, () => import(/* webpackChunkName: "export" */ '@hcengineering/export-resources'))
   addLocation(textEditorId, () => import(/* webpackChunkName: "text-editor" */ '@hcengineering/text-editor-resources'))
   addLocation(

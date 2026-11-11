@@ -2007,6 +2007,26 @@
       "shouldPublish": false
     },
     {
+      "packageName": "@hcengineering/share",
+      "projectFolder": "plugins/share",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/share-assets",
+      "projectFolder": "plugins/share-assets",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/share-resources",
+      "projectFolder": "plugins/share-resources",
+      "shouldPublish": false
+    },
+    {
+      "packageName": "@hcengineering/model-share",
+      "projectFolder": "models/share",
+      "shouldPublish": false
+    },
+    {
       "packageName": "@hcengineering/model-export",
       "projectFolder": "models/export",
       "shouldPublish": false

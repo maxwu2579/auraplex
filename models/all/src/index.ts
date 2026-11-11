@@ -94,6 +94,7 @@ import { analyticsCollectorId, createModel as analyticsCollectorModel } from '@h
 import { exportId, createModel as exportModel } from '@hcengineering/model-export'
 import love, { loveId, createModel as loveModel } from '@hcengineering/model-love'
 import { printId, createModel as printModel } from '@hcengineering/model-print'
+import { shareId, createModel as shareModel } from '@hcengineering/model-share'
 import { serverLoveId, createModel as serverLoveModel } from '@hcengineering/model-server-love'
 import { serverProcessId, createModel as serverProcessModel } from '@hcengineering/model-server-process'
 import { serverTimeId, createModel as serverTimeModel } from '@hcengineering/model-server-time'
@@ -399,6 +400,7 @@ export default function buildModel (): Builder {
       }
     ],
     [printModel, printId],
+    [shareModel, shareId],
     [exportModel, exportId],
     [aiBotModel, aiBotId],
     [
