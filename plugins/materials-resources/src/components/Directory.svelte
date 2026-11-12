@@ -17,7 +17,7 @@
 -->
 <script lang="ts">
   import attachment, { type Photo } from '@hcengineering/attachment'
-  import core, { generateId } from '@hcengineering/core'
+  import core, { generateId, isOwnerOrMaintainer } from '@hcengineering/core'
   import { type IntlString } from '@hcengineering/platform'
   import { createQuery, getBlobRef, getClient, uploadFile } from '@hcengineering/presentation'
   import { Label } from '@hcengineering/ui'
@@ -28,6 +28,7 @@
     type Material,
     type MovementKind
   } from '@hcengineering/materials'
+  import ImportDialog from './ImportDialog.svelte'
   import HistoryDialog from './HistoryDialog.svelte'
   import StockDialog from './StockDialog.svelte'
 
@@ -57,6 +58,7 @@
   let search = ''
   let category = ''
   let rack = ''
+  let importing = false
   let editing = false
   let selected: Material | undefined
   let draft: Draft = emptyDraft()
@@ -286,6 +288,7 @@
 <div class="directory">
   <header>
     <h1><Label label={materials.string.Directory} /></h1>
+    {#if isOwnerOrMaintainer()}<button on:click={() => (importing = true)}>导入 Excel</button>{/if}
     <button
       class="primary"
       on:click={() => {
@@ -400,6 +403,7 @@
     </table>
   </div>
 </div>
+{#if importing}<ImportDialog on:close={() => (importing = false)} />{/if}
 {#if stockTarget !== undefined}
   <StockDialog material={stockTarget.material} kind={stockTarget.kind} on:close={() => (stockTarget = undefined)} />
 {/if}

@@ -17,6 +17,7 @@
     "_phase:test": "jest --passWithNoTests --silent"
   },
   "devDependencies": {
+    "@xmldom/xmldom": "^0.9.12",
     "svelte-loader": "^3.2.0",
     "sass": "^1.80.0",
     "svelte-preprocess": "^5.1.4",
@@ -47,7 +48,8 @@
     "@hcengineering/attachment": "workspace:^0.7.0",
     "svelte": "^4.2.20",
     "@hcengineering/contact": "workspace:^0.7.0",
-    "@hcengineering/contact-resources": "workspace:^0.7.0"
+    "@hcengineering/contact-resources": "workspace:^0.7.0",
+    "fflate": "0.8.3"
   },
   "license": "EPL-2.0"
 }

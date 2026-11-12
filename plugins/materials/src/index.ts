@@ -180,3 +180,6 @@ export default plugin(materialsId, {
     Location: '' as IntlString
   }
 })
+
+export { previewStockRows } from './stockImport'
+export type { StockImportRow, StockImportIssue } from './stockImport'

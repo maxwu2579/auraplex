@@ -23866,6 +23866,9 @@ importers:
       '@hcengineering/ui':
         specifier: workspace:^0.7.0
         version: link:../../packages/ui
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       svelte:
         specifier: ^4.2.20
         version: 4.2.20
@@ -23882,6 +23885,9 @@ importers:
       '@typescript-eslint/parser':
         specifier: ^6.21.0
         version: 6.21.0(eslint@8.57.1)(typescript@5.9.3)
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
       eslint:
         specifier: ^8.54.0
         version: 8.57.1
@@ -46517,6 +46523,11 @@ packages:
   '@xmldom/xmldom@0.8.11':
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
+
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -57866,6 +57877,8 @@ snapshots:
       tslib: 1.14.1
 
   '@xmldom/xmldom@0.8.11': {}
+
+  '@xmldom/xmldom@0.9.12': {}
 
   '@xtuc/ieee754@1.2.0': {}
 
