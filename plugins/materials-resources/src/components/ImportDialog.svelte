@@ -14,13 +14,20 @@
     type StockImportRow
   } from '@hcengineering/materials'
   import { getClient } from '@hcengineering/presentation'
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, tick } from 'svelte'
   import { readStockWorkbook } from '../stockWorkbook'
   import { guardOpening } from '../opening'
+  import { indexStockPictures, type StockPicture } from '../stockPictures'
+  import { saveImportedPhoto } from '../saveImportedPhoto'
 
   const dispatch = createEventDispatcher()
   const client = getClient()
   let rows: StockImportRow[] = []
+  let archive: Uint8Array | undefined
+  let pictures: StockPicture[] = []
+  let picturesByRow = new Map<number, StockPicture[]>()
+  let originalCodes = new Map<number, string>()
+  let progress = ''
   let existing: Material[] = []
   let selected = new Set<number>()
   let withMovements = new Set<Ref<Material>>()
@@ -56,13 +63,30 @@
     loaded = false
     busy = true
     started = Date.now()
+    progress = '正在读取 Excel 文件……'
+    await tick()
     try {
-      rows = readStockWorkbook(new Uint8Array(await file.arrayBuffer()))
+      archive = new Uint8Array(await file.arrayBuffer())
+      progress = '正在识别物料及照片，请稍候……'
+      await tick()
+      rows = readStockWorkbook(archive)
+      progress = '正在核对照片关联，请稍候……'
+      await tick()
+      pictures = indexStockPictures(archive)
+      picturesByRow = new Map()
+      for (const picture of pictures) {
+        const list = picturesByRow.get(picture.row) ?? []
+        list.push(picture)
+        picturesByRow.set(picture.row, list)
+      }
+      originalCodes = new Map(rows.map((row) => [row.row, row.invalidCode === true ? '' : normalizeCode(row.code)]))
       existing = await client.findAll(materials.class.Material, {})
       const codes = new Set(rows.map((row) => normalizeCode(row.code)))
       const matched = existing.filter((material) => codes.has(material.normalizedCode))
       const found = new Set<Ref<Material>>()
       for (let i = 0; i < matched.length; i += 20) {
+        progress = `正在检查现有流水 ${Math.min(i + 20, matched.length)} / ${matched.length}`
+        await tick()
         const batch = matched.slice(i, i + 20)
         const checks = await Promise.all(
           batch.map(
@@ -127,8 +151,14 @@
     error = ''
     message = ''
     let done = 0
+    let photosDone = 0
+    let skippedPhotos = 0
+    const chosen = preview.filter((x) => selected.has(x.row.row) && x.issues.length === 0)
     try {
-      for (const entry of preview.filter((x) => selected.has(x.row.row) && x.issues.length === 0)) {
+      if (archive === undefined) throw new Error('请重新选择文件')
+      for (const entry of chosen) {
+        progress = `正在处理物料 ${done + 1} / ${chosen.length}，已保存 ${done} 行，新增照片 ${photosDone} 张`
+        await tick()
         const row = entry.row
         const code = row.code.trim()
         const normalizedCode = normalizeCode(code)
@@ -201,14 +231,26 @@
         }
         if (!(await ops.commit()).result) throw new Error(`第 ${row.row} 行保存冲突，请重新预览。`)
         done++
+        const attached = picturesByRow.get(row.row) ?? []
+        if (originalCodes.get(row.row) !== normalizedCode || normalizedCode === '') skippedPhotos += attached.length
+        else {
+          for (const picture of attached) {
+            if (picture.problem !== undefined || picture.media === undefined) {
+              skippedPhotos++
+              continue
+            }
+            if (await saveImportedPhoto(client, id, archive, picture.media)) photosDone++
+          }
+        }
       }
-      message = `已导入 ${done} 行。请重新选择文件查看最新预览。`
+      message = `已保存 ${done} 行，新增照片 ${photosDone} 张，跳过问题或编号变更照片 ${skippedPhotos} 张。请重新选择文件查看最新预览。`
       loaded = false
     } catch (e) {
-      error = `已导入 ${done} 行。${e instanceof Error ? e.message : '保存失败'} 其余行未处理，请重新预览。`
+      error = `已保存 ${done} 行、新增照片 ${photosDone} 张。${e instanceof Error ? e.message : '保存失败'} 请重新选择同一文件继续。`
       loaded = false
     } finally {
       busy = false
+      progress = ''
     }
   }
 </script>
@@ -216,12 +258,12 @@
 <div class="overlay" role="presentation">
   <section class="dialog" role="dialog" aria-modal="true" aria-label="导入库存">
     <header>
-      <h2>导入库存 Excel（不含照片）</h2>
+      <h2>导入库存 Excel（含照片）</h2>
       <button disabled={busy} on:click={() => dispatch('close')}>关闭</button>
     </header>
     <p>先预览再确认。问题行默认不导入；已有流水的库存不会被覆盖。</p>
     <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label="选择库存 Excel" />
-    {#if busy}<p>正在处理，请稍候……</p>{/if}
+    {#if busy}<p role="status">{progress}</p>{/if}
     {#if error}<p role="alert" class="error">{error}</p>{/if}
     {#if message}<p>{message}</p>{/if}
     {#if loaded}
@@ -230,12 +272,20 @@
           (x) => x.issues.length > 0
         ).length} 行。
       </p>
+      <p>
+        图片总数：{pictures.length}；无对应物料行或编号的图片：{pictures.filter(
+          (p) => (originalCodes.get(p.row) ?? '') === ''
+        ).length}；关联错误：{pictures.filter((p) => p.problem !== undefined).length}。编号修改后不会猜测照片归属。
+      </p>
+      {#each pictures.filter((p) => p.problem !== undefined || (originalCodes.get(p.row) ?? '') === '') as picture}
+        <p>第 {picture.row} 行图片：{picture.problem ?? '没有对应物料编号'}</p>
+      {/each}
       <div class="table">
         <table>
           <thead
             ><tr
               ><th>导入</th><th>行</th><th>编号</th><th>名称</th><th>Excel 库存</th><th>现有库存</th><th>最低库存</th
-              ><th>资料变化</th><th>问题 / 库存差别</th></tr
+              ><th>照片</th><th>资料变化</th><th>问题 / 库存差别</th></tr
             ></thead
           ><tbody>
             {#each preview as item (item.row.row)}
@@ -253,6 +303,7 @@
                 <td>{item.row.row}</td><td
                   ><input
                     aria-label="编号"
+                    disabled={busy}
                     value={item.row.code}
                     on:change={(e) => {
                       changed(item.row, 'code', e.currentTarget.value)
@@ -261,6 +312,7 @@
                 ><td
                   ><input
                     aria-label="名称"
+                    disabled={busy}
                     value={item.row.name}
                     on:change={(e) => {
                       changed(item.row, 'name', e.currentTarget.value)
@@ -269,6 +321,7 @@
                 ><td
                   ><input
                     aria-label="库存"
+                    disabled={busy}
                     value={item.row.stock}
                     on:change={(e) => {
                       changed(item.row, 'stock', e.currentTarget.value)
@@ -278,11 +331,17 @@
                 <td
                   ><input
                     aria-label="最低库存"
+                    disabled={busy}
                     value={item.row.minimum}
                     on:change={(e) => {
                       changed(item.row, 'minimum', e.currentTarget.value)
                     }}
                   /></td
+                ><td
+                  >{(picturesByRow.get(item.row.row) ?? []).length} 张{originalCodes.get(item.row.row) !==
+                  normalizeCode(item.row.code)
+                    ? '（编号已变，不导入）'
+                    : ''}</td
                 ><td>
                   {#each importFieldChanges(item.row, item.existing) as change}<div>
                       {change.label}: {change.before} → {change.after}

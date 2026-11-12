@@ -23866,6 +23866,9 @@ importers:
       '@hcengineering/ui':
         specifier: workspace:^0.7.0
         version: link:../../packages/ui
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
       fflate:
         specifier: 0.8.3
         version: 0.8.3
