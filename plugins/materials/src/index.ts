@@ -181,5 +181,5 @@ export default plugin(materialsId, {
   }
 })
 
-export { previewStockRows } from './stockImport'
+export { previewStockRows, importFieldChanges } from './stockImport'
 export type { StockImportRow, StockImportIssue } from './stockImport'

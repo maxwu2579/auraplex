@@ -3,6 +3,7 @@
 // https://www.eclipse.org/legal/epl-2.0
 
 import { normalizeCode, parseQuantity, type Material } from './index'
+import type { Ref } from '@hcengineering/core'
 
 export interface StockImportRow {
   row: number
@@ -33,7 +34,8 @@ export type StockImportIssue =
 /** Problem rows are excluded until the user resolves them. No duplicate quantities are combined. */
 export function previewStockRows (
   rows: StockImportRow[],
-  existing: Material[]
+  existing: Material[],
+  withMovements?: ReadonlySet<Ref<Material>>
 ): Array<{
     row: StockImportRow
     issues: StockImportIssue[]
@@ -63,6 +65,41 @@ export function previewStockRows (
     if (row.invalidMinimumCell === true || (row.minimum.trim() !== '' && minimum === undefined)) {
       issues.push('invalidMinimum')
     }
-    return { row, issues, existing: material, stock, minimum, preserveStock: (material?.movements ?? 0) > 0 }
+    return {
+      row,
+      issues,
+      existing: material,
+      stock,
+      minimum,
+      preserveStock: material !== undefined && withMovements?.has(material._id) === true
+    }
   })
+}
+
+/** Shows only fields that the importer will actually change. */
+export function importFieldChanges (
+  row: StockImportRow,
+  existing: Material | undefined
+): Array<{ label: string, before: string, after: string }> {
+  if (existing === undefined) return []
+  const pairs: Array<[string, string | number | undefined | null, string | number | undefined | null]> = [
+    ['编号', existing.code, row.code.trim()],
+    ['名称', existing.name, row.name.trim()],
+    ['型号', existing.model, row.model ?? ''],
+    ['品牌', existing.brand, row.brand ?? ''],
+    ['类别', existing.category, row.category ?? ''],
+    ['组别', existing.group, row.group ?? ''],
+    ['货架', existing.rack, row.rack ?? ''],
+    ['层', existing.level, row.level ?? '']
+  ]
+  if (row.minimumPresent !== false) {
+    pairs.push(['最低库存', existing.minimumStock, row.minimum.trim() === '' ? undefined : parseQuantity(row.minimum)])
+  }
+  return pairs
+    .filter(([, oldValue, newValue]) => (oldValue ?? '') !== (newValue ?? ''))
+    .map(([label, before, after]) => ({
+      label,
+      before: before === undefined || before === null || before === '' ? '—' : String(before),
+      after: after === undefined || after === null || after === '' ? '—' : String(after)
+    }))
 }

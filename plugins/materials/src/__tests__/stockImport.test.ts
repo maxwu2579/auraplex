@@ -2,7 +2,7 @@
 // Licensed under the Eclipse Public License, Version 2.0.
 // https://www.eclipse.org/legal/epl-2.0
 
-import { previewStockRows, type StockImportRow } from '../stockImport'
+import { importFieldChanges, previewStockRows, type StockImportRow } from '../stockImport'
 import type { Material } from '../index'
 
 const row = (code: string, stock = '3'): StockImportRow => ({ row: 14, code, stock, name: 'Example', minimum: '' })
@@ -19,7 +19,29 @@ describe('stock import preview', () => {
     expect(result.map((item) => item.stock)).toEqual([undefined, undefined, 0])
   })
   it('identifies materials with movement history', () => {
-    const existing = { normalizedCode: 'A', movements: 1, stock: 7 } as unknown as Material
-    expect(previewStockRows([row('a', '2')], [existing])[0].preserveStock).toBe(true)
+    const existing = { _id: 'fixture-id', normalizedCode: 'A', movements: 0, stock: 7 } as unknown as Material
+    expect(previewStockRows([row('a', '2')], [existing], new Set([existing._id]))[0].preserveStock).toBe(true)
   })
+})
+
+test('shows changed fields and preserves a missing minimum column', () => {
+  const existing = {
+    code: 'A',
+    name: 'Old',
+    model: 'Old model',
+    category: 'Group A',
+    minimumStock: 4
+  } as unknown as Material
+  const imported: StockImportRow = {
+    ...row('A'),
+    name: 'New',
+    model: 'New model',
+    category: 'Group A',
+    minimumPresent: false
+  }
+  const changes = importFieldChanges(imported, existing)
+  expect(changes).toEqual([
+    { label: '名称', before: 'Old', after: 'New' },
+    { label: '型号', before: 'Old model', after: 'New model' }
+  ])
 })

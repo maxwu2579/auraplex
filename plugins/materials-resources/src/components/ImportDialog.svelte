@@ -4,9 +4,10 @@
 // https://www.eclipse.org/legal/epl-2.0
 -->
 <script lang="ts">
-  import core, { generateId, isOwnerOrMaintainer } from '@hcengineering/core'
+  import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
   import materials, {
     normalizeCode,
+    importFieldChanges,
     previewStockRows,
     type Material,
     type StockMovement,
@@ -15,19 +16,21 @@
   import { getClient } from '@hcengineering/presentation'
   import { createEventDispatcher } from 'svelte'
   import { readStockWorkbook } from '../stockWorkbook'
+  import { guardOpening } from '../opening'
 
   const dispatch = createEventDispatcher()
   const client = getClient()
   let rows: StockImportRow[] = []
   let existing: Material[] = []
   let selected = new Set<number>()
+  let withMovements = new Set<Ref<Material>>()
   let error = ''
   let message = ''
   let busy = false
   let loaded = false
   let started = 0
   let elapsed = 0
-  $: preview = previewStockRows(rows, existing)
+  $: preview = previewStockRows(rows, existing, withMovements)
   $: creates = preview.filter(
     (x) => selected.has(x.row.row) && x.issues.length === 0 && x.existing === undefined
   ).length
@@ -56,6 +59,21 @@
     try {
       rows = readStockWorkbook(new Uint8Array(await file.arrayBuffer()))
       existing = await client.findAll(materials.class.Material, {})
+      const codes = new Set(rows.map((row) => normalizeCode(row.code)))
+      const matched = existing.filter((material) => codes.has(material.normalizedCode))
+      const found = new Set<Ref<Material>>()
+      for (let i = 0; i < matched.length; i += 20) {
+        const batch = matched.slice(i, i + 20)
+        const checks = await Promise.all(
+          batch.map(
+            async (item) => await client.findAll(materials.class.StockMovement, { attachedTo: item._id }, { limit: 1 })
+          )
+        )
+        checks.forEach((items, index) => {
+          if (items.length > 0) found.add(batch[index]._id)
+        })
+      }
+      withMovements = found
       selected = new Set(
         previewStockRows(rows, existing)
           .filter((x) => x.issues.length === 0)
@@ -81,6 +99,22 @@
     selected.delete(row.row)
     selected = new Set(selected)
     rows = [...rows]
+    if (field === 'code') {
+      const matched = existing.find((item) => item.normalizedCode === normalizeCode(value))
+      if (matched !== undefined) {
+        void client
+          .findAll(materials.class.StockMovement, { attachedTo: matched._id }, { limit: 1 })
+          .then((items) => {
+            if (items.length > 0) withMovements.add(matched._id)
+            else withMovements.delete(matched._id)
+            withMovements = new Set(withMovements)
+          })
+          .catch(() => {
+            error = '无法读取物料流水，请重新选择文件预览。'
+            loaded = false
+          })
+      }
+    }
   }
   function toggle (row: number, checked: boolean): void {
     if (checked) selected.add(row)
@@ -106,7 +140,6 @@
         ) {
           throw new Error(`第 ${row.row} 行的物料已变化，请重新预览。`)
         }
-        const opening = current === undefined || (current.movements ?? 0) === 0
         const stock = entry.stock
         if (stock === undefined) throw new Error(`第 ${row.row} 行库存无效。`)
         const fields = {
@@ -121,9 +154,9 @@
           level: row.level ?? ''
         }
         const ops = client.apply(current === undefined ? 'materials-code' : 'materials-stock')
-        let id = current?._id
+        const id = current?._id ?? generateId<Material>()
+        const opening = await guardOpening(client, ops, id)
         if (current === undefined) {
-          id = generateId<Material>()
           ops.notMatch(materials.class.Material, { normalizedCode })
           await ops.createDoc(
             materials.class.Material,
@@ -154,7 +187,6 @@
                 : { minimumStock: entry.minimum })
           })
         }
-        if (id === undefined) throw new Error('物料编号无效')
         if (opening) {
           await ops.addCollection(
             materials.class.StockMovement,
@@ -203,7 +235,7 @@
           <thead
             ><tr
               ><th>导入</th><th>行</th><th>编号</th><th>名称</th><th>Excel 库存</th><th>现有库存</th><th>最低库存</th
-              ><th>问题 / 库存差别</th></tr
+              ><th>资料变化</th><th>问题 / 库存差别</th></tr
             ></thead
           ><tbody>
             {#each preview as item (item.row.row)}
@@ -251,7 +283,11 @@
                       changed(item.row, 'minimum', e.currentTarget.value)
                     }}
                   /></td
-                ><td
+                ><td>
+                  {#each importFieldChanges(item.row, item.existing) as change}<div>
+                      {change.label}: {change.before} → {change.after}
+                    </div>{/each}
+                </td><td
                   >{item.issues.map((issue) => names[issue]).join('、')}{item.preserveStock
                     ? ' 已有流水，保留现有库存'
                     : ''}</td
@@ -306,7 +342,12 @@
   }
   button,
   input {
+    color: var(--theme-content-color);
     font: inherit;
+    border: 1px solid var(--theme-button-border);
+    background: var(--theme-button-default);
+    border-radius: 0.4rem;
+    padding: 0.55rem 0.7rem;
   }
   button {
     padding: 0.5rem;
