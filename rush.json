@@ -273,6 +273,10 @@
    * 3. It's useful to have a centralized inventory of all projects and their important metadata.
    */
   "projects": [
+    { "packageName": "@hcengineering/materials", "projectFolder": "plugins/materials", "shouldPublish": false },
+    { "packageName": "@hcengineering/materials-assets", "projectFolder": "plugins/materials-assets", "shouldPublish": false },
+    { "packageName": "@hcengineering/materials-resources", "projectFolder": "plugins/materials-resources", "shouldPublish": false },
+    { "packageName": "@hcengineering/model-materials", "projectFolder": "models/materials", "shouldPublish": false },
     {
       "packageName": "@hcengineering/whatsapp",
       "projectFolder": "plugins/whatsapp",

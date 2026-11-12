@@ -153,6 +153,8 @@ import { coreId } from '@hcengineering/core'
 import love, { loveId } from '@hcengineering/love'
 import presentation, { createFileStorage, presentationId } from '@hcengineering/presentation'
 import print, { printId } from '@hcengineering/print'
+import { materialsId } from '@hcengineering/materials'
+import '@hcengineering/materials-assets'
 import { shareId } from '@hcengineering/share'
 import whatsapp, { whatsappId } from '@hcengineering/whatsapp'
 import sign from '@hcengineering/sign'
@@ -278,6 +280,7 @@ function configureI18n (): void {
   )
   addStringsLoader(loveId, async (lang: string) => await import(`@hcengineering/love-assets/lang/${lang}.json`))
   addStringsLoader(printId, async (lang: string) => await import(`@hcengineering/print-assets/lang/${lang}.json`))
+  addStringsLoader(materialsId, async (lang: string) => await import(`@hcengineering/materials-assets/lang/${lang}.json`))
   addStringsLoader(shareId, async (lang: string) => await import(`@hcengineering/share-assets/lang/${lang}.json`))
   addStringsLoader(whatsappId, async (lang: string) => await import(`@hcengineering/whatsapp-assets/lang/${lang}.json`))
   addStringsLoader(exportId, async (lang: string) => await import(`@hcengineering/export-assets/lang/${lang}.json`))
@@ -498,6 +501,7 @@ export async function configurePlatform (onWorkbenchConnect?: () => Promise<void
   )
   addLocation(loveId, () => import(/* webpackChunkName: "love" */ '@hcengineering/love-resources'))
   addLocation(printId, () => import(/* webpackChunkName: "print" */ '@hcengineering/print-resources'))
+  addLocation(materialsId, async () => await import(/* webpackChunkName: "materials" */ '@hcengineering/materials-resources'))
   addLocation(shareId, () => import(/* webpackChunkName: "share" */ '@hcengineering/share-resources'))
   addLocation(whatsappId, () => import(/* webpackChunkName: "whatsapp" */ '@hcengineering/whatsapp-resources'))
   addLocation(exportId, () => import(/* webpackChunkName: "export" */ '@hcengineering/export-resources'))
