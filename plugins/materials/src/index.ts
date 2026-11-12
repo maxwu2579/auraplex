@@ -176,6 +176,7 @@ export default plugin(materialsId, {
     StockChanged: '' as IntlString,
     DeletePhoto: '' as IntlString,
     LowStock: '' as IntlString,
-    Actions: '' as IntlString
+    Actions: '' as IntlString,
+    Location: '' as IntlString
   }
 })

@@ -60,6 +60,7 @@
     "StockChanged": "Someone changed this stock just now. The current stock has been refreshed; please check and submit again.",
     "DeletePhoto": "Delete photo",
     "LowStock": "Below minimum stock",
-    "Actions": "Actions"
+    "Actions": "Actions",
+    "Location": "Location (rack / level)"
   }
 }

@@ -300,34 +300,48 @@
       <thead>
         <tr>
           <th
-            ><button class="sort" on:click={() => { sortBy('code') }}
-              ><Label label={materials.string.Code} />{arrow('code', sortKey, ascending)}</button
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('code')
+              }}><Label label={materials.string.Code} />{arrow('code', sortKey, ascending)}</button
             ></th
           >
           <th
-            ><button class="sort" on:click={() => { sortBy('name') }}
-              ><Label label={materials.string.Name} />{arrow('name', sortKey, ascending)}</button
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('name')
+              }}><Label label={materials.string.Name} />{arrow('name', sortKey, ascending)}</button
             ></th
           >
           <th><Label label={materials.string.Model} /></th>
           <th
-            ><button class="sort" on:click={() => { sortBy('category') }}
-              ><Label label={materials.string.Category} />{arrow('category', sortKey, ascending)}</button
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('category')
+              }}><Label label={materials.string.Category} />{arrow('category', sortKey, ascending)}</button
             ></th
           >
           <th
-            ><button class="sort" on:click={() => { sortBy('rack') }}
-              ><Label label={materials.string.Rack} />{arrow('rack', sortKey, ascending)}</button
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('rack')
+              }}><Label label={materials.string.Location} />{arrow('rack', sortKey, ascending)}</button
             ></th
           >
-          <th><Label label={materials.string.Level} /></th>
           <th class="number"
-            ><button class="sort" on:click={() => { sortBy('stock') }}
-              ><Label label={materials.string.Stock} />{arrow('stock', sortKey, ascending)}</button
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('stock')
+              }}><Label label={materials.string.Stock} />{arrow('stock', sortKey, ascending)}</button
             ></th
           >
           <th class="number"><Label label={materials.string.MinimumStock} /></th>
-          <th><Label label={materials.string.Actions} /></th>
+          <th class="actions-col"><Label label={materials.string.Actions} /></th>
         </tr>
       </thead>
       <tbody>
@@ -337,8 +351,7 @@
             <td>{item.name}</td>
             <td>{item.model}</td>
             <td>{item.category}</td>
-            <td>{item.rack}</td>
-            <td>{item.level}</td>
+            <td>{[item.rack, item.level].filter((part) => part !== undefined && part !== '').join(' / ')}</td>
             <td class="number" class:low={isLowStock(item)}>
               {formatQuantity(item.stock)}
             </td>
@@ -347,26 +360,28 @@
                 ? formatQuantity(item.minimumStock)
                 : '—'}</td
             >
-            <td class="row-actions">
-              <button on:click={() => (stockTarget = { material: item, kind: 'in' })}
-                ><Label label={materials.string.StockIn} /></button
-              >
-              <button on:click={() => (stockTarget = { material: item, kind: 'out' })}
-                ><Label label={materials.string.StockOut} /></button
-              >
-              <button on:click={() => (stockTarget = { material: item, kind: 'adjust' })}
-                ><Label label={materials.string.Adjust} /></button
-              >
-              <button on:click={() => (historyTarget = item)}><Label label={materials.string.History} /></button>
-              <button
-                on:click={() => {
-                  edit(item)
-                }}><Label label={materials.string.Edit} /></button
-              >
-            </td>
+            <td class="actions-col"
+              ><div class="row-actions">
+                <button on:click={() => (stockTarget = { material: item, kind: 'in' })}
+                  ><Label label={materials.string.StockIn} /></button
+                >
+                <button on:click={() => (stockTarget = { material: item, kind: 'out' })}
+                  ><Label label={materials.string.StockOut} /></button
+                >
+                <button on:click={() => (stockTarget = { material: item, kind: 'adjust' })}
+                  ><Label label={materials.string.Adjust} /></button
+                >
+                <button on:click={() => (historyTarget = item)}><Label label={materials.string.History} /></button>
+                <button
+                  on:click={() => {
+                    edit(item)
+                  }}><Label label={materials.string.Edit} /></button
+                >
+              </div></td
+            >
           </tr>
         {:else}
-          <tr><td colspan="9" class="empty"><Label label={materials.string.NoResults} /></td></tr>
+          <tr><td colspan="8" class="empty"><Label label={materials.string.NoResults} /></td></tr>
         {/each}
       </tbody>
     </table>
@@ -458,7 +473,11 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    width: 100%;
     min-height: 0;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
     padding: 1.5rem;
     color: var(--theme-content-color);
   }
@@ -528,6 +547,9 @@
   }
   .table-wrap {
     overflow: auto;
+    min-width: 0;
+    min-height: 0;
+    flex: 0 1 auto;
     border: 1px solid var(--theme-divider-color);
     border-radius: 0.5rem;
   }
@@ -567,6 +589,22 @@
   .row-actions {
     display: flex;
     gap: 0.35rem;
+  }
+  /* The buttons stay visible on the right while the rest of the table scrolls sideways. */
+  .actions-col {
+    position: sticky;
+    right: 0;
+    background: var(--theme-bg-color, #1a1a1e);
+    box-shadow: -1px 0 0 var(--theme-divider-color);
+  }
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--theme-bg-color, #1a1a1e);
+  }
+  th.actions-col {
+    z-index: 2;
   }
   .row-actions button {
     padding: 0.3rem 0.55rem;

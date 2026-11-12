@@ -60,6 +60,7 @@
     "StockChanged": "刚才有人改了这个物料的库存，已刷新当前库存，请确认后再提交。",
     "DeletePhoto": "删除照片",
     "LowStock": "低于最低库存",
-    "Actions": "操作"
+    "Actions": "操作",
+    "Location": "位置（货架 / 层）"
   }
 }
