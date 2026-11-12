@@ -61,6 +61,12 @@
   let selected: Material | undefined
   let draft: Draft = emptyDraft()
   let minimum = ''
+  // Fields shown in the editor, as they were when it opened. Photos and stock changes do not count as edits.
+  let original = ''
+  function editableFields (material: Material): string {
+    const keys = ['code', 'name', 'model', 'brand', 'category', 'group', 'rack', 'level', 'unit', 'notes'] as const
+    return JSON.stringify([...keys.map((key) => material[key] ?? ''), material.minimumStock ?? null])
+  }
   let error: IntlString | undefined
   let busy = false
   let uploading = false
@@ -140,6 +146,7 @@
             notes: material.notes ?? ''
           }
     minimum = material?.minimumStock === undefined ? '' : String(material.minimumStock)
+    original = material === undefined ? '' : editableFields(material)
     error = undefined
     editing = true
     photos = []
@@ -193,8 +200,14 @@
           id
         )
       } else {
-        ops.match(materials.class.Material, { _id: id, modifiedOn: current.modifiedOn })
-        await ops.update(current, {
+        // Only a change to the edited fields by someone else is a conflict.
+        const latest = await client.findOne(materials.class.Material, { _id: id })
+        if (latest === undefined || editableFields(latest) !== original) {
+          error = materials.string.Conflict
+          return
+        }
+        ops.match(materials.class.Material, { _id: id, modifiedOn: latest.modifiedOn })
+        await ops.update(latest, {
           ...draft,
           code,
           normalizedCode,
