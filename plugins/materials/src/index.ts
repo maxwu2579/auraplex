@@ -37,6 +37,25 @@ export interface Material extends Doc {
   movements?: number
 }
 
+/** Product BOM is addressed by normalized code rather than a fixed material reference. */
+export interface Product extends Doc {
+  name: string
+  normalizedName: string
+  description: string
+  lines?: number
+}
+export interface BomLine extends AttachedDoc<Product> {
+  code: string
+  description: string
+  quantityRaw: string
+  quantity?: number
+  quantityProblem: boolean
+  codeProblem: boolean
+  section: string
+  sourceSheet: string
+  sourceRow: number
+}
+
 /**
  * opening: first stock taken over from Excel (step 3)
  * in / out: goods received / issued
@@ -111,12 +130,24 @@ export function normalizeCode (value: string): string {
   return value.normalize('NFKC').trim().toUpperCase()
 }
 export default plugin(materialsId, {
-  class: { Material: '' as Ref<Class<Material>>, StockMovement: '' as Ref<Class<StockMovement>> },
+  class: {
+    Material: '' as Ref<Class<Material>>,
+    StockMovement: '' as Ref<Class<StockMovement>>,
+    Product: '' as Ref<Class<Product>>,
+    BomLine: '' as Ref<Class<BomLine>>
+  },
   app: { Materials: '' as Ref<Doc> },
   icon: { Materials: '' as Asset },
-  component: { Directory: '' as AnyComponent },
+  component: { Directory: '' as AnyComponent, Products: '' as AnyComponent },
   string: {
     Materials: '' as IntlString,
+    Products: '' as IntlString,
+    BomLines: '' as IntlString,
+    BomQuantity: '' as IntlString,
+    BomSection: '' as IntlString,
+    BomSource: '' as IntlString,
+    BomProblem: '' as IntlString,
+    BomDescription: '' as IntlString,
     Directory: '' as IntlString,
     Create: '' as IntlString,
     Edit: '' as IntlString,

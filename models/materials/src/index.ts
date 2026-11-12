@@ -21,6 +21,7 @@ import {
   Model,
   Prop,
   TypeNumber,
+  TypeBoolean,
   TypeString,
   TypeTimestamp,
   UX
@@ -28,7 +29,14 @@ import {
 import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
 import attachment from '@hcengineering/model-attachment'
 import workbench from '@hcengineering/model-workbench'
-import materials, { materialsId, type Material, type MovementKind, type StockMovement } from '@hcengineering/materials'
+import materials, {
+  materialsId,
+  type Material,
+  type MovementKind,
+  type StockMovement,
+  type Product,
+  type BomLine
+} from '@hcengineering/materials'
 
 export { materialsId } from '@hcengineering/materials'
 export default materials
@@ -67,8 +75,32 @@ export class TStockMovement extends TAttachedDoc implements StockMovement {
   @Prop(TypeString(), materials.string.Purpose) purpose?: string
   @Prop(TypeString(), materials.string.Reason) reason?: string
 }
+@Model(materials.class.Product, core.class.Doc, DOMAIN_MATERIALS)
+@UX(materials.string.Products, materials.icon.Materials, undefined, 'name')
+export class TProduct extends TDoc implements Product {
+  @Prop(TypeString(), materials.string.Name) name!: string
+  @Prop(TypeString(), materials.string.Name) @Index(IndexKind.Indexed) normalizedName!: string
+  @Prop(TypeString(), materials.string.BomDescription) description!: string
+  @Prop(Collection(materials.class.BomLine), materials.string.BomLines) lines?: number
+}
+
+@Model(materials.class.BomLine, core.class.AttachedDoc, DOMAIN_MATERIALS)
+@UX(materials.string.BomLines, materials.icon.Materials)
+export class TBomLine extends TAttachedDoc implements BomLine {
+  declare attachedTo: BomLine['attachedTo']
+  declare attachedToClass: BomLine['attachedToClass']
+  @Prop(TypeString(), materials.string.Code) code!: string
+  @Prop(TypeString(), materials.string.BomDescription) description!: string
+  @Prop(TypeString(), materials.string.BomQuantity) quantityRaw!: string
+  @Prop(TypeNumber(), materials.string.BomQuantity) quantity?: number
+  @Prop(TypeBoolean(), materials.string.BomProblem) quantityProblem!: boolean
+  @Prop(TypeBoolean(), materials.string.BomProblem) codeProblem!: boolean
+  @Prop(TypeString(), materials.string.BomSection) section!: string
+  @Prop(TypeString(), materials.string.BomSource) sourceSheet!: string
+  @Prop(TypeNumber(), materials.string.BomSource) sourceRow!: number
+}
 export function createModel (builder: Builder): void {
-  builder.createModel(TMaterial, TStockMovement)
+  builder.createModel(TMaterial, TStockMovement, TProduct, TBomLine)
   builder.createDoc(
     workbench.class.Application,
     core.space.Model,
@@ -84,6 +116,12 @@ export function createModel (builder: Builder): void {
             label: materials.string.Directory,
             icon: materials.icon.Materials,
             component: materials.component.Directory
+          },
+          {
+            id: 'products',
+            label: materials.string.Products,
+            icon: materials.icon.Materials,
+            component: materials.component.Products
           }
         ],
         spaces: []

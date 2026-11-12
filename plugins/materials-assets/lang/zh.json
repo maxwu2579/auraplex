@@ -61,6 +61,13 @@
     "DeletePhoto": "删除照片",
     "LowStock": "低于最低库存",
     "Actions": "操作",
-    "Location": "位置（货架 / 层）"
+    "Location": "位置（货架 / 层）",
+    "Products": "产品 / BOM",
+    "BomLines": "BOM 明细",
+    "BomQuantity": "每台数量",
+    "BomSection": "装配段",
+    "BomSource": "来源",
+    "BomProblem": "有问题",
+    "BomDescription": "描述"
   }
 }

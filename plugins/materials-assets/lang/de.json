@@ -61,6 +61,13 @@
     "DeletePhoto": "Delete photo",
     "LowStock": "Below minimum stock",
     "Actions": "Actions",
-    "Location": "Location (rack / level)"
+    "Location": "Location (rack / level)",
+    "Products": "Products / BOM",
+    "BomLines": "BOM lines",
+    "BomQuantity": "Quantity per unit",
+    "BomSection": "Assembly section",
+    "BomSource": "Source",
+    "BomProblem": "Problem",
+    "BomDescription": "Description"
   }
 }

@@ -15,4 +15,5 @@
 
 import type { Resources } from '@hcengineering/platform'
 import Directory from './components/Directory.svelte'
-export default async (): Promise<Resources> => ({ component: { Directory } })
+import Products from './components/Products.svelte'
+export default async (): Promise<Resources> => ({ component: { Directory, Products } })
