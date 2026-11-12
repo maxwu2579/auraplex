@@ -21,7 +21,15 @@
   import { type IntlString } from '@hcengineering/platform'
   import { createQuery, getBlobRef, getClient, uploadFile } from '@hcengineering/presentation'
   import { Label } from '@hcengineering/ui'
-  import materials, { normalizeCode, type Material } from '@hcengineering/materials'
+  import materials, {
+    formatQuantity,
+    isLowStock,
+    normalizeCode,
+    type Material,
+    type MovementKind
+  } from '@hcengineering/materials'
+  import HistoryDialog from './HistoryDialog.svelte'
+  import StockDialog from './StockDialog.svelte'
 
   type Draft = Pick<
   Material,
@@ -61,6 +69,36 @@
   let categories: string[] = []
   let racks: string[] = []
   let filtered: Material[] = []
+  type SortKey = 'code' | 'name' | 'category' | 'rack' | 'stock'
+  let sortKey: SortKey = 'code'
+  let ascending = true
+  let stockTarget: { material: Material, kind: Exclude<MovementKind, 'opening'> } | undefined
+  let historyTarget: Material | undefined
+
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+  function sorted (list: Material[], key: SortKey, up: boolean): Material[] {
+    const compare = (a: Material, b: Material): number => {
+      let result: number
+      if (key === 'stock') result = a.stock - b.stock
+      else if (key === 'rack') {
+        result = collator.compare(a.rack ?? '', b.rack ?? '')
+        if (result === 0) result = collator.compare(a.level ?? '', b.level ?? '')
+      } else result = collator.compare(a[key] ?? '', b[key] ?? '')
+      if (result === 0) result = collator.compare(a.code, b.code)
+      return up ? result : -result
+    }
+    return list.sort(compare)
+  }
+  function sortBy (key: SortKey): void {
+    if (sortKey === key) ascending = !ascending
+    else {
+      sortKey = key
+      ascending = true
+    }
+  }
+  function arrow (key: SortKey, current: SortKey, up: boolean): string {
+    return key === current ? (up ? ' ▲' : ' ▼') : ''
+  }
 
   query.query(materials.class.Material, {}, (result) => {
     all = result
@@ -68,8 +106,8 @@
   $: categories = Array.from(new Set(all.map((item) => item.category).filter(Boolean))).sort()
   $: racks = Array.from(new Set(all.map((item) => item.rack).filter(Boolean))).sort()
   $: nameFilter = search.normalize('NFKC').trim().toLocaleLowerCase()
-  $: filtered = all
-    .filter((item) => {
+  $: filtered = sorted(
+    all.filter((item) => {
       const text = [item.code, item.name, item.model, item.brand, item.category, item.group, item.rack, item.level]
         .join(' ')
         .normalize('NFKC')
@@ -79,8 +117,10 @@
         (category === '' || item.category === category) &&
         (rack === '' || item.rack === rack)
       )
-    })
-    .sort((a, b) => a.code.localeCompare(b.code))
+    }),
+    sortKey,
+    ascending
+  )
 
   function edit (material?: Material): void {
     selected = material
@@ -180,6 +220,22 @@
     }
   }
 
+  async function removePhoto (photo: Photo): Promise<void> {
+    const item = selected
+    if (item === undefined || uploading) return
+    uploading = true
+    error = undefined
+    try {
+      await client.removeCollection(photo._class, photo.space, photo._id, item._id, item._class, 'photos')
+      const updated = await client.findOne(materials.class.Material, { _id: item._id })
+      if (updated !== undefined && selected?._id === item._id) selected = updated
+    } catch {
+      error = materials.string.PhotoFailed
+    } finally {
+      uploading = false
+    }
+  }
+
   async function addPhoto (): Promise<void> {
     const file = fileInput.files?.item(0)
     const item = selected
@@ -241,33 +297,87 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead
-        ><tr
-          ><th><Label label={materials.string.Code} /></th><th><Label label={materials.string.Name} /></th><th
-            ><Label label={materials.string.Model} /></th
-          ><th><Label label={materials.string.Category} /></th><th><Label label={materials.string.Rack} /></th><th
-            ><Label label={materials.string.Level} /></th
-          ><th><Label label={materials.string.Stock} /></th><th><Label label={materials.string.MinimumStock} /></th><th
-          ></th></tr
-        ></thead
-      >
-      <tbody
-        >{#each filtered as item (item._id)}
-          <tr
-            ><td>{item.code}</td><td>{item.name}</td><td>{item.model}</td><td>{item.category}</td><td>{item.rack}</td
-            ><td>{item.level}</td><td>{item.stock}</td><td>{item.minimumStock ?? '—'}</td><td
-              ><button
+      <thead>
+        <tr>
+          <th
+            ><button class="sort" on:click={() => { sortBy('code') }}
+              ><Label label={materials.string.Code} />{arrow('code', sortKey, ascending)}</button
+            ></th
+          >
+          <th
+            ><button class="sort" on:click={() => { sortBy('name') }}
+              ><Label label={materials.string.Name} />{arrow('name', sortKey, ascending)}</button
+            ></th
+          >
+          <th><Label label={materials.string.Model} /></th>
+          <th
+            ><button class="sort" on:click={() => { sortBy('category') }}
+              ><Label label={materials.string.Category} />{arrow('category', sortKey, ascending)}</button
+            ></th
+          >
+          <th
+            ><button class="sort" on:click={() => { sortBy('rack') }}
+              ><Label label={materials.string.Rack} />{arrow('rack', sortKey, ascending)}</button
+            ></th
+          >
+          <th><Label label={materials.string.Level} /></th>
+          <th class="number"
+            ><button class="sort" on:click={() => { sortBy('stock') }}
+              ><Label label={materials.string.Stock} />{arrow('stock', sortKey, ascending)}</button
+            ></th
+          >
+          <th class="number"><Label label={materials.string.MinimumStock} /></th>
+          <th><Label label={materials.string.Actions} /></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each filtered as item (item._id)}
+          <tr>
+            <td>{item.code}</td>
+            <td>{item.name}</td>
+            <td>{item.model}</td>
+            <td>{item.category}</td>
+            <td>{item.rack}</td>
+            <td>{item.level}</td>
+            <td class="number" class:low={isLowStock(item)}>
+              {formatQuantity(item.stock)}
+            </td>
+            <td class="number"
+              >{item.minimumStock !== undefined && item.minimumStock !== null
+                ? formatQuantity(item.minimumStock)
+                : '—'}</td
+            >
+            <td class="row-actions">
+              <button on:click={() => (stockTarget = { material: item, kind: 'in' })}
+                ><Label label={materials.string.StockIn} /></button
+              >
+              <button on:click={() => (stockTarget = { material: item, kind: 'out' })}
+                ><Label label={materials.string.StockOut} /></button
+              >
+              <button on:click={() => (stockTarget = { material: item, kind: 'adjust' })}
+                ><Label label={materials.string.Adjust} /></button
+              >
+              <button on:click={() => (historyTarget = item)}><Label label={materials.string.History} /></button>
+              <button
                 on:click={() => {
                   edit(item)
                 }}><Label label={materials.string.Edit} /></button
-              ></td
-            ></tr
-          >
-        {:else}<tr><td colspan="9" class="empty"><Label label={materials.string.NoResults} /></td></tr>{/each}</tbody
-      >
+              >
+            </td>
+          </tr>
+        {:else}
+          <tr><td colspan="9" class="empty"><Label label={materials.string.NoResults} /></td></tr>
+        {/each}
+      </tbody>
     </table>
   </div>
 </div>
+{#if stockTarget !== undefined}
+  <StockDialog material={stockTarget.material} kind={stockTarget.kind} on:close={() => (stockTarget = undefined)} />
+{/if}
+{#if historyTarget !== undefined}
+  <HistoryDialog material={historyTarget} on:close={() => (historyTarget = undefined)} />
+{/if}
 {#if editing}
   <div class="overlay" role="presentation">
     <section class="editor" role="dialog" aria-modal="true" aria-labelledby="materials-editor-title">
@@ -306,10 +416,19 @@
           <h3><Label label={materials.string.Photos} /></h3>
           {#if selected !== undefined}
             <div class="photo-list">
-              {#each photos as photo (photo._id)}{#await getBlobRef(photo.file, photo.name) then image}<img
-                    src={image.src}
-                    alt={photo.name}
-                  />{/await}{/each}
+              {#each photos as photo (photo._id)}
+                <div class="photo">
+                  {#await getBlobRef(photo.file, photo.name) then image}<img src={image.src} alt={photo.name} />{/await}
+                  <button
+                    type="button"
+                    class="remove"
+                    on:click={() => removePhoto(photo)}
+                    disabled={uploading || busy}
+                    aria-label="Delete photo"
+                    title="Delete photo">×</button
+                  >
+                </div>
+              {/each}
             </div>
             <input
               type="file"
@@ -430,6 +549,41 @@
   .empty {
     text-align: center;
     padding: 2rem;
+  }
+  th .sort {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+  }
+  .number {
+    text-align: right;
+  }
+  .low {
+    color: var(--theme-error-color);
+    font-weight: 600;
+  }
+  .row-actions {
+    display: flex;
+    gap: 0.35rem;
+  }
+  .row-actions button {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.82rem;
+  }
+  .photo {
+    position: relative;
+  }
+  .photo .remove {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.15rem;
+    padding: 0 0.4rem;
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
   }
   .overlay {
     position: fixed;

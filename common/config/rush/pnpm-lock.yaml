@@ -23845,6 +23845,12 @@ importers:
       '@hcengineering/attachment':
         specifier: workspace:^0.7.0
         version: link:../attachment
+      '@hcengineering/contact':
+        specifier: workspace:^0.7.0
+        version: link:../contact
+      '@hcengineering/contact-resources':
+        specifier: workspace:^0.7.0
+        version: link:../contact-resources
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core

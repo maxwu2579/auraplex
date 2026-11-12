@@ -25,10 +25,10 @@ import {
   TypeTimestamp,
   UX
 } from '@hcengineering/model'
-import core, { TDoc } from '@hcengineering/model-core'
+import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
 import attachment from '@hcengineering/model-attachment'
 import workbench from '@hcengineering/model-workbench'
-import materials, { materialsId, type Material } from '@hcengineering/materials'
+import materials, { materialsId, type Material, type MovementKind, type StockMovement } from '@hcengineering/materials'
 
 export { materialsId } from '@hcengineering/materials'
 export default materials
@@ -51,10 +51,24 @@ export class TMaterial extends TDoc implements Material {
   @Prop(TypeString(), materials.string.Notes) notes!: string
   @Prop(Collection(attachment.class.Photo), materials.string.Photos) photos?: number
   @Prop(TypeNumber(), materials.string.Stock) stock!: number
-  @Prop(TypeTimestamp(), materials.string.Stock) lastMovementOn?: number
+  @Prop(TypeTimestamp(), materials.string.LastMovement) lastMovementOn?: number
+  @Prop(Collection(materials.class.StockMovement), materials.string.Movements) movements?: number
+}
+
+@Model(materials.class.StockMovement, core.class.AttachedDoc, DOMAIN_MATERIALS)
+@UX(materials.string.Movements, materials.icon.Materials)
+export class TStockMovement extends TAttachedDoc implements StockMovement {
+  declare attachedTo: StockMovement['attachedTo']
+  declare attachedToClass: StockMovement['attachedToClass']
+  @Prop(TypeString(), materials.string.Type) kind!: MovementKind
+  @Prop(TypeNumber(), materials.string.Quantity) quantity!: number
+  @Prop(TypeNumber(), materials.string.Change) delta!: number
+  @Prop(TypeNumber(), materials.string.Balance) balance!: number
+  @Prop(TypeString(), materials.string.Purpose) purpose?: string
+  @Prop(TypeString(), materials.string.Reason) reason?: string
 }
 export function createModel (builder: Builder): void {
-  builder.createModel(TMaterial)
+  builder.createModel(TMaterial, TStockMovement)
   builder.createDoc(
     workbench.class.Application,
     core.space.Model,
