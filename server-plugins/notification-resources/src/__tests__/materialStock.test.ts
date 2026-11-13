@@ -14,12 +14,15 @@ jest.mock('@hcengineering/account-client', () => ({
 }))
 jest.mock('@hcengineering/server-token', () => ({ generateToken: () => 'test-token' }))
 jest.mock('@hcengineering/server-contact', () => ({
-  getPersonSpaces: async () => [{ _id: 'owner-space', person: 'owner-person' }],
+  getPersonSpaces: async () => [
+    { _id: 'owner-space', person: 'owner-person' },
+    { _id: 'member-space', person: 'member-person' }
+  ],
   getAccountBySocialId: jest.fn(),
   getEmployeesBySocialIds: jest.fn()
 }))
 
-function fixture (): any {
+function fixture (recipients?: string[]): any {
   return {
     workspace: { uuid: 'workspace' },
     ctx: { contextData: { broadcast: { txes: [] } } },
@@ -28,6 +31,7 @@ function fixture (): any {
     contextCache: new Map(),
     removedMap: new Map(),
     findAll: async (_ctx: any, cls: string) => {
+      if (cls === materials.class.LowStockSettings) return recipients === undefined ? [] : [{ recipients }]
       if (cls === materials.class.Material) {
         return [
           {
@@ -43,9 +47,19 @@ function fixture (): any {
           }
         ]
       }
-      if (cls === contact.mixin.Employee) { return [{ _id: 'owner-person', personUuid: 'owner', active: true, role: 'USER' }] }
+      if (cls === contact.mixin.Employee) {
+        return [
+          { _id: 'owner-person', personUuid: 'owner', active: true, role: 'USER' },
+          { _id: 'member-person', personUuid: 'member', active: true, role: 'USER' }
+        ]
+      }
       if (cls === contact.class.SocialIdentity) return []
-      if (cls === notification.class.DocNotifyContext) return [{ _id: 'context', objectId: 'material', user: 'owner' }]
+      if (cls === notification.class.DocNotifyContext) {
+        return [
+          { _id: 'context', objectId: 'material', user: 'owner' },
+          { _id: 'context2', objectId: 'material', user: 'member' }
+        ]
+      }
       return []
     },
     txFactory: {
@@ -76,4 +90,17 @@ test('sends only to the owner when stock crosses below the minimum', async () =>
 
 test('does not send for opening stock or while stock stays low', async () => {
   expect(await OnMaterialStockMovement([movement('opening', 4, -1), movement('out', 3, -1)], fixture())).toHaveLength(0)
+})
+
+test('uses configured recipients once each and defaults to owners when empty', async () => {
+  const selected: any[] = await OnMaterialStockMovement(
+    [movement('out', 4, -1)],
+    fixture(['owner', 'member', 'member'])
+  )
+  expect(selected.filter((tx) => tx.attributes !== undefined).map((tx) => tx.attributes.user)).toEqual([
+    'owner',
+    'member'
+  ])
+  const empty: any[] = await OnMaterialStockMovement([movement('out', 4, -1)], fixture([]))
+  expect(empty.filter((tx) => tx.attributes !== undefined).map((tx) => tx.attributes.user)).toEqual(['owner'])
 })

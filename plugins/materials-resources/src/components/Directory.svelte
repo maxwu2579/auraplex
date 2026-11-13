@@ -31,6 +31,7 @@
   import ImportDialog from './ImportDialog.svelte'
   import HistoryDialog from './HistoryDialog.svelte'
   import StockDialog from './StockDialog.svelte'
+  import LowStockSettingsDialog from './LowStockSettingsDialog.svelte'
 
   type Draft = Pick<
   Material,
@@ -59,6 +60,7 @@
   let category = ''
   let rack = ''
   let importing = false
+  let editingRecipients = false
   let editing = false
   let selected: Material | undefined
   let draft: Draft = emptyDraft()
@@ -288,7 +290,10 @@
 <div class="directory">
   <header>
     <h1><Label label={materials.string.Directory} /></h1>
-    {#if isOwnerOrMaintainer()}<button on:click={() => (importing = true)}>导入 Excel</button>{/if}
+    {#if isOwnerOrMaintainer()}
+      <button on:click={() => (importing = true)}>导入 Excel</button>
+      <button on:click={() => (editingRecipients = true)}>低库存提醒接收人</button>
+    {/if}
     <button
       class="primary"
       on:click={() => {
@@ -404,6 +409,7 @@
   </div>
 </div>
 {#if importing}<ImportDialog on:close={() => (importing = false)} />{/if}
+{#if editingRecipients}<LowStockSettingsDialog on:close={() => (editingRecipients = false)} />{/if}
 {#if stockTarget !== undefined}
   <StockDialog material={stockTarget.material} kind={stockTarget.kind} on:close={() => (stockTarget = undefined)} />
 {/if}

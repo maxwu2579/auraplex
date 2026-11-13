@@ -36,7 +36,9 @@ export function bomDiff (
         (a[i].quantity !== undefined && b[i].quantity !== undefined
           ? a[i].quantity !== b[i].quantity
           : a[i].quantityRaw !== b[i].quantityRaw)
-      ) { quantityChanged++ }
+      ) {
+        quantityChanged++
+      }
     }
   }
   return { added, removed, quantityChanged }

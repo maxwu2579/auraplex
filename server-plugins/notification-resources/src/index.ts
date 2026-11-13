@@ -1683,10 +1683,21 @@ export async function OnMaterialStockMovement (txes: Tx[], control: TriggerContr
       await control.findAll(control.ctx, materials.class.Material, { _id: tx.attachedTo as Ref<any> }, { limit: 1 })
     )[0]
     if (material === undefined || !shouldAlertLowStock(tx.attributes, material.minimumStock)) continue
-    const token = generateToken(systemAccountUuid, control.workspace.uuid, { service: 'transactor' })
-    const members = await getAccountClient(process.env.ACCOUNTS_URL, token).getWorkspaceMembers()
-    const owners = members.filter((m) => m.role === AccountRole.Owner).map((m) => m.person)
-    const receivers = await getReceiversInfo(control.ctx, owners, control)
+    const settings = (
+      await control.findAll(
+        control.ctx,
+        materials.class.LowStockSettings,
+        { _id: materials.ids.LowStockSettings },
+        { limit: 1 }
+      )
+    )[0]
+    let recipients = settings?.recipients ?? []
+    if (recipients.length === 0) {
+      const token = generateToken(systemAccountUuid, control.workspace.uuid, { service: 'transactor' })
+      const members = await getAccountClient(process.env.ACCOUNTS_URL, token).getWorkspaceMembers()
+      recipients = members.filter((m) => m.role === AccountRole.Owner).map((m) => m.person)
+    }
+    const receivers = await getReceiversInfo(control.ctx, [...new Set(recipients)], control)
     const contexts = await control.findAll(control.ctx, notification.class.DocNotifyContext, { objectId: material._id })
     const body = `${material.code} · ${material.name}\n库存: ${tx.attributes.balance} / 最低库存: ${material.minimumStock}\n位置: ${material.rack ?? ''} / ${material.level ?? ''}`
     const messageHtml = JSON.stringify({
@@ -1697,10 +1708,12 @@ export async function OnMaterialStockMovement (txes: Tx[], control: TriggerContr
     for (const receiver of receivers) {
       const existing = contexts.find((context) => context.user === receiver.account)
       if (existing !== undefined) {
-        results.push(control.txFactory.createTxUpdateDoc(existing._class, existing.space, existing._id, {
-          hidden: false,
-          lastUpdateTimestamp: Math.max(existing.lastUpdateTimestamp ?? 0, tx.modifiedOn)
-        }))
+        results.push(
+          control.txFactory.createTxUpdateDoc(existing._class, existing.space, existing._id, {
+            hidden: false,
+            lastUpdateTimestamp: Math.max(existing.lastUpdateTimestamp ?? 0, tx.modifiedOn)
+          })
+        )
       }
       await pushInboxNotifications(
         control.ctx,

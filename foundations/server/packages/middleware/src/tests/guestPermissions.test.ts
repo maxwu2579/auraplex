@@ -143,6 +143,16 @@ function makeGuestSettingsDoc (allowedPermissions: Ref<Doc>[], disabledPermissio
 }
 
 describe('GuestPermissionsMiddleware', () => {
+  it('restricts low stock recipient settings to maintainers and owners, including batch writes', async () => {
+    const mw = makeMiddleware(async () => [])
+    const settingsClass = 'materials:class:LowStockSettings' as Ref<Class<Doc>>
+    const tx = makeCreateTx(settingsClass, ALLOWED_SPACE)
+    await expect(mw.tx(makeCtx(makeAccount(AccountRole.User)), [tx])).rejects.toThrow()
+    const batch: Tx = { _class: core.class.TxApplyIf, txes: [tx] } as any
+    await expect(mw.tx(makeCtx(makeAccount(AccountRole.User)), [batch])).rejects.toThrow()
+    await expect(mw.tx(makeCtx(makeAccount(AccountRole.Maintainer)), [tx])).resolves.toBeDefined()
+    await expect(mw.tx(makeCtx(makeAccount(AccountRole.Owner)), [tx])).resolves.toBeDefined()
+  })
   // ─── Non-guest users pass through ───────────────────────────────────────────
   describe('non-guest users', () => {
     it('User role: passes through without restriction', async () => {

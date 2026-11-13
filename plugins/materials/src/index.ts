@@ -13,11 +13,14 @@
 // limitations under the License.
 //
 
-import type { AttachedDoc, Class, Doc, Ref } from '@hcengineering/core'
+import type { AccountUuid, AttachedDoc, Class, Doc, Ref } from '@hcengineering/core'
 import { plugin, type Asset, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
 
 export const materialsId = 'materials' as Plugin
+export interface LowStockSettings extends Doc {
+  recipients: AccountUuid[]
+}
 export interface Material extends Doc {
   code: string
   normalizedCode: string
@@ -150,11 +153,13 @@ export function normalizeCode (value: string): string {
 export default plugin(materialsId, {
   class: {
     Material: '' as Ref<Class<Material>>,
+    LowStockSettings: '' as Ref<Class<LowStockSettings>>,
     StockMovement: '' as Ref<Class<StockMovement>>,
     Product: '' as Ref<Class<Product>>,
     BomLine: '' as Ref<Class<BomLine>>
   },
   app: { Materials: '' as Ref<Doc> },
+  ids: { LowStockSettings: '' as Ref<LowStockSettings> },
   icon: { Materials: '' as Asset },
   component: {
     Directory: '' as AnyComponent,

@@ -179,6 +179,10 @@ export class GuestPermissionsMiddleware extends BaseMiddleware implements Middle
     if (!TxProcessor.isExtendsCUD(tx._class)) return
 
     const { account } = ctx.contextData
+    // Workspace notification recipients are an administrative setting.
+    if ((tx as TxCUD<Doc>).objectClass === ('materials:class:LowStockSettings' as Ref<Class<Doc>>)) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+    }
     if (await this.isForbiddenUserContactTx(ctx, tx as TxCUD<Doc>, account)) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
     }

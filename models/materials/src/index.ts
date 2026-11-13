@@ -17,6 +17,7 @@ import { type Domain, IndexKind } from '@hcengineering/core'
 import {
   type Builder,
   Collection,
+  ArrOf,
   Index,
   Model,
   Prop,
@@ -24,6 +25,7 @@ import {
   TypeBoolean,
   TypeString,
   TypeTimestamp,
+  TypeAccountUuid,
   UX
 } from '@hcengineering/model'
 import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
@@ -38,12 +40,18 @@ import materials, {
   type MovementKind,
   type StockMovement,
   type Product,
-  type BomLine
+  type BomLine,
+  type LowStockSettings
 } from '@hcengineering/materials'
 
 export { materialsId } from '@hcengineering/materials'
 export default materials
 export const DOMAIN_MATERIALS = 'materials' as Domain
+
+@Model(materials.class.LowStockSettings, core.class.Doc, DOMAIN_MATERIALS)
+export class TLowStockSettings extends TDoc implements LowStockSettings {
+  @Prop(ArrOf(TypeAccountUuid()), materials.string.LowStock) recipients!: LowStockSettings['recipients']
+}
 
 @Model(materials.class.Material, core.class.Doc, DOMAIN_MATERIALS)
 @UX(materials.string.Materials, materials.icon.Materials, undefined, 'name')
@@ -103,7 +111,7 @@ export class TBomLine extends TAttachedDoc implements BomLine {
   @Prop(TypeNumber(), materials.string.BomSource) sourceRow!: number
 }
 export function createModel (builder: Builder): void {
-  builder.createModel(TMaterial, TStockMovement, TProduct, TBomLine)
+  builder.createModel(TMaterial, TStockMovement, TProduct, TBomLine, TLowStockSettings)
   builder.mixin(materials.class.Material, core.class.Class, view.mixin.ObjectPanel, {
     component: materials.component.MaterialPanel
   })
