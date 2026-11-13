@@ -18,6 +18,7 @@ import { type Builder, Mixin } from '@hcengineering/model'
 
 import contact from '@hcengineering/contact'
 import core from '@hcengineering/core'
+import materials from '@hcengineering/materials'
 import { TClass } from '@hcengineering/model-core'
 import { TNotificationType } from '@hcengineering/model-notification'
 import notification from '@hcengineering/notification'
@@ -57,6 +58,14 @@ export class TTypeMatch extends TNotificationType implements TypeMatch {
 
 export function createModel (builder: Builder): void {
   builder.createModel(THTMLPresenter, TTextPresenter, TTypeMatch, TNotificationPresenter)
+
+  // Low stock alerts. Registered here, not in model-materials, because the Trigger
+  // class is defined by model-server-core, which is built after model-materials.
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverNotification.trigger.OnMaterialStockMovement,
+    isAsync: true,
+    txMatch: { _class: core.class.TxCreateDoc, objectClass: materials.class.StockMovement }
+  })
 
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAttributeCreate,
