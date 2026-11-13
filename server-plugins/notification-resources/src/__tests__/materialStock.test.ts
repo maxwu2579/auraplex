@@ -48,7 +48,10 @@ function fixture (): any {
       if (cls === notification.class.DocNotifyContext) return [{ _id: 'context', objectId: 'material', user: 'owner' }]
       return []
     },
-    txFactory: { createTxCreateDoc: (cls: string, space: string, attributes: any) => ({ cls, space, attributes }) }
+    txFactory: {
+      createTxCreateDoc: (cls: string, space: string, attributes: any) => ({ cls, space, attributes }),
+      createTxUpdateDoc: (cls: string, space: string, id: string, operations: any) => ({ cls, space, id, operations })
+    }
   }
 }
 function movement (kind: string, balance: number, delta: number): any {
@@ -64,10 +67,11 @@ function movement (kind: string, balance: number, delta: number): any {
 
 test('sends only to the owner when stock crosses below the minimum', async () => {
   const result: any[] = await OnMaterialStockMovement([movement('out', 4, -1)], fixture())
-  expect(result).toHaveLength(1)
-  expect(result[0].attributes.user).toBe('owner')
-  expect(result[0].attributes.objectId).toBe('material')
-  expect(result[0].attributes.messageHtml).toContain('TEST')
+  expect(result).toHaveLength(2)
+  expect(result[0].operations.hidden).toBe(false)
+  expect(result[1].attributes.user).toBe('owner')
+  expect(result[1].attributes.objectId).toBe('material')
+  expect(result[1].attributes.messageHtml).toContain('TEST')
 })
 
 test('does not send for opening stock or while stock stays low', async () => {

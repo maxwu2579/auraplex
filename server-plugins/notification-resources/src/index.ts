@@ -1695,6 +1695,13 @@ export async function OnMaterialStockMovement (txes: Tx[], control: TriggerContr
     }) as any
     const content: Partial<Data<CommonInboxNotification>> = { header: materials.string.LowStock, messageHtml }
     for (const receiver of receivers) {
+      const existing = contexts.find((context) => context.user === receiver.account)
+      if (existing !== undefined) {
+        results.push(control.txFactory.createTxUpdateDoc(existing._class, existing.space, existing._id, {
+          hidden: false,
+          lastUpdateTimestamp: Math.max(existing.lastUpdateTimestamp ?? 0, tx.modifiedOn)
+        }))
+      }
       await pushInboxNotifications(
         control.ctx,
         control,
