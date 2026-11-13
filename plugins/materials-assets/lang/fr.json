@@ -68,6 +68,7 @@
     "BomSection": "Assembly section",
     "BomSource": "Source",
     "BomProblem": "Problem",
-    "BomDescription": "Description"
+    "BomDescription": "Description",
+    "Shortages": "Shortage calculation"
   }
 }

@@ -68,6 +68,7 @@
     "BomSection": "装配段",
     "BomSource": "来源",
     "BomProblem": "有问题",
-    "BomDescription": "描述"
+    "BomDescription": "描述",
+    "Shortages": "缺料计算"
   }
 }

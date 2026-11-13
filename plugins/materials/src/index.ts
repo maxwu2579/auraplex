@@ -138,10 +138,11 @@ export default plugin(materialsId, {
   },
   app: { Materials: '' as Ref<Doc> },
   icon: { Materials: '' as Asset },
-  component: { Directory: '' as AnyComponent, Products: '' as AnyComponent },
+  component: { Directory: '' as AnyComponent, Products: '' as AnyComponent, Shortages: '' as AnyComponent },
   string: {
     Materials: '' as IntlString,
     Products: '' as IntlString,
+    Shortages: '' as IntlString,
     BomLines: '' as IntlString,
     BomQuantity: '' as IntlString,
     BomSection: '' as IntlString,
@@ -214,3 +215,6 @@ export default plugin(materialsId, {
 
 export { previewStockRows, importFieldChanges } from './stockImport'
 export type { StockImportRow, StockImportIssue } from './stockImport'
+
+export { calculateShortages } from './shortage'
+export type { CalculationProduct, ShortageRow, ShortageStatus, ShortageUse } from './shortage'

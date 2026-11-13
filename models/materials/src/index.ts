@@ -122,6 +122,12 @@ export function createModel (builder: Builder): void {
             label: materials.string.Products,
             icon: materials.icon.Materials,
             component: materials.component.Products
+          },
+          {
+            id: 'shortages',
+            label: materials.string.Shortages,
+            icon: materials.icon.Materials,
+            component: materials.component.Shortages
           }
         ],
         spaces: []
