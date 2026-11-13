@@ -133,7 +133,9 @@ export function shouldAlertLowStock (
   movement: Pick<StockMovement, 'kind' | 'balance' | 'delta'>,
   minimumStock: Material['minimumStock']
 ): boolean {
-  if (movement.kind === 'opening' || !Number.isFinite(movement.balance) || !Number.isFinite(movement.delta)) { return false }
+  if (movement.kind === 'opening' || !Number.isFinite(movement.balance) || !Number.isFinite(movement.delta)) {
+    return false
+  }
   const before = Math.round((movement.balance - movement.delta) * SCALE) / SCALE
   return !isLowStock({ stock: before, minimumStock }) && isLowStock({ stock: movement.balance, minimumStock })
 }
@@ -154,7 +156,12 @@ export default plugin(materialsId, {
   },
   app: { Materials: '' as Ref<Doc> },
   icon: { Materials: '' as Asset },
-  component: { Directory: '' as AnyComponent, Products: '' as AnyComponent, Shortages: '' as AnyComponent },
+  component: {
+    Directory: '' as AnyComponent,
+    Products: '' as AnyComponent,
+    Shortages: '' as AnyComponent,
+    MaterialPanel: '' as AnyComponent
+  },
   string: {
     Materials: '' as IntlString,
     Products: '' as IntlString,

@@ -15,11 +15,15 @@
 //
 
 import activity, { ActivityMessage, DocUpdateMessage } from '@hcengineering/activity'
+import { getClient as getAccountClient } from '@hcengineering/account-client'
+import materials, { shouldAlertLowStock, type StockMovement } from '@hcengineering/materials'
+import { generateToken } from '@hcengineering/server-token'
 import { Analytics } from '@hcengineering/analytics'
 import chunter, { ChatMessage } from '@hcengineering/chunter'
 import contact, { Employee, type Person } from '@hcengineering/contact'
 import core, {
   AccountUuid,
+  AccountRole,
   AnyAttribute,
   ArrOf,
   AttachedDoc,
@@ -39,6 +43,7 @@ import core, {
   Ref,
   RefTo,
   SortingOrder,
+  systemAccountUuid,
   Space,
   Timestamp,
   Tx,
@@ -1665,6 +1670,53 @@ async function OnDocRemove (txes: TxCUD<Doc>[], control: TriggerControl): Promis
   return res
 }
 
+export async function OnMaterialStockMovement (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const pending = txes.filter(
+    (tx) =>
+      tx._class === core.class.TxCreateDoc &&
+      (tx as TxCreateDoc<StockMovement>).objectClass === materials.class.StockMovement
+  ) as Array<TxCreateDoc<StockMovement>>
+  const results: Tx[] = []
+  for (const tx of pending) {
+    if (tx.attachedTo === undefined) continue
+    const material = (
+      await control.findAll(control.ctx, materials.class.Material, { _id: tx.attachedTo as Ref<any> }, { limit: 1 })
+    )[0]
+    if (material === undefined || !shouldAlertLowStock(tx.attributes, material.minimumStock)) continue
+    const token = generateToken(systemAccountUuid, control.workspace.uuid, { service: 'transactor' })
+    const members = await getAccountClient(process.env.ACCOUNTS_URL, token).getWorkspaceMembers()
+    const owners = members.filter((m) => m.role === AccountRole.Owner).map((m) => m.person)
+    const receivers = await getReceiversInfo(control.ctx, owners, control)
+    const contexts = await control.findAll(control.ctx, notification.class.DocNotifyContext, { objectId: material._id })
+    const body = `${material.code} · ${material.name}\n库存: ${tx.attributes.balance} / 最低库存: ${material.minimumStock}\n位置: ${material.rack ?? ''} / ${material.level ?? ''}`
+    const messageHtml = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: body }] }]
+    }) as any
+    const content: Partial<Data<CommonInboxNotification>> = { header: materials.string.LowStock, messageHtml }
+    for (const receiver of receivers) {
+      await pushInboxNotifications(
+        control.ctx,
+        control,
+        results,
+        receiver,
+        { socialId: tx.modifiedBy },
+        material._id,
+        material._class,
+        material.space,
+        contexts,
+        content,
+        notification.class.CommonInboxNotification,
+        tx.modifiedOn,
+        [],
+        true,
+        tx
+      )
+    }
+  }
+  return results
+}
+
 export * from './push'
 export * from './types'
 export * from './utils'
@@ -1676,6 +1728,7 @@ export default async () => ({
     OnAttributeUpdate,
     OnDocRemove,
     OnEmployeeDeactivate,
+    OnMaterialStockMovement,
     PushNotificationsHandler
   },
   function: {

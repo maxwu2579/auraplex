@@ -28,7 +28,10 @@ import {
 } from '@hcengineering/model'
 import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
 import attachment from '@hcengineering/model-attachment'
+import serverCore from '@hcengineering/server-core'
+import serverNotification from '@hcengineering/server-notification'
 import workbench from '@hcengineering/model-workbench'
+import view from '@hcengineering/view'
 import materials, {
   materialsId,
   type Material,
@@ -101,6 +104,14 @@ export class TBomLine extends TAttachedDoc implements BomLine {
 }
 export function createModel (builder: Builder): void {
   builder.createModel(TMaterial, TStockMovement, TProduct, TBomLine)
+  builder.mixin(materials.class.Material, core.class.Class, view.mixin.ObjectPanel, {
+    component: materials.component.MaterialPanel
+  })
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverNotification.trigger.OnMaterialStockMovement,
+    isAsync: true,
+    txMatch: { _class: core.class.TxCreateDoc, objectClass: materials.class.StockMovement }
+  })
   builder.createDoc(
     workbench.class.Application,
     core.space.Model,
