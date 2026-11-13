@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-import { formatQuantity, isLowStock, parseQuantity, planMovement } from '..'
+import { formatQuantity, isLowStock, parseQuantity, planMovement, shouldAlertLowStock } from '..'
 
 describe('stock movements', () => {
   it('adds and removes stock', () => {
@@ -78,5 +78,22 @@ describe('low stock', () => {
     expect(isLowStock({ stock: 2, minimumStock: 5 })).toBe(true)
     expect(isLowStock({ stock: 5, minimumStock: 5 })).toBe(false)
     expect(isLowStock({ stock: 0, minimumStock: undefined })).toBe(false)
+  })
+
+  it('alerts only on crossing down, and again after replenishment', () => {
+    const movement = (kind: 'in' | 'out' | 'adjust' | 'opening', balance: number, delta: number): boolean =>
+      shouldAlertLowStock({ kind, balance, delta }, 5)
+    expect(movement('out', 4, -1)).toBe(true)
+    expect(movement('out', 3, -1)).toBe(false)
+    expect(movement('in', 5, 2)).toBe(false)
+    expect(movement('adjust', 4, -1)).toBe(true)
+    expect(movement('opening', 2, -3)).toBe(false)
+  })
+
+  it('ignores missing and invalid thresholds and malformed movements', () => {
+    for (const minimum of [undefined, NaN, Infinity, -1]) {
+      expect(shouldAlertLowStock({ kind: 'out', balance: 0, delta: -5 }, minimum)).toBe(false)
+    }
+    expect(shouldAlertLowStock({ kind: 'out', balance: 0, delta: NaN }, 5)).toBe(false)
   })
 })

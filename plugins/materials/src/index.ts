@@ -119,7 +119,23 @@ export function planMovement (stock: number, kind: MovementKind, quantity: numbe
 
 /** Below the minimum stock. A missing minimum never counts as low. */
 export function isLowStock (material: Pick<Material, 'stock' | 'minimumStock'>): boolean {
-  return material.minimumStock !== undefined && material.minimumStock !== null && material.stock < material.minimumStock
+  return (
+    typeof material.minimumStock === 'number' &&
+    Number.isFinite(material.minimumStock) &&
+    material.minimumStock >= 0 &&
+    Number.isFinite(material.stock) &&
+    material.stock < material.minimumStock
+  )
+}
+
+/** A movement alerts only when it crosses the threshold from normal to low. */
+export function shouldAlertLowStock (
+  movement: Pick<StockMovement, 'kind' | 'balance' | 'delta'>,
+  minimumStock: Material['minimumStock']
+): boolean {
+  if (movement.kind === 'opening' || !Number.isFinite(movement.balance) || !Number.isFinite(movement.delta)) { return false }
+  const before = Math.round((movement.balance - movement.delta) * SCALE) / SCALE
+  return !isLowStock({ stock: before, minimumStock }) && isLowStock({ stock: movement.balance, minimumStock })
 }
 
 /** Shows up to 3 decimals without trailing zeros. */
