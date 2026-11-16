@@ -249,4 +249,6 @@ export { previewStockRows, importFieldChanges } from './stockImport'
 export type { StockImportRow, StockImportIssue } from './stockImport'
 
 export { calculateShortages } from './shortage'
+export { planIssue } from './issue'
+export type { IssueItem, IssueSkip, IssuePlan } from './issue'
 export type { CalculationProduct, ShortageRow, ShortageStatus, ShortageUse } from './shortage'

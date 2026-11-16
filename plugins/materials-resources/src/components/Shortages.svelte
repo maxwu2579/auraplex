@@ -14,6 +14,7 @@
   import { createShortageWorkbook, shortageFilename } from '../shortageExport'
   import { downloadWorkbook } from '../xlsx'
   import PhotoDialog from './PhotoDialog.svelte'
+  import IssueDialog from './IssueDialog.svelte'
 
   const productQuery = createQuery()
   const materialQuery = createQuery()
@@ -39,6 +40,7 @@
   let filter: 'all' | ShortageStatus = 'all'
   let error = ''
   let photoTarget: Material | undefined
+  let issuing = false
   productQuery.query(materials.class.Product, {}, (items) => {
     products = items
     productsReady = true
@@ -208,6 +210,7 @@
     <button disabled={!ready || selected.length === 0} on:click={calculate}
       >{results === undefined ? '计算' : '重新计算'}</button
     >
+    <button disabled={results === undefined || stale} on:click={() => (issuing = true)}>一键领料出库</button>
     <button disabled={results === undefined || stale || exportProducts.length === 0} on:click={download}
       >{calculatedProducts.length > 1 && results !== undefined && !stale
         ? `导出选中的 ${exportProducts.length} 个产品`
@@ -286,6 +289,15 @@
 
 {#if photoTarget !== undefined}
   <PhotoDialog material={photoTarget} on:close={() => (photoTarget = undefined)} />
+{/if}
+{#if issuing && results !== undefined}
+  <IssueDialog
+    rows={results}
+    stock={calculatedStock}
+    products={calculatedProducts}
+    {stale}
+    on:close={() => (issuing = false)}
+  />
 {/if}
 
 <style>
