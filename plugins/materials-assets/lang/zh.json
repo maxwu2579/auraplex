@@ -61,6 +61,8 @@
     "DeletePhoto": "删除照片",
     "LowStock": "低于最低库存",
     "Actions": "操作",
+    "UpdatedOn": "更新时间",
+    "LastImported": "上次导入时间",
     "Location": "位置（货架 / 层）",
     "Products": "产品 / BOM",
     "BomLines": "BOM 明细",

@@ -2,6 +2,7 @@
 <script lang="ts">
   import materials, {
     calculateShortages,
+    normalizeCode,
     type Product,
     type BomLine,
     type Material,
@@ -11,6 +12,8 @@
   } from '@hcengineering/materials'
   import { createQuery } from '@hcengineering/presentation'
   import { createShortageWorkbook, shortageFilename } from '../shortageExport'
+  import { downloadWorkbook } from '../xlsx'
+  import PhotoDialog from './PhotoDialog.svelte'
 
   const productQuery = createQuery()
   const materialQuery = createQuery()
@@ -21,15 +24,21 @@
   let productsReady = false
   let materialsReady = false
   let linesReady = false
-  let selected = new Set<string>()
+  // Products added for calculation, in the order they were added.
+  let selected: string[] = []
+  let productSearch = ''
+  let pickerOpen = false
   let counts: Record<string, string> = {}
   let revision = 0
   let calculatedRevision = -1
   let results: ShortageRow[] | undefined
   let calculatedProducts: CalculationProduct[] = []
   let calculatedStock: Material[] = []
+  // Products ticked for export; the ticked ones are added together into one file.
+  let exportChoice = new Set<string>()
   let filter: 'all' | ShortageStatus = 'all'
   let error = ''
+  let photoTarget: Material | undefined
   productQuery.query(materials.class.Product, {}, (items) => {
     products = items
     productsReady = true
@@ -49,11 +58,34 @@
   $: stale = results !== undefined && calculatedRevision !== revision
   $: visible = results?.filter((row) => filter === 'all' || row.status === filter) ?? []
   const label: Record<ShortageStatus, string> = { shortage: '缺料', problem: '有问题', enough: '够用' }
-  function select (id: string, checked: boolean): void {
-    if (checked) selected.add(id)
-    else selected.delete(id)
-    selected = new Set(selected)
+  $: byId = new Map(products.map((p) => [p._id as string, p]))
+  // Material by code, for the "查看" photo button (first one wins if a code is in stock twice).
+  $: byCode = materialsList.reduce((map, m) => {
+    const code = normalizeCode(m.normalizedCode)
+    if (!map.has(code)) map.set(code, m)
+    return map
+  }, new Map<string, Material>())
+  $: chosenProducts = selected.map((id) => byId.get(id)).filter((p): p is Product => p !== undefined)
+  $: keyword = productSearch.normalize('NFKC').trim().toLocaleLowerCase()
+  $: matches = products
+    .filter((p) => !selected.includes(p._id) && p.name.normalize('NFKC').toLocaleLowerCase().includes(keyword))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  function add (id: string): void {
+    if (selected.includes(id)) return
+    selected = [...selected, id]
+    productSearch = ''
     revision++
+  }
+  function remove (id: string): void {
+    selected = selected.filter((item) => item !== id)
+    revision++
+  }
+  function searchKey (e: KeyboardEvent): void {
+    if (e.key === 'Enter' && matches.length > 0) {
+      e.preventDefault()
+      add(matches[0]._id)
+    } else if (e.key === 'Escape') pickerOpen = false
+    else pickerOpen = true
   }
   function updateCount (id: string, value: string): void {
     counts = { ...counts, [id]: value }
@@ -63,8 +95,8 @@
     error = ''
     try {
       if (!ready) throw new Error('数据仍在加载，请稍候。')
-      const chosen = products.filter((p) => selected.has(p._id))
-      if (chosen.length === 0 || chosen.length !== selected.size) throw new Error('请选择有效的产品。')
+      const chosen = chosenProducts
+      if (chosen.length === 0 || chosen.length !== selected.length) throw new Error('请选择有效的产品。')
       const snapshot: CalculationProduct[] = chosen.map((p) => {
         const raw = (counts[p._id] ?? '1').trim()
         if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
@@ -90,6 +122,7 @@
       const stockCopy = materialsList.map((m) => ({ ...m }))
       results = calculateShortages(snapshot, stockCopy)
       calculatedProducts = snapshot
+      exportChoice = new Set(snapshot.map((p) => p.id))
       calculatedStock = stockCopy
       calculatedRevision = revision
     } catch (e) {
@@ -97,22 +130,19 @@
       error = e instanceof Error ? e.message : '计算失败。'
     }
   }
+  function chooseExport (id: string, checked: boolean): void {
+    if (checked) exportChoice.add(id)
+    else exportChoice.delete(id)
+    exportChoice = new Set(exportChoice)
+  }
+  $: exportProducts = calculatedProducts.filter((p) => exportChoice.has(p.id))
   function download (): void {
-    if (results === undefined || stale) return
+    if (results === undefined || stale || exportProducts.length === 0) return
     try {
-      const data = createShortageWorkbook(calculatedProducts, calculatedStock)
-      const copy = new Uint8Array(data.length)
-      copy.set(data)
-      const url = URL.createObjectURL(
-        new Blob([copy.buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      downloadWorkbook(
+        createShortageWorkbook(exportProducts, calculatedStock),
+        shortageFilename(exportProducts, new Date())
       )
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = shortageFilename(calculatedProducts, new Date())
-      anchor.click()
-      setTimeout(() => {
-        URL.revokeObjectURL(url)
-      }, 60000)
     } catch (e) {
       error = e instanceof Error ? e.message : '导出失败。'
     }
@@ -121,35 +151,68 @@
 
 <div class="page">
   <h1>缺料计算</h1>
-  <p>选择一个或多个产品，填写要生产的台数，再点击计算。使用的库存来自当前工作区。</p>
+  <p>在下面搜索并添加一个或多个产品，填写要生产的台数，再点击计算。使用的库存来自当前工作区。</p>
   {#if !ready}<p>正在加载产品、BOM 和库存……</p>{:else if products.length === 0}<p>还没有产品，请先导入 BOM。</p>{/if}
-  <div class="products">
-    {#each products as p (p._id)}
-      <label class="product"
-        ><input
-          type="checkbox"
-          checked={selected.has(p._id)}
-          on:change={(e) => {
-            select(p._id, e.currentTarget.checked)
-          }}
-        /><span>{p.name}</span>
-        <span>台数</span><input
-          aria-label={`${p.name} 台数`}
-          inputmode="numeric"
-          value={counts[p._id] ?? '1'}
-          disabled={!selected.has(p._id)}
-          on:input={(e) => {
-            updateCount(p._id, e.currentTarget.value)
-          }}
-        /></label
-      >
-    {/each}
+  <div class="picker">
+    <input
+      class="search"
+      placeholder="添加产品：输入关键词搜索，点击结果添加（回车添加第一个）"
+      aria-label="搜索产品"
+      bind:value={productSearch}
+      disabled={!ready || products.length === 0}
+      on:focus={() => (pickerOpen = true)}
+      on:click={() => (pickerOpen = true)}
+      on:blur={() => (pickerOpen = false)}
+      on:keydown={searchKey}
+    />
+    {#if pickerOpen}
+      <div class="dropdown" role="listbox">
+        {#each matches as p (p._id)}
+          <button
+            role="option"
+            aria-selected="false"
+            on:mousedown|preventDefault={() => {
+              add(p._id)
+            }}>{p.name}<span class="hint">{p.lines ?? 0} 行 BOM</span></button
+          >
+        {:else}
+          <div class="none">{keyword === '' ? '所有产品都已添加' : '没有匹配的产品'}</div>
+        {/each}
+      </div>
+    {/if}
   </div>
+  {#if chosenProducts.length > 0}
+    <div class="chosen">
+      {#each chosenProducts as p (p._id)}
+        <div class="chosen-row">
+          <span class="chosen-name" title={p.name}>{p.name}</span>
+          <span>台数</span><input
+            aria-label={`${p.name} 台数`}
+            inputmode="numeric"
+            value={counts[p._id] ?? '1'}
+            on:input={(e) => {
+              updateCount(p._id, e.currentTarget.value)
+            }}
+          /><button
+            class="remove"
+            title="移除"
+            on:click={() => {
+              remove(p._id)
+            }}>移除</button
+          >
+        </div>
+      {/each}
+    </div>
+  {/if}
   <div class="actions">
-    <button disabled={!ready || selected.size === 0} on:click={calculate}
+    <button disabled={!ready || selected.length === 0} on:click={calculate}
       >{results === undefined ? '计算' : '重新计算'}</button
     >
-    <button disabled={results === undefined || stale} on:click={download}>导出 Excel</button>
+    <button disabled={results === undefined || stale || exportProducts.length === 0} on:click={download}
+      >{calculatedProducts.length > 1 && results !== undefined && !stale
+        ? `导出选中的 ${exportProducts.length} 个产品`
+        : '导出 Excel'}</button
+    >
     <label
       >状态筛选 <select bind:value={filter}
         ><option value="all">全部</option><option value="shortage">缺料</option><option value="problem">有问题</option
@@ -157,6 +220,22 @@
       ></label
     >
   </div>
+  {#if results !== undefined && !stale && calculatedProducts.length > 1}
+    <div class="export-choice">
+      <span>导出哪些产品（选中的会合并成一份，用量相加）：</span>
+      {#each calculatedProducts as p (p.id)}
+        <label
+          ><input
+            type="checkbox"
+            checked={exportChoice.has(p.id)}
+            on:change={(e) => {
+              chooseExport(p.id, e.currentTarget.checked)
+            }}
+          />{p.name} × {p.count}</label
+        >
+      {/each}
+    </div>
+  {/if}
   {#if error !== ''}<p role="alert" class="error">{error}</p>{/if}
   {#if stale}<p role="status" class="error">产品、BOM、库存或选择已改变，请点击“重新计算”后查看和导出最新结果。</p>{/if}
   {#if results !== undefined && !stale}
@@ -170,7 +249,7 @@
         <thead
           ><tr
             ><th>状态</th><th>编号</th><th>名称</th><th>需要</th><th>库存</th><th>缺多少</th><th>位置（货架 / 层）</th
-            ><th>用于产品和装配段</th><th>问题</th></tr
+            ><th>用于产品和装配段</th><th>问题</th><th>照片</th></tr
           ></thead
         ><tbody>
           {#each visible as row, index (`${row.code}-${index}`)}<tr
@@ -192,14 +271,36 @@
                       '未知'}
                   </div>{/each}</td
               ><td>{row.issues.join('；')}</td>
-            </tr>{:else}<tr><td colspan="9">当前筛选没有结果。</td></tr>{/each}
+              <td
+                >{#if byCode.get(normalizeCode(row.code)) !== undefined}<button
+                    class="view"
+                    on:click={() => (photoTarget = byCode.get(normalizeCode(row.code)))}>查看</button
+                  >{:else}—{/if}</td
+              >
+            </tr>{:else}<tr><td colspan="10">当前筛选没有结果。</td></tr>{/each}
         </tbody>
       </table>
     </div>
   {/if}
 </div>
 
+{#if photoTarget !== undefined}
+  <PhotoDialog material={photoTarget} on:close={() => (photoTarget = undefined)} />
+{/if}
+
 <style>
+  /* Rows have light red / yellow / white backgrounds, so the button is solid blue to stay readable on all of them. */
+  td .view {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    background: #3b5bdb;
+    border-color: #3b5bdb;
+    color: #fff;
+  }
+  td .view:hover {
+    background: #2f4ac0;
+  }
   .page {
     padding: 1.5rem;
     min-width: 0;
@@ -212,15 +313,74 @@
   h1 {
     font-size: 1.4rem;
   }
-  .products {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.6rem;
+  .picker {
+    position: relative;
+    max-width: 40rem;
   }
-  .product {
+  .picker .search {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .dropdown {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    max-height: 18rem;
+    overflow: auto;
+    margin-top: 0.2rem;
+    background: var(--theme-popup-color, #24252a);
+    border: 1px solid var(--theme-button-border);
+    border-radius: 0.4rem;
+    box-shadow: 0 0.4rem 1rem #0006;
+  }
+  .dropdown button {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    border: none;
+    border-radius: 0;
+    background: none;
+    text-align: left;
+  }
+  .dropdown button:hover {
+    background: var(--theme-button-hovered, #ffffff1a);
+  }
+  .hint {
+    color: var(--theme-caption-color);
+    font-size: 0.85em;
+  }
+  .none {
+    padding: 0.6rem;
+    color: var(--theme-caption-color);
+  }
+  .chosen {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+    max-width: 40rem;
+  }
+  .chosen-row {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.5rem;
+  }
+  .chosen-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chosen-row input {
+    width: 5rem;
+  }
+  /* Dropdown options follow the dark theme instead of white on white. */
+  select option {
+    background: var(--theme-popup-color, #24252a);
+    color: var(--theme-content-color);
   }
   input,
   select,
@@ -231,9 +391,6 @@
     background: var(--theme-button-default);
     border-radius: 0.4rem;
     padding: 0.45rem;
-  }
-  .product input[inputmode] {
-    width: 5rem;
   }
   button {
     cursor: pointer;
@@ -247,7 +404,22 @@
     gap: 0.7rem;
     margin: 1rem 0;
   }
+  .export-choice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1rem;
+    margin: -0.3rem 0 1rem;
+  }
+  .export-choice label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
   .table {
+    /* Huly hides every scrollbar site-wide; show this one so wide tables can be scrolled sideways. */
+    scrollbar-width: auto;
+    scrollbar-color: rgba(128, 128, 128, 0.7) transparent;
     width: 100%;
     overflow: auto;
   }

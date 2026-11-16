@@ -30,8 +30,10 @@
   } from '@hcengineering/materials'
   import ImportDialog from './ImportDialog.svelte'
   import HistoryDialog from './HistoryDialog.svelte'
+  import PhotoDialog from './PhotoDialog.svelte'
   import StockDialog from './StockDialog.svelte'
   import LowStockSettingsDialog from './LowStockSettingsDialog.svelte'
+  import { createWorkbook, datedFilename, downloadWorkbook, formatDateTime } from '../xlsx'
 
   type Draft = Pick<
   Material,
@@ -59,6 +61,9 @@
   let search = ''
   let category = ''
   let rack = ''
+  // '' = all, 'missed' = not saved by the latest stock Excel import (or never imported)
+  let importFilter: '' | 'missed' = ''
+  let latestImport: number | undefined
   let importing = false
   let editingRecipients = false
   let editing = false
@@ -79,17 +84,19 @@
   let categories: string[] = []
   let racks: string[] = []
   let filtered: Material[] = []
-  type SortKey = 'code' | 'name' | 'category' | 'rack' | 'stock'
+  type SortKey = 'code' | 'name' | 'category' | 'rack' | 'stock' | 'modifiedOn'
   let sortKey: SortKey = 'code'
   let ascending = true
   let stockTarget: { material: Material, kind: Exclude<MovementKind, 'opening'> } | undefined
   let historyTarget: Material | undefined
+  let photoTarget: Material | undefined
 
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
   function sorted (list: Material[], key: SortKey, up: boolean): Material[] {
     const compare = (a: Material, b: Material): number => {
       let result: number
       if (key === 'stock') result = a.stock - b.stock
+      else if (key === 'modifiedOn') result = a.modifiedOn - b.modifiedOn
       else if (key === 'rack') {
         result = collator.compare(a.rack ?? '', b.rack ?? '')
         if (result === 0) result = collator.compare(a.level ?? '', b.level ?? '')
@@ -103,8 +110,19 @@
     if (sortKey === key) ascending = !ascending
     else {
       sortKey = key
-      ascending = true
+      // Newest first when sorting by update time.
+      ascending = key !== 'modifiedOn'
     }
+  }
+  const timeFormat = new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+  function formatTime (value: number): string {
+    return timeFormat.format(new Date(value))
   }
   function arrow (key: SortKey, current: SortKey, up: boolean): string {
     return key === current ? (up ? ' ▲' : ' ▼') : ''
@@ -116,6 +134,13 @@
   $: categories = Array.from(new Set(all.map((item) => item.category).filter(Boolean))).sort()
   $: racks = Array.from(new Set(all.map((item) => item.rack).filter(Boolean))).sort()
   $: nameFilter = search.normalize('NFKC').trim().toLocaleLowerCase()
+  $: latestImport = all.reduce<number | undefined>(
+    (latest, item) =>
+      item.lastImportedOn !== undefined && (latest === undefined || item.lastImportedOn > latest)
+        ? item.lastImportedOn
+        : latest,
+    undefined
+  )
   $: filtered = sorted(
     all.filter((item) => {
       const text = [item.code, item.name, item.model, item.brand, item.category, item.group, item.rack, item.level]
@@ -125,12 +150,65 @@
       return (
         (nameFilter === '' || text.includes(nameFilter)) &&
         (category === '' || item.category === category) &&
-        (rack === '' || item.rack === rack)
+        (rack === '' || item.rack === rack) &&
+        (importFilter === '' || item.lastImportedOn !== latestImport)
       )
     }),
     sortKey,
     ascending
   )
+
+  /** Exports the materials currently shown (search and filters applied), low stock rows in red. */
+  function exportList (): void {
+    const rows = filtered.map((m) => [
+      m.code,
+      m.name,
+      m.model,
+      m.brand,
+      m.category,
+      m.group,
+      m.rack,
+      m.level,
+      m.stock,
+      m.minimumStock ?? undefined,
+      m.unit,
+      isLowStock(m) ? '是' : '',
+      formatDateTime(m.lastMovementOn),
+      formatDateTime(m.modifiedOn),
+      formatDateTime(m.lastImportedOn),
+      m.notes
+    ])
+    downloadWorkbook(
+      createWorkbook([
+        {
+          name: '物料库存',
+          rows: [
+            [
+              '编号',
+              '名称',
+              '型号',
+              '品牌',
+              '类别',
+              '组别',
+              '货架',
+              '层',
+              '当前库存',
+              '最低库存',
+              '单位',
+              '低于最低库存',
+              '最后变动时间',
+              '更新时间',
+              '上次导入时间',
+              '备注'
+            ],
+            ...rows
+          ],
+          styles: [undefined, ...filtered.map((m) => (isLowStock(m) ? 'red' : undefined))]
+        }
+      ]),
+      datedFilename('物料库存', '', new Date())
+    )
+  }
 
   function edit (material?: Material): void {
     selected = material
@@ -290,16 +368,19 @@
 <div class="directory">
   <header>
     <h1><Label label={materials.string.Directory} /></h1>
-    {#if isOwnerOrMaintainer()}
-      <button on:click={() => (importing = true)}>导入 Excel</button>
-      <button on:click={() => (editingRecipients = true)}>低库存提醒接收人</button>
-    {/if}
-    <button
-      class="primary"
-      on:click={() => {
-        edit()
-      }}><Label label={materials.string.Create} /></button
-    >
+    <div class="header-actions">
+      {#if isOwnerOrMaintainer()}
+        <button on:click={() => (importing = true)}>导入 Excel</button>
+        <button on:click={() => (editingRecipients = true)}>低库存提醒接收人</button>
+      {/if}
+      <button disabled={filtered.length === 0} on:click={exportList}>导出 Excel</button>
+      <button
+        class="primary"
+        on:click={() => {
+          edit()
+        }}><Label label={materials.string.Create} /></button
+      >
+    </div>
   </header>
   <div class="filters">
     <label><span><Label label={materials.string.Search} /></span><input bind:value={search} /></label>
@@ -315,6 +396,14 @@
         {#each racks as value}<option {value}>{value}</option>{/each}
       </select></label
     >
+    {#if latestImport !== undefined}
+      <label
+        ><span>导入情况（最近一次：{formatDateTime(latestImport)}）</span><select bind:value={importFilter}>
+          <option value="">全部</option>
+          <option value="missed">最近一次导入没有更新到的</option>
+        </select></label
+      >
+    {/if}
   </div>
   <div class="table-wrap">
     <table>
@@ -336,6 +425,15 @@
               }}><Label label={materials.string.Name} />{arrow('name', sortKey, ascending)}</button
             ></th
           >
+          <th class="number"
+            ><button
+              class="sort"
+              on:click={() => {
+                sortBy('stock')
+              }}><Label label={materials.string.Stock} />{arrow('stock', sortKey, ascending)}</button
+            ></th
+          >
+          <th class="number"><Label label={materials.string.MinimumStock} /></th>
           <th><Label label={materials.string.Model} /></th>
           <th
             ><button
@@ -353,26 +451,22 @@
               }}><Label label={materials.string.Location} />{arrow('rack', sortKey, ascending)}</button
             ></th
           >
-          <th class="number"
+          <th
             ><button
               class="sort"
               on:click={() => {
-                sortBy('stock')
-              }}><Label label={materials.string.Stock} />{arrow('stock', sortKey, ascending)}</button
+                sortBy('modifiedOn')
+              }}><Label label={materials.string.UpdatedOn} />{arrow('modifiedOn', sortKey, ascending)}</button
             ></th
           >
-          <th class="number"><Label label={materials.string.MinimumStock} /></th>
           <th class="actions-col"><Label label={materials.string.Actions} /></th>
         </tr>
       </thead>
       <tbody>
         {#each filtered as item (item._id)}
           <tr>
-            <td>{item.code}</td>
-            <td>{item.name}</td>
-            <td>{item.model}</td>
-            <td>{item.category}</td>
-            <td>{[item.rack, item.level].filter((part) => part !== undefined && part !== '').join(' / ')}</td>
+            <td class="name" title={item.code}>{item.code}</td>
+            <td class="name" title={item.name}>{item.name}</td>
             <td class="number" class:low={isLowStock(item)}>
               {formatQuantity(item.stock)}
             </td>
@@ -381,8 +475,13 @@
                 ? formatQuantity(item.minimumStock)
                 : '—'}</td
             >
+            <td>{item.model}</td>
+            <td>{item.category}</td>
+            <td>{[item.rack, item.level].filter((part) => part !== undefined && part !== '').join(' / ')}</td>
+            <td class="time">{formatTime(item.modifiedOn)}</td>
             <td class="actions-col"
               ><div class="row-actions">
+                <button on:click={() => (photoTarget = item)}>查看</button>
                 <button on:click={() => (stockTarget = { material: item, kind: 'in' })}
                   ><Label label={materials.string.StockIn} /></button
                 >
@@ -402,7 +501,7 @@
             >
           </tr>
         {:else}
-          <tr><td colspan="8" class="empty"><Label label={materials.string.NoResults} /></td></tr>
+          <tr><td colspan="9" class="empty"><Label label={materials.string.NoResults} /></td></tr>
         {/each}
       </tbody>
     </table>
@@ -412,6 +511,9 @@
 {#if editingRecipients}<LowStockSettingsDialog on:close={() => (editingRecipients = false)} />{/if}
 {#if stockTarget !== undefined}
   <StockDialog material={stockTarget.material} kind={stockTarget.kind} on:close={() => (stockTarget = undefined)} />
+{/if}
+{#if photoTarget !== undefined}
+  <PhotoDialog material={photoTarget} on:close={() => (photoTarget = undefined)} />
 {/if}
 {#if historyTarget !== undefined}
   <HistoryDialog material={historyTarget} on:close={() => (historyTarget = undefined)} />
@@ -456,7 +558,12 @@
             <div class="photo-list">
               {#each photos as photo (photo._id)}
                 <div class="photo">
-                  {#await getBlobRef(photo.file, photo.name) then image}<img src={image.src} alt={photo.name} />{/await}
+                  {#await getBlobRef(photo.file, photo.name) then image}<button
+                      type="button"
+                      class="thumb"
+                      title="点击看大图"
+                      on:click={() => (photoTarget = selected)}><img src={image.src} alt={photo.name} /></button
+                    >{/await}
                   <button
                     type="button"
                     class="remove"
@@ -503,6 +610,17 @@
     overflow: hidden;
     padding: 1.5rem;
     color: var(--theme-content-color);
+  }
+  /* Dropdown options follow the dark theme instead of white on white. */
+  select option {
+    background: var(--theme-popup-color, #24252a);
+    color: var(--theme-content-color);
+  }
+  .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.6rem;
   }
   header,
   .editor-head {
@@ -569,6 +687,9 @@
     min-width: 10rem;
   }
   .table-wrap {
+    /* Huly hides every scrollbar site-wide; show this one so wide tables can be scrolled sideways. */
+    scrollbar-width: auto;
+    scrollbar-color: rgba(128, 128, 128, 0.7) transparent;
     overflow: auto;
     min-width: 0;
     min-height: 0;
@@ -604,6 +725,15 @@
   }
   .number {
     text-align: right;
+  }
+  /* Long codes and names are cut with "…" (full text on hover) so the stock columns stay in view. */
+  td.name {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .time {
+    color: var(--theme-caption-color);
   }
   .low {
     color: var(--theme-error-color);
@@ -687,6 +817,12 @@
     gap: 0.5rem;
     flex-wrap: wrap;
     margin-bottom: 0.5rem;
+  }
+  .photo-list .thumb {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: zoom-in;
   }
   .photo-list img {
     width: 5rem;

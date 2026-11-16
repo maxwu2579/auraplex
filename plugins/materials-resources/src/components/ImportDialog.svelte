@@ -6,7 +6,9 @@
 <script lang="ts">
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
   import materials, {
+    formatQuantity,
     normalizeCode,
+    planMovement,
     importFieldChanges,
     previewStockRows,
     type Material,
@@ -19,6 +21,7 @@
   import { guardOpening } from '../opening'
   import { indexStockPictures, type StockPicture } from '../stockPictures'
   import { saveImportedPhoto } from '../saveImportedPhoto'
+  import { createWorkbook, datedFilename, downloadWorkbook, formatDateTime } from '../xlsx'
 
   const dispatch = createEventDispatcher()
   const client = getClient()
@@ -37,6 +40,65 @@
   let loaded = false
   let started = 0
   let elapsed = 0
+  // Off by default: stock is kept in Huly. On during the Excel period: Excel stock wins, as a stocktake record.
+  let overrideStock = false
+  const OVERRIDE_REASON = 'Excel 导入覆盖'
+  interface StockDiff {
+    material: Material
+    excel: number
+  }
+  interface ImportReport {
+    at: number
+    created: number
+    updated: number
+    overridden: number
+    diffs: StockDiff[]
+    missing: Material[]
+  }
+  let report: ImportReport | undefined
+  function location (m: Pick<Material, 'rack' | 'level'>): string {
+    return [m.rack, m.level].filter((part) => part !== undefined && part !== '').join(' / ')
+  }
+  function stockNote (item: { preserveStock: boolean, existing?: Material, stock?: number }, override: boolean): string {
+    if (!item.preserveStock || item.existing === undefined || item.stock === undefined) return ''
+    if (item.stock === item.existing.stock) return ' 已有流水，库存与 Excel 相同'
+    const from = formatQuantity(item.existing.stock)
+    const to = formatQuantity(item.stock)
+    return override
+      ? ` 将用 Excel 覆盖库存：${from} → ${to}（记一条盘点）`
+      : ` 已有流水，保留现有库存（系统 ${from}，Excel ${to}）`
+  }
+  function exportReport (): void {
+    if (report === undefined) return
+    const diffRows = report.diffs.map((d) => [
+      d.material.code,
+      d.material.name,
+      location(d.material),
+      d.material.stock,
+      d.excel,
+      Math.round((d.excel - d.material.stock) * 1000) / 1000
+    ])
+    const missingRows = report.missing.map((m) => [
+      m.code,
+      m.name,
+      location(m),
+      m.stock,
+      formatDateTime(m.lastImportedOn) ?? '从未导入'
+    ])
+    downloadWorkbook(
+      createWorkbook([
+        {
+          name: '库存不一致',
+          rows: [['编号', '名称', '位置（货架 / 层）', '系统库存', 'Excel 库存', '差（Excel − 系统）'], ...diffRows]
+        },
+        {
+          name: '这次没有更新到',
+          rows: [['编号', '名称', '位置（货架 / 层）', '当前库存', '上次导入时间'], ...missingRows]
+        }
+      ]),
+      datedFilename('库存核对清单', '', new Date(report.at))
+    )
+  }
   $: preview = previewStockRows(rows, existing, withMovements)
   $: creates = preview.filter(
     (x) => selected.has(x.row.row) && x.issues.length === 0 && x.existing === undefined
@@ -60,6 +122,7 @@
     if (file === undefined) return
     error = ''
     message = ''
+    report = undefined
     loaded = false
     busy = true
     started = Date.now()
@@ -153,6 +216,13 @@
     let done = 0
     let photosDone = 0
     let skippedPhotos = 0
+    // Every row of this import gets the same time, so the directory can tell which materials it missed.
+    const importedAt = Date.now()
+    const override = overrideStock
+    const saved = new Set<Ref<Material>>()
+    const diffs: StockDiff[] = []
+    let created = 0
+    let overridden = 0
     const chosen = preview.filter((x) => selected.has(x.row.row) && x.issues.length === 0)
     try {
       if (archive === undefined) throw new Error('请重新选择文件')
@@ -198,6 +268,7 @@
               unit: '',
               notes: '',
               photos: 0,
+              lastImportedOn: importedAt,
               ...(entry.minimum === undefined ? {} : { minimumStock: entry.minimum })
             },
             id
@@ -210,6 +281,7 @@
           })
           await ops.update(current, {
             ...fields,
+            lastImportedOn: importedAt,
             ...(row.minimumPresent === false
               ? {}
               : entry.minimum === undefined
@@ -229,8 +301,28 @@
           )
           if (current !== undefined) await ops.update(current, { stock, lastMovementOn: Date.now() })
         }
+        let overrode = false
+        if (!opening && current !== undefined && stock !== current.stock) {
+          const plan = override ? planMovement(current.stock, 'adjust', stock, OVERRIDE_REASON) : undefined
+          if (plan !== undefined && 'delta' in plan) {
+            await ops.addCollection(
+              materials.class.StockMovement,
+              core.space.Workspace,
+              id,
+              materials.class.Material,
+              'movements',
+              { kind: 'adjust', quantity: stock, delta: plan.delta, balance: plan.balance, reason: OVERRIDE_REASON },
+              generateId<StockMovement>()
+            )
+            await ops.update(current, { stock: plan.balance, lastMovementOn: Date.now() })
+            overrode = true
+          } else diffs.push({ material: current, excel: stock })
+        }
         if (!(await ops.commit()).result) throw new Error(`第 ${row.row} 行保存冲突，请重新预览。`)
         done++
+        saved.add(id)
+        if (current === undefined) created++
+        if (overrode) overridden++
         const attached = picturesByRow.get(row.row) ?? []
         if (originalCodes.get(row.row) !== normalizedCode || normalizedCode === '') skippedPhotos += attached.length
         else {
@@ -244,6 +336,14 @@
         }
       }
       message = `已保存 ${done} 行，新增照片 ${photosDone} 张，跳过问题或编号变更照片 ${skippedPhotos} 张。请重新选择文件查看最新预览。`
+      report = {
+        at: importedAt,
+        created,
+        updated: done - created,
+        overridden,
+        diffs,
+        missing: existing.filter((m) => !saved.has(m._id))
+      }
       loaded = false
     } catch (e) {
       error = `已保存 ${done} 行、新增照片 ${photosDone} 张。${e instanceof Error ? e.message : '保存失败'} 请重新选择同一文件继续。`
@@ -261,11 +361,29 @@
       <h2>导入库存 Excel（含照片）</h2>
       <button disabled={busy} on:click={() => dispatch('close')}>关闭</button>
     </header>
-    <p>先预览再确认。问题行默认不导入；已有流水的库存不会被覆盖。</p>
+    <p>先预览再确认。问题行默认不导入；已有流水的库存默认不覆盖（可在下面勾选用 Excel 覆盖）。</p>
     <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label="选择库存 Excel" />
     {#if busy}<p role="status">{progress}</p>{/if}
     {#if error}<p role="alert" class="error">{error}</p>{/if}
     {#if message}<p>{message}</p>{/if}
+    {#if report !== undefined}
+      <div class="report">
+        <p>
+          本次导入（{formatDateTime(report.at)}）：新建 {report.created} 条，更新 {report.updated} 条{report.overridden >
+          0
+            ? `，用 Excel 覆盖库存 ${report.overridden} 条`
+            : ''}。
+        </p>
+        <p>
+          库存和 Excel 不一致、没有覆盖：<b>{report.diffs.length}</b> 条；系统里有、这次没有更新到的物料：<b
+            >{report.missing.length}</b
+          > 条（Excel 里没有，或那一行有问题 / 没勾选）。物料目录里也可以用“导入情况”筛选查看。
+        </p>
+        <button disabled={report.diffs.length + report.missing.length === 0} on:click={exportReport}
+          >导出核对清单 Excel</button
+        >
+      </div>
+    {/if}
     {#if loaded}
       <p>
         读取耗时 {elapsed.toFixed(1)} 秒。将新建 {creates} 条，更新 {updates} 条；问题 {preview.filter(
@@ -280,6 +398,13 @@
       {#each pictures.filter((p) => p.problem !== undefined || (originalCodes.get(p.row) ?? '') === '') as picture}
         <p>第 {picture.row} 行图片：{picture.problem ?? '没有对应物料编号'}</p>
       {/each}
+      <label class="override"
+        ><input type="checkbox" bind:checked={overrideStock} disabled={busy} />
+        <span
+          >用 Excel 库存覆盖系统库存（已有流水的物料也覆盖，每个变化记一条盘点记录，原因“{OVERRIDE_REASON}”）。正式改在
+          Huly 里做出入库后，不要再勾选。</span
+        ></label
+      >
       <div class="table">
         <table>
           <thead
@@ -346,17 +471,17 @@
                   {#each importFieldChanges(item.row, item.existing) as change}<div>
                       {change.label}: {change.before} → {change.after}
                     </div>{/each}
-                </td><td
-                  >{item.issues.map((issue) => names[issue]).join('、')}{item.preserveStock
-                    ? ' 已有流水，保留现有库存'
-                    : ''}</td
-                ></tr
+                </td><td>{item.issues.map((issue) => names[issue]).join('、')}{stockNote(item, overrideStock)}</td></tr
               >
             {/each}
           </tbody>
         </table>
       </div>
-      <button on:click={submit} disabled={busy || creates + updates === 0}>确认导入 {creates + updates} 行</button>
+      <div class="footer">
+        <button class="primary" on:click={submit} disabled={busy || creates + updates === 0}
+          >确认导入 {creates + updates} 行</button
+        >
+      </div>
     {/if}
   </section>
 </div>
@@ -374,6 +499,9 @@
   .dialog {
     background: var(--popup-bg-color, #24252a);
     color: var(--theme-content-color);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
     width: min(70rem, 95vw);
     max-height: 90vh;
     overflow: auto;
@@ -385,9 +513,47 @@
     align-items: center;
     justify-content: space-between;
   }
+  /* The list shrinks to fit so the confirm button below it always stays on screen. */
   .table {
-    max-height: 55vh;
+    /* Huly hides every scrollbar site-wide; show this one so wide tables can be scrolled sideways. */
+    scrollbar-width: auto;
+    scrollbar-color: rgba(128, 128, 128, 0.7) transparent;
     overflow: auto;
+    flex: 0 1 auto;
+    min-height: 8rem;
+  }
+  .dialog > input {
+    align-self: flex-start;
+  }
+  .report {
+    flex-shrink: 0;
+    padding: 0.5rem 0.8rem;
+    border: 1px solid var(--theme-divider-color, #777);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .report p {
+    margin: 0.3rem 0;
+  }
+  .override {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0.3rem 0 0.6rem;
+  }
+  .override input {
+    padding: 0;
+    margin-top: 0.25rem;
+  }
+  .footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    padding-top: 0.75rem;
+  }
+  .primary {
+    background: var(--primary-button-default, #4b68ed);
+    color: white;
   }
   table {
     border-collapse: collapse;

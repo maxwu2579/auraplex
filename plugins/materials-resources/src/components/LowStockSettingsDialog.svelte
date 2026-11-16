@@ -69,6 +69,7 @@
     {#if error}<p class="error">{error}</p>{/if}
     <div class="actions">
       <button on:click={() => dispatch('close')} disabled={busy}>取消</button><button
+        class="primary"
         on:click={save}
         disabled={busy || !loaded}>保存</button
       >
@@ -105,6 +106,23 @@
     justify-content: flex-end;
     gap: 0.7rem;
     margin-top: 1rem;
+  }
+  .actions button {
+    color: var(--theme-content-color);
+    font: inherit;
+    border: 1px solid var(--theme-button-border);
+    background: var(--theme-button-default);
+    border-radius: 0.4rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+  }
+  .actions button.primary {
+    background: var(--primary-button-default, #4b68ed);
+    color: white;
+  }
+  .actions button:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
   .error {
     color: var(--theme-error-color);

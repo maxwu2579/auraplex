@@ -254,7 +254,9 @@
             </tbody>
           </table>
         </div>
-        <button disabled={busy || checked.size === 0} on:click={submit}>确认替换选中的产品 BOM</button>
+        <div class="footer">
+          <button class="primary" disabled={busy || checked.size === 0} on:click={submit}>确认替换选中的产品 BOM</button>
+        </div>
       {/if}
     </section>
   </div>
@@ -289,9 +291,24 @@
   button:disabled {
     opacity: 0.5;
   }
+  /* The list shrinks to fit so the confirm button below it always stays on screen. */
   .table {
     overflow: auto;
-    max-height: 65vh;
+    flex: 0 1 auto;
+    min-height: 8rem;
+  }
+  .dialog > input {
+    align-self: flex-start;
+  }
+  .footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    padding-top: 0.75rem;
+  }
+  .primary {
+    background: var(--primary-button-default, #4b68ed);
+    color: white;
   }
   table {
     border-collapse: collapse;
@@ -316,6 +333,9 @@
     background: #0009;
   }
   .dialog {
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
     width: min(75rem, 95vw);
     max-height: 90vh;
     overflow: auto;

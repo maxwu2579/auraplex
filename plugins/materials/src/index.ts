@@ -37,6 +37,8 @@ export interface Material extends Doc {
   photos?: number
   stock: number
   lastMovementOn?: number
+  /** When a stock Excel import last saved this material; all rows of one import share the same time. */
+  lastImportedOn?: number
   movements?: number
 }
 
@@ -237,6 +239,8 @@ export default plugin(materialsId, {
     DeletePhoto: '' as IntlString,
     LowStock: '' as IntlString,
     Actions: '' as IntlString,
+    UpdatedOn: '' as IntlString,
+    LastImported: '' as IntlString,
     Location: '' as IntlString
   }
 })

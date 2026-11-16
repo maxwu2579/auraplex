@@ -69,6 +69,7 @@ export class TMaterial extends TDoc implements Material {
   @Prop(Collection(attachment.class.Photo), materials.string.Photos) photos?: number
   @Prop(TypeNumber(), materials.string.Stock) stock!: number
   @Prop(TypeTimestamp(), materials.string.LastMovement) lastMovementOn?: number
+  @Prop(TypeTimestamp(), materials.string.LastImported) lastImportedOn?: number
   @Prop(Collection(materials.class.StockMovement), materials.string.Movements) movements?: number
 }
 

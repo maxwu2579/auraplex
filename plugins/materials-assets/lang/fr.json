@@ -61,6 +61,8 @@
     "DeletePhoto": "Delete photo",
     "LowStock": "Below minimum stock",
     "Actions": "Actions",
+    "UpdatedOn": "Updated",
+    "LastImported": "Last stock import",
     "Location": "Location (rack / level)",
     "Products": "Products / BOM",
     "BomLines": "BOM lines",

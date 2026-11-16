@@ -32,22 +32,25 @@ const item: CalculationProduct = {
 const stock: Array<Pick<Material, 'normalizedCode' | 'name' | 'stock' | 'rack' | 'level'>> = [
   { normalizedCode: 'X', name: '=not-a-formula', stock: 1, rack: '', level: '' }
 ]
-test('single product exports shortage and problem sheets using safe literal strings', () => {
+test('single product opens on the full material list, then shortage and problem sheets, as literal strings', () => {
   const files = unzipSync(createShortageWorkbook([item], stock))
   const workbook = strFromU8(files['xl/workbook.xml'])
-  const first = strFromU8(files['xl/worksheets/sheet1.xml'])
-  const second = strFromU8(files['xl/worksheets/sheet2.xml'])
-  expect(workbook).toContain('缺料表')
+  const all = strFromU8(files['xl/worksheets/sheet1.xml'])
+  const shortages = strFromU8(files['xl/worksheets/sheet2.xml'])
+  const problems = strFromU8(files['xl/worksheets/sheet3.xml'])
+  expect(workbook.indexOf('物料明细')).toBeLessThan(workbook.indexOf('缺料表'))
   expect(workbook).toContain('问题表')
-  expect(first).toContain('=not-a-formula')
-  expect(first).not.toContain('<f>')
-  expect(second).toContain('未知（按 0 估算）')
+  expect(all).toContain('=not-a-formula')
+  expect(all).toContain('未知（按 0 估算）')
+  expect(shortages).toContain('=not-a-formula')
+  expect(shortages).not.toContain('<f>')
+  expect(problems).toContain('未知（按 0 估算）')
 })
 test('multiple products use unique valid sheet names and a dated safe filename', () => {
   const products = [item, { ...item, id: 'b', name: 'A:TEST' }]
   const workbook = strFromU8(unzipSync(createShortageWorkbook(products, stock))['xl/workbook.xml'])
   expect(workbook).toContain('汇总')
-  expect(workbook).toContain('合并')
+  expect(workbook.indexOf('物料明细')).toBeLessThan(workbook.indexOf('汇总'))
   expect(workbook).toContain('A_TEST')
   expect(workbook).toContain('A_TEST (2)')
   expect(shortageFilename(products, new Date(2026, 10, 13))).toContain('2026-11-13.xlsx')
