@@ -18,11 +18,8 @@ const path = require('path')
 const exec = require('child_process').exec
 
 function main() {
-  exec('git describe --tags --abbrev=0', (err, stdout) => {
-    if (err !== null) {
-      console.log('"0.6.0"')
-      return
-    }
+  // Auraplex: the model version comes from version.txt; git is not needed for it.
+  exec('git describe --tags --abbrev=0', () => {
     // Take version from file
     let version
     try {
