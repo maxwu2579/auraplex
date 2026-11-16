@@ -123,6 +123,16 @@ export class GuestPermissionsMiddleware extends BaseMiddleware implements Middle
 
   async tx (ctx: MeasureContext<SessionData>, txes: Tx[]): Promise<TxMiddlewareResult> {
     const account = ctx.contextData.account
+    const deniesProspectRemoval = (tx: Tx): boolean => {
+      if (tx._class === core.class.TxApplyIf) return (tx as TxApplyIf).txes.some(deniesProspectRemoval)
+      return (
+        tx._class === core.class.TxRemoveDoc &&
+        (tx as TxCUD<Doc>).objectClass === ('prospects:class:Prospect' as Ref<Class<Doc>>)
+      )
+    }
+    if (!hasAccountRole(account, AccountRole.Maintainer) && txes.some(deniesProspectRemoval)) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+    }
     if (hasAccountRole(account, AccountRole.User)) {
       if (!hasAccountRole(account, AccountRole.Maintainer)) {
         for (const tx of txes) {

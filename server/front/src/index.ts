@@ -34,6 +34,7 @@ import { preConditions } from './utils'
 import fs, { createReadStream, mkdtempSync } from 'fs'
 import { rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
+import { request as httpRequest } from 'http'
 
 const cacheControlValue = 'public, no-cache, must-revalidate, max-age=365d'
 const cacheControlNoCache = 'public, no-store, no-cache, must-revalidate, max-age=0'
@@ -307,6 +308,39 @@ export function start (
   setInterval(cleanupTempFiles, 1000 * 60 * 15) // Run every 15 minutes
 
   app.use(cors())
+  // Same-origin proxy: the recognizer itself is never exposed to the network.
+  app.use('/prospects-api', (req, res) => {
+    if (!['/status', '/recognize'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
+      res.sendStatus(404)
+      return
+    }
+    const target = process.env.PROSPECTS_SERVICE_URL
+    if (target === undefined || target === '') {
+      res.status(503).json({ error: '识别服务未配置' })
+      return
+    }
+    const url = new URL(`/api${req.path}`, target)
+    const upstream = httpRequest(
+      url,
+      {
+        method: req.method,
+        headers: {
+          authorization: req.headers.authorization ?? '',
+          'content-type': req.headers['content-type'] ?? 'application/json'
+        }
+      },
+      (response) => {
+        res.status(response.statusCode ?? 502)
+        if (response.headers['content-type'] !== undefined) { res.setHeader('content-type', response.headers['content-type']) }
+        response.pipe(res)
+      }
+    )
+    upstream.on('error', () => {
+      if (!res.headersSent) res.status(503).json({ error: '识别服务连不上' })
+      else res.end()
+    })
+    req.pipe(upstream)
+  })
   app.use(
     fileUpload({
       useTempFiles: true,

@@ -288,6 +288,17 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+  prospects-recognizer:
+    image: hardcoreeng/prospects-recognizer
+    env_file:
+      - path: .env.prospects.local
+        required: false
+    ports:
+      - '127.0.0.1:8101:8101'
+    environment:
+      - PORT=8101
+      - ACCOUNTS_URL=http://account:3000
+    restart: unless-stopped
   front:
     image: hardcoreeng/front
     extra_hosts:
@@ -299,6 +310,7 @@ services:
       - 8088:8080
     environment:
       - SERVER_PORT=8080
+      - PROSPECTS_SERVICE_URL=http://prospects-recognizer:8101
       - SERVER_SECRET=secret
       - ACCOUNTS_URL=http://huly.local:3000
       - STATS_URL=http://huly.local:4900

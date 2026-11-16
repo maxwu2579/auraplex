@@ -1,0 +1,13 @@
+services:
+  prospects-recognizer:
+    environment:
+      PROSPECTS_AI_URL: http://prospects-mock:8111
+      PROSPECTS_AI_MODEL: local-fake
+      PROSPECTS_AI_KEY: ''
+  prospects-mock:
+    image: hardcoreeng/base-slim:v20250916
+    command: ["node", "/mock/index.cjs"]
+    volumes:
+      - ../services/prospects-recognizer/mock/index.cjs:/mock/index.cjs:ro
+    ports:
+      - '127.0.0.1:8111:8111'

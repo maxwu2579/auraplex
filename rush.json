@@ -277,6 +277,11 @@
     { "packageName": "@hcengineering/materials-assets", "projectFolder": "plugins/materials-assets", "shouldPublish": false },
     { "packageName": "@hcengineering/materials-resources", "projectFolder": "plugins/materials-resources", "shouldPublish": false },
     { "packageName": "@hcengineering/model-materials", "projectFolder": "models/materials", "shouldPublish": false },
+    { "packageName": "@hcengineering/prospects", "projectFolder": "plugins/prospects", "shouldPublish": false },
+    { "packageName": "@hcengineering/prospects-assets", "projectFolder": "plugins/prospects-assets", "shouldPublish": false },
+    { "packageName": "@hcengineering/prospects-resources", "projectFolder": "plugins/prospects-resources", "shouldPublish": false },
+    { "packageName": "@hcengineering/model-prospects", "projectFolder": "models/prospects", "shouldPublish": false },
+    { "packageName": "@hcengineering/prospects-recognizer", "projectFolder": "services/prospects-recognizer", "shouldPublish": false },
     {
       "packageName": "@hcengineering/whatsapp",
       "projectFolder": "plugins/whatsapp",

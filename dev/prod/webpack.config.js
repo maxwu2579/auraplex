@@ -51,6 +51,7 @@ const useCache = process.env.USE_CACHE === 'true'
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 const devProxy = {
+  '/prospects-api': { target: 'http://huly.local:8087', changeOrigin: true, logLevel: 'error' },
   '/account': {
     target: 'http://huly.local:3000',
     changeOrigin: true,

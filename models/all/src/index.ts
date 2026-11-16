@@ -95,6 +95,7 @@ import { exportId, createModel as exportModel } from '@hcengineering/model-expor
 import love, { loveId, createModel as loveModel } from '@hcengineering/model-love'
 import { printId, createModel as printModel } from '@hcengineering/model-print'
 import { materialsId, createModel as materialsModel } from '@hcengineering/model-materials'
+import { prospectsId, createModel as prospectsModel } from '@hcengineering/model-prospects'
 import { shareId, createModel as shareModel } from '@hcengineering/model-share'
 import { whatsappId, createModel as whatsappModel } from '@hcengineering/model-whatsapp'
 import { serverLoveId, createModel as serverLoveModel } from '@hcengineering/model-server-love'
@@ -403,6 +404,7 @@ export default function buildModel (): Builder {
     ],
     [printModel, printId],
     [materialsModel, materialsId],
+    [prospectsModel, prospectsId],
     [shareModel, shareId],
     [whatsappModel, whatsappId],
     [exportModel, exportId],

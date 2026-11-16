@@ -143,6 +143,23 @@ function makeGuestSettingsDoc (allowedPermissions: Ref<Doc>[], disabledPermissio
 }
 
 describe('GuestPermissionsMiddleware', () => {
+  it('only permits maintainers and owners to delete prospects, including in a batch', async () => {
+    const mw = makeMiddleware(async () => [])
+    const factory = new TxFactory('test' as PersonId)
+    const tx = factory.createTxRemoveDoc(
+      'prospects:class:Prospect' as Ref<Class<Doc>>,
+      ALLOWED_SPACE,
+      'prospect' as Ref<Doc>
+    )
+    const batch: Tx = { _class: core.class.TxApplyIf, txes: [tx] } as any
+    for (const role of [AccountRole.User, AccountRole.Guest]) {
+      await expect(mw.tx(makeCtx(makeAccount(role)), [tx])).rejects.toThrow()
+      await expect(mw.tx(makeCtx(makeAccount(role)), [batch])).rejects.toThrow()
+    }
+    for (const role of [AccountRole.Maintainer, AccountRole.Owner]) {
+      await expect(mw.tx(makeCtx(makeAccount(role)), [tx])).resolves.toBeDefined()
+    }
+  })
   it('restricts low stock recipient settings to maintainers and owners, including batch writes', async () => {
     const mw = makeMiddleware(async () => [])
     const settingsClass = 'materials:class:LowStockSettings' as Ref<Class<Doc>>
