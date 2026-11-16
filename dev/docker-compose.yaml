@@ -302,6 +302,8 @@ services:
   prospect-mail:
     # Without .env.mail.local it only answers "邮件未配置" and never connects to a mailbox.
     image: hardcoreeng/prospect-mail
+    extra_hosts:
+      - 'huly.local:host-gateway'
     env_file:
       - path: .env.mail.local
         required: false
