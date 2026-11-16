@@ -168,6 +168,7 @@
     width: min(70rem, 95vw);
     max-height: 85vh;
     overflow: auto;
+    scrollbar-width: auto;
     border-radius: 0.7rem;
     padding: 1.25rem;
     box-shadow: var(--popup-shadow);
@@ -184,8 +185,10 @@
   h3 {
     margin: 0.8rem 0 0.4rem;
   }
+  /* Do not let the list be squeezed to one line on short windows; the whole dialog scrolls instead. */
   .table-wrap {
-    overflow: auto;
+    flex-shrink: 0;
+    overflow-x: auto;
     scrollbar-width: auto;
   }
   table {
