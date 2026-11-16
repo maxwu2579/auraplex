@@ -1,0 +1,23 @@
+# Local test only: points prospect-mail at the fake mail server instead of Gmail.
+# Use: docker compose -f docker-compose.yaml -f docker-compose.min.yaml -f ../services/prospect-mail/mock/compose.mock.yaml up -d prospect-mail prospect-mail-mock
+services:
+  prospect-mail:
+    environment:
+      # Workspace "123" on this machine; replace with your test workspace UUID.
+      MAIL_WORKSPACE: d92aeff4-58c1-4d63-bdf5-bd4fff72c252
+      MAIL_ADDRESS: sales@gmail.test
+      MAIL_PASSWORD: fake
+      MAIL_SMTP_HOST: prospect-mail-mock
+      MAIL_SMTP_PORT: '2525'
+      MAIL_SMTP_SECURE: 'false'
+      MAIL_IMAP_HOST: prospect-mail-mock
+      MAIL_IMAP_PORT: '1143'
+      MAIL_IMAP_SECURE: 'false'
+      MAIL_POLL_SECONDS: '30'
+  prospect-mail-mock:
+    image: hardcoreeng/base-slim:v20250916
+    command: ['node', '/mock/mail.cjs']
+    volumes:
+      - ../services/prospect-mail/mock/mail.cjs:/mock/mail.cjs:ro
+    ports:
+      - '127.0.0.1:8112:8112'

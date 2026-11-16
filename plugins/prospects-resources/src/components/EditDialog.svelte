@@ -12,6 +12,7 @@
     type RecognitionField
   } from '@hcengineering/prospects'
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
+  import MailPanel from './MailPanel.svelte'
 
   export let value: Prospect | undefined = undefined
   export let initialFront: File | undefined = undefined
@@ -357,6 +358,7 @@
         >查看已有记录：{duplicate.name} · {duplicate.company}</button
       >{/if}
     <footer><button disabled={busy} on:click={save}>{busy ? '处理中…' : '确认保存'}</button></footer>
+    {#if value !== undefined}<MailPanel {value} />{/if}
   </section>
   {#if preview}<div class="preview" role="presentation" on:click|self={() => (preview = undefined)}>
       <button on:click={() => (preview = undefined)}>关闭</button><img src={preview} alt="名片大图" />

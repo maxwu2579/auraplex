@@ -52,6 +52,7 @@ const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPl
 
 const devProxy = {
   '/prospects-api': { target: 'http://huly.local:8087', changeOrigin: true, logLevel: 'error' },
+  '/prospect-mail-api': { target: 'http://huly.local:8087', changeOrigin: true, logLevel: 'error' },
   '/account': {
     target: 'http://huly.local:3000',
     changeOrigin: true,

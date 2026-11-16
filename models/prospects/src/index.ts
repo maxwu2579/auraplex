@@ -11,12 +11,19 @@ import {
   TypeTimestamp,
   TypeBoolean,
   TypeAccountUuid,
+  TypeRef,
   Collection
 } from '@hcengineering/model'
-import core, { TDoc } from '@hcengineering/model-core'
+import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
 import attachment from '@hcengineering/model-attachment'
 import workbench from '@hcengineering/model-workbench'
-import prospects, { prospectsId, type Prospect, type ProspectStatus } from '@hcengineering/prospects'
+import prospects, {
+  prospectsId,
+  type Prospect,
+  type ProspectMail,
+  type ProspectMailCursor,
+  type ProspectStatus
+} from '@hcengineering/prospects'
 export { prospectsId } from '@hcengineering/prospects'
 export default prospects
 export const DOMAIN_PROSPECTS = 'prospects' as Domain
@@ -42,13 +49,36 @@ export class TProspect extends TDoc implements Prospect {
   @Prop(Collection(attachment.class.Photo), prospects.string.Prospects) photos?: number
   @Prop(TypeTimestamp(), prospects.string.Prospects) lastEmailAt?: number
   @Prop(TypeNumber(), prospects.string.Prospects) emailCount!: number
+  @Prop(TypeAccountUuid(), prospects.string.Prospects) owner?: Prospect['owner']
+  @Prop(Collection(prospects.class.ProspectMail), prospects.string.Prospects) mailMessages?: number
   @Prop(TypeString(), prospects.string.Prospects) recognitionModel?: string
   @Prop(TypeTimestamp(), prospects.string.Prospects) recognizedAt?: number
   @Prop(TypeAccountUuid(), prospects.string.Prospects) recognitionBy?: Prospect['recognitionBy']
   @Prop(TypeBoolean(), prospects.string.Prospects) recognitionConfirmed!: boolean
 }
+@Model(prospects.class.ProspectMail, core.class.AttachedDoc, DOMAIN_PROSPECTS)
+@UX(prospects.string.Prospects, prospects.icon.Prospects)
+export class TProspectMail extends TAttachedDoc implements ProspectMail {
+  declare attachedTo: ProspectMail['attachedTo']
+  declare attachedToClass: ProspectMail['attachedToClass']
+  @Prop(TypeString(), prospects.string.Prospects) direction!: ProspectMail['direction']
+  @Prop(TypeString(), prospects.string.Prospects) delivery!: ProspectMail['delivery']
+  @Prop(TypeString(), prospects.string.Prospects) @Index(IndexKind.Indexed) messageId!: string
+  @Prop(TypeString(), prospects.string.Prospects) sender!: string
+  @Prop(TypeString(), prospects.string.Prospects) recipient!: string
+  @Prop(TypeString(), prospects.string.Prospects) subject!: string
+  @Prop(TypeString(), prospects.string.Prospects) body!: string
+  @Prop(TypeTimestamp(), prospects.string.Prospects) sentAt!: number
+  @Prop(TypeAccountUuid(), prospects.string.Prospects) actor?: ProspectMail['actor']
+  @Prop(TypeRef(prospects.class.ProspectMail), prospects.string.Prospects) replyTo?: ProspectMail['replyTo']
+}
+@Model(prospects.class.ProspectMailCursor, core.class.Doc, DOMAIN_PROSPECTS)
+export class TProspectMailCursor extends TDoc implements ProspectMailCursor {
+  @Prop(TypeString(), prospects.string.Prospects) uidValidity!: string
+  @Prop(TypeNumber(), prospects.string.Prospects) uid!: number
+}
 export function createModel (builder: Builder): void {
-  builder.createModel(TProspect)
+  builder.createModel(TProspect, TProspectMail, TProspectMailCursor)
   builder.createDoc(
     workbench.class.Application,
     core.space.Model,

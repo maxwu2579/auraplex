@@ -282,6 +282,7 @@
     { "packageName": "@hcengineering/prospects-resources", "projectFolder": "plugins/prospects-resources", "shouldPublish": false },
     { "packageName": "@hcengineering/model-prospects", "projectFolder": "models/prospects", "shouldPublish": false },
     { "packageName": "@hcengineering/prospects-recognizer", "projectFolder": "services/prospects-recognizer", "shouldPublish": false },
+    { "packageName": "@hcengineering/prospect-mail", "projectFolder": "services/prospect-mail", "shouldPublish": false },
     {
       "packageName": "@hcengineering/whatsapp",
       "projectFolder": "plugins/whatsapp",

@@ -308,6 +308,37 @@ export function start (
   setInterval(cleanupTempFiles, 1000 * 60 * 15) // Run every 15 minutes
 
   app.use(cors())
+  app.use('/prospect-mail-api', (req, res) => {
+    if (!['/status', '/send', '/forward'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
+      res.sendStatus(404)
+      return
+    }
+    const target = process.env.PROSPECT_MAIL_SERVICE_URL
+    if (target === undefined || target === '') {
+      res.status(503).json({ error: '邮件未配置' })
+      return
+    }
+    const upstream = httpRequest(
+      new URL(`/api${req.path}`, target),
+      {
+        method: req.method,
+        headers: {
+          authorization: req.headers.authorization ?? '',
+          'content-type': req.headers['content-type'] ?? 'application/json'
+        }
+      },
+      (response) => {
+        res.status(response.statusCode ?? 502)
+        if (response.headers['content-type'] !== undefined) { res.setHeader('content-type', response.headers['content-type']) }
+        response.pipe(res)
+      }
+    )
+    upstream.on('error', () => {
+      if (!res.headersSent) res.status(503).json({ error: '邮件服务连不上' })
+      else res.end()
+    })
+    req.pipe(upstream)
+  })
   // Same-origin proxy: the recognizer itself is never exposed to the network.
   app.use('/prospects-api', (req, res) => {
     if (!['/status', '/recognize'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
@@ -331,7 +362,9 @@ export function start (
       },
       (response) => {
         res.status(response.statusCode ?? 502)
-        if (response.headers['content-type'] !== undefined) { res.setHeader('content-type', response.headers['content-type']) }
+        if (response.headers['content-type'] !== undefined) {
+          res.setHeader('content-type', response.headers['content-type'])
+        }
         response.pipe(res)
       }
     )
