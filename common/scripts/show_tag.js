@@ -15,32 +15,13 @@
 
 const fs = require('fs')
 const path = require('path')
-const exec = require('child_process').exec
 
-// Auraplex: without git or tags (ZIP download, shallow clone, no .git in the build)
-// use version.txt instead of the old "0.6.0" default, so front and server always agree.
-function fromFile () {
-  try {
-    return fs.readFileSync(path.resolve(__dirname, 'version.txt'), 'utf8').trim()
-  } catch {
-    return '"0.6.0"'
-  }
+// Auraplex: the version always comes from version.txt, never from git tags, so the
+// front and the server built from the same code always report the same version,
+// however the code was fetched (full clone, shallow clone, ZIP, no .git).
+// To release a new version, change version.txt.
+try {
+  console.log(fs.readFileSync(path.resolve(__dirname, 'version.txt'), 'utf8').trim())
+} catch {
+  console.log('"0.6.0"')
 }
-
-exec('git describe --tags --abbrev=0', (err, stdout, stderr) => {
-  if (err !== null) {
-    console.log(fromFile())
-    return
-  }
-  const rawVersion = stdout.trim().replace('v', '').replace('s', '').split('.')
-  if (rawVersion.length === 3) {
-    const version = {
-      major: parseInt(rawVersion[0]),
-      minor: parseInt(rawVersion[1]),
-      patch: parseInt(rawVersion[2])
-    }
-    console.log(`"${version.major}.${version.minor}.${version.patch}"`)
-  } else {
-    console.log(fromFile())
-  }
-})
