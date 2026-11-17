@@ -19662,6 +19662,21 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  ../../plugins/departments-assets:
+    devDependencies:
+      '@hcengineering/platform-rig':
+        specifier: workspace:^0.7.21
+        version: link:../../foundations/utils/packages/platform-rig
+      '@types/jest':
+        specifier: ^29.5.5
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.18.1
+        version: 22.19.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   ../../plugins/desktop-downloads:
     dependencies:
       '@hcengineering/core':

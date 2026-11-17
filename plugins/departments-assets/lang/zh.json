@@ -1,0 +1,16 @@
+{
+  "string": {
+    "Administrators": "部门管理员",
+    "Supervisors": "主管",
+    "Employees": "员工",
+    "Readers": "只读成员",
+    "AdminPermissions": "部门管理员权限",
+    "SupervisorPermissions": "主管权限",
+    "EmployeePermissions": "员工权限",
+    "ReaderPermissions": "只读成员权限",
+    "ProjectSpace": "任务项目",
+    "DocumentSpace": "文档空间",
+    "DriveSpace": "云盘",
+    "Archived": "已归档"
+  }
+}

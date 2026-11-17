@@ -4,9 +4,34 @@ import {
   defaultDepartmentPolicy,
   effectivePermissions,
   permissionForAction,
+  departmentPermissions,
   type DepartmentMembers,
   type DepartmentPolicy
 } from './departmentPolicy'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+test('server permission names match the departments plugin definition', () => {
+  const source = readFileSync(resolve(__dirname, '../../../../../plugins/departments/src/index.ts'), 'utf8')
+  const union = source.match(/export type DepartmentPermission\s*=([^\n]+)/)
+  expect(union).not.toBeNull()
+  const names = [...(union?.[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1])
+  expect(names.sort()).toEqual([...departmentPermissions].sort())
+})
+
+test('all department model field labels exist in both Chinese and English', () => {
+  const root = resolve(__dirname, '../../../../..')
+  const model = readFileSync(resolve(root, 'models/departments/src/index.ts'), 'utf8')
+  const fields = [...model.matchAll(/@Prop\([^\n]+departments\.string\.(\w+)/g)].map((match) => match[1])
+  const en = JSON.parse(readFileSync(resolve(root, 'plugins/departments-assets/lang/en.json'), 'utf8')).string
+  const zh = JSON.parse(readFileSync(resolve(root, 'plugins/departments-assets/lang/zh.json'), 'utf8')).string
+  expect(fields).toHaveLength(12)
+  expect(new Set(fields).size).toBe(12)
+  for (const label of fields) {
+    expect(en[label]).toBeTruthy()
+    expect(zh[label]).toBeTruthy()
+  }
+})
 
 test('maps object actions conservatively', () => {
   expect(permissionForAction('create', 'comment')).toBe('comment')

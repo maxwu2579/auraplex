@@ -1,0 +1,16 @@
+{
+  "string": {
+    "Administrators": "Department administrators",
+    "Supervisors": "Supervisors",
+    "Employees": "Employees",
+    "Readers": "Read-only members",
+    "AdminPermissions": "Administrator permissions",
+    "SupervisorPermissions": "Supervisor permissions",
+    "EmployeePermissions": "Employee permissions",
+    "ReaderPermissions": "Read-only member permissions",
+    "ProjectSpace": "Task project",
+    "DocumentSpace": "Document space",
+    "DriveSpace": "Drive",
+    "Archived": "Archived"
+  }
+}

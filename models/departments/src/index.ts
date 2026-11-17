@@ -18,18 +18,26 @@ export default departments
 
 @Mixin(departments.mixin.DepartmentAccess, hr.class.Department)
 export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
-  @Prop(ArrOf(TypeAccountUuid()), core.string.Name) administrators!: DepartmentAccess['administrators']
-  @Prop(ArrOf(TypeAccountUuid()), core.string.Name) supervisors!: DepartmentAccess['supervisors']
-  @Prop(ArrOf(TypeAccountUuid()), core.string.Name) employees!: DepartmentAccess['employees']
-  @Prop(ArrOf(TypeAccountUuid()), core.string.Name) readers!: DepartmentAccess['readers']
-  @Prop(ArrOf(TypeString()), core.string.Name) adminPermissions!: DepartmentAccess['adminPermissions']
-  @Prop(ArrOf(TypeString()), core.string.Name) supervisorPermissions!: DepartmentAccess['supervisorPermissions']
-  @Prop(ArrOf(TypeString()), core.string.Name) employeePermissions!: DepartmentAccess['employeePermissions']
-  @Prop(ArrOf(TypeString()), core.string.Name) readerPermissions!: DepartmentAccess['readerPermissions']
-  @Prop(TypeRef(core.class.Space), core.string.Name) projectSpace?: DepartmentAccess['projectSpace']
-  @Prop(TypeRef(core.class.Space), core.string.Name) documentSpace?: DepartmentAccess['documentSpace']
-  @Prop(TypeRef(core.class.Space), core.string.Name) driveSpace?: DepartmentAccess['driveSpace']
-  @Prop(TypeBoolean(), core.string.Name) archived!: boolean
+  @Prop(ArrOf(TypeAccountUuid()), departments.string.Administrators) administrators!: DepartmentAccess['administrators']
+  @Prop(ArrOf(TypeAccountUuid()), departments.string.Supervisors) supervisors!: DepartmentAccess['supervisors']
+  @Prop(ArrOf(TypeAccountUuid()), departments.string.Employees) employees!: DepartmentAccess['employees']
+  @Prop(ArrOf(TypeAccountUuid()), departments.string.Readers) readers!: DepartmentAccess['readers']
+  @Prop(ArrOf(TypeString()), departments.string.AdminPermissions)
+    adminPermissions!: DepartmentAccess['adminPermissions']
+
+  @Prop(ArrOf(TypeString()), departments.string.SupervisorPermissions)
+    supervisorPermissions!: DepartmentAccess['supervisorPermissions']
+
+  @Prop(ArrOf(TypeString()), departments.string.EmployeePermissions)
+    employeePermissions!: DepartmentAccess['employeePermissions']
+
+  @Prop(ArrOf(TypeString()), departments.string.ReaderPermissions)
+    readerPermissions!: DepartmentAccess['readerPermissions']
+
+  @Prop(TypeRef(core.class.Space), departments.string.ProjectSpace) projectSpace?: DepartmentAccess['projectSpace']
+  @Prop(TypeRef(core.class.Space), departments.string.DocumentSpace) documentSpace?: DepartmentAccess['documentSpace']
+  @Prop(TypeRef(core.class.Space), departments.string.DriveSpace) driveSpace?: DepartmentAccess['driveSpace']
+  @Prop(TypeBoolean(), departments.string.Archived) archived!: boolean
 }
 
 export function createModel (builder: Builder): void {
