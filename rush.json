@@ -275,6 +275,7 @@
   "projects": [
     { "packageName": "@hcengineering/departments", "projectFolder": "plugins/departments", "shouldPublish": false },
     { "packageName": "@hcengineering/departments-assets", "projectFolder": "plugins/departments-assets", "shouldPublish": false },
+    { "packageName": "@hcengineering/departments-resources", "projectFolder": "plugins/departments-resources", "shouldPublish": false },
     { "packageName": "@hcengineering/model-departments", "projectFolder": "models/departments", "shouldPublish": false },
     { "packageName": "@hcengineering/materials", "projectFolder": "plugins/materials", "shouldPublish": false },
     { "packageName": "@hcengineering/materials-assets", "projectFolder": "plugins/materials-assets", "shouldPublish": false },

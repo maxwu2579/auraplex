@@ -11,6 +11,7 @@ import {
 } from '@hcengineering/model'
 import core from '@hcengineering/model-core'
 import hr, { TDepartment } from '@hcengineering/model-hr'
+import workbench from '@hcengineering/model-workbench'
 import departments, { departmentsId, type DepartmentAccess } from '@hcengineering/departments'
 
 export { departmentsId }
@@ -42,4 +43,14 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
 
 export function createModel (builder: Builder): void {
   builder.createModel(TDepartmentAccess)
+  builder.createDoc(workbench.class.Application, core.space.Model, {
+    label: departments.string.Departments,
+    icon: hr.icon.Department,
+    alias: departmentsId,
+    hidden: false,
+    navigatorModel: {
+      specials: [{ id: 'directory', label: departments.string.Departments, icon: hr.icon.Department, component: departments.component.Directory }],
+      spaces: []
+    }
+  }, departments.app.Departments)
 }

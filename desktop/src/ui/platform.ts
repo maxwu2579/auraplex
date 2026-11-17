@@ -157,6 +157,8 @@ import { materialsId } from '@hcengineering/materials'
 import '@hcengineering/materials-assets'
 import { prospectsId } from '@hcengineering/prospects'
 import '@hcengineering/prospects-assets'
+import { departmentsId } from '@hcengineering/departments'
+import '@hcengineering/departments-assets'
 import { shareId } from '@hcengineering/share'
 import whatsapp, { whatsappId } from '@hcengineering/whatsapp'
 import sign from '@hcengineering/sign'
@@ -284,6 +286,7 @@ function configureI18n (): void {
   addStringsLoader(printId, async (lang: string) => await import(`@hcengineering/print-assets/lang/${lang}.json`))
   addStringsLoader(materialsId, async (lang: string) => await import(`@hcengineering/materials-assets/lang/${lang}.json`))
   addStringsLoader(prospectsId, async (lang: string) => await import(`@hcengineering/prospects-assets/lang/${lang}.json`))
+  addStringsLoader(departmentsId, async (lang: string) => await import(`@hcengineering/departments-assets/lang/${lang}.json`))
   addStringsLoader(shareId, async (lang: string) => await import(`@hcengineering/share-assets/lang/${lang}.json`))
   addStringsLoader(whatsappId, async (lang: string) => await import(`@hcengineering/whatsapp-assets/lang/${lang}.json`))
   addStringsLoader(exportId, async (lang: string) => await import(`@hcengineering/export-assets/lang/${lang}.json`))
@@ -506,6 +509,7 @@ export async function configurePlatform (onWorkbenchConnect?: () => Promise<void
   addLocation(printId, () => import(/* webpackChunkName: "print" */ '@hcengineering/print-resources'))
   addLocation(materialsId, async () => await import(/* webpackChunkName: "materials" */ '@hcengineering/materials-resources'))
   addLocation(prospectsId, async () => await import(/* webpackChunkName: "prospects" */ '@hcengineering/prospects-resources'))
+  addLocation(departmentsId, async () => await import(/* webpackChunkName: "departments" */ '@hcengineering/departments-resources'))
   addLocation(shareId, () => import(/* webpackChunkName: "share" */ '@hcengineering/share-resources'))
   addLocation(whatsappId, () => import(/* webpackChunkName: "whatsapp" */ '@hcengineering/whatsapp-resources'))
   addLocation(exportId, () => import(/* webpackChunkName: "export" */ '@hcengineering/export-resources'))

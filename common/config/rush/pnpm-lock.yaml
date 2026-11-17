@@ -174,6 +174,15 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../plugins/departments
+      '@hcengineering/departments-assets':
+        specifier: workspace:^0.7.0
+        version: link:../plugins/departments-assets
+      '@hcengineering/departments-resources':
+        specifier: workspace:^0.7.0
+        version: link:../plugins/departments-resources
       '@hcengineering/desktop-downloads':
         specifier: workspace:^0.7.0
         version: link:../plugins/desktop-downloads
@@ -1267,6 +1276,15 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments
+      '@hcengineering/departments-assets':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments-assets
+      '@hcengineering/departments-resources':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments-resources
       '@hcengineering/desktop-preferences':
         specifier: workspace:^0.7.0
         version: link:../../plugins/desktop-preferences
@@ -6061,6 +6079,9 @@ importers:
       '@hcengineering/model-core':
         specifier: workspace:^0.7.0
         version: link:../core
+      '@hcengineering/model-departments':
+        specifier: workspace:^0.7.0
+        version: link:../departments
       '@hcengineering/model-desktop-downloads':
         specifier: workspace:^0.7.0
         version: link:../desktop-downloads
@@ -7729,6 +7750,9 @@ importers:
       '@hcengineering/model-hr':
         specifier: workspace:^0.7.0
         version: link:../hr
+      '@hcengineering/model-workbench':
+        specifier: workspace:^0.7.0
+        version: link:../workbench
     devDependencies:
       '@hcengineering/platform-rig':
         specifier: workspace:^0.7.21
@@ -19645,6 +19669,9 @@ importers:
       '@hcengineering/platform':
         specifier: workspace:^0.7.20
         version: link:../../foundations/core/packages/platform
+      '@hcengineering/ui':
+        specifier: workspace:^0.7.0
+        version: link:../../packages/ui
     devDependencies:
       '@hcengineering/platform-rig':
         specifier: workspace:^0.7.21
@@ -19673,6 +19700,58 @@ importers:
       '@types/node':
         specifier: ^22.18.1
         version: 22.19.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  ../../plugins/departments-resources:
+    dependencies:
+      '@hcengineering/contact':
+        specifier: workspace:^0.7.0
+        version: link:../contact
+      '@hcengineering/core':
+        specifier: workspace:^0.7.26
+        version: link:../../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../departments
+      '@hcengineering/hr':
+        specifier: workspace:^0.7.0
+        version: link:../hr
+      '@hcengineering/platform':
+        specifier: workspace:^0.7.20
+        version: link:../../foundations/core/packages/platform
+      '@hcengineering/presentation':
+        specifier: workspace:^0.7.0
+        version: link:../../packages/presentation
+      '@hcengineering/ui':
+        specifier: workspace:^0.7.0
+        version: link:../../packages/ui
+      svelte:
+        specifier: ^4.2.20
+        version: 4.2.20
+    devDependencies:
+      '@hcengineering/platform-rig':
+        specifier: workspace:^0.7.21
+        version: link:../../foundations/utils/packages/platform-rig
+      '@types/jest':
+        specifier: ^29.5.5
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.18.1
+        version: 22.19.0
+      sass:
+        specifier: ^1.80.0
+        version: 1.93.3
+      svelte-check:
+        specifier: ^3.6.9
+        version: 3.8.6(@babel/core@7.28.5)(postcss-load-config@4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@22.19.0)(typescript@5.9.3)))(postcss@8.5.6)(sass@1.93.3)(svelte@4.2.20)
+      svelte-loader:
+        specifier: ^3.2.0
+        version: 3.2.4(svelte@4.2.20)
+      svelte-preprocess:
+        specifier: ^5.1.4
+        version: 5.1.4(@babel/core@7.28.5)(postcss-load-config@4.0.2(postcss@8.5.6)(ts-node@10.9.2(@types/node@22.19.0)(typescript@5.9.3)))(postcss@8.5.6)(sass@1.93.3)(svelte@4.2.20)(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -63785,7 +63864,7 @@ snapshots:
   node-loader@2.0.0(webpack@5.102.1):
     dependencies:
       loader-utils: 2.0.4
-      webpack: 5.102.1(esbuild@0.25.12)(webpack-cli@5.1.4)
+      webpack: 5.102.1
 
   node-localstorage@2.2.1:
     dependencies:

@@ -22,6 +22,7 @@
   "dependencies": {
     "@hcengineering/core": "workspace:^0.7.26",
     "@hcengineering/hr": "workspace:^0.7.0",
-    "@hcengineering/platform": "workspace:^0.7.20"
+    "@hcengineering/platform": "workspace:^0.7.20",
+    "@hcengineering/ui": "workspace:^0.7.0"
   }
 }

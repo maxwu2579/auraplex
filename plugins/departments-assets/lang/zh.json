@@ -11,6 +11,25 @@
     "ProjectSpace": "任务项目",
     "DocumentSpace": "文档空间",
     "DriveSpace": "云盘",
-    "Archived": "已归档"
+    "Archived": "已归档",
+    "Departments": "部门",
+    "CreateDepartment": "新建部门",
+    "DepartmentName": "部门名称",
+    "ChooseAdministrator": "选择部门管理员",
+    "Create": "新建",
+    "Save": "保存",
+    "Cancel": "取消",
+    "Member": "成员",
+    "CreatePermission": "新建",
+    "UpdatePermission": "修改",
+    "DeletePermission": "删除",
+    "CommentPermission": "评论",
+    "InvitePermission": "邀请",
+    "ManageMembersPermission": "管理成员",
+    "NoPermission": "你没有权限授予该角色或操作。",
+    "Saved": "保存成功。",
+    "SaveError": "保存失败，请刷新页面后重试。",
+    "Processing": "正在保存…",
+    "InviteHelp": "邀请的成员默认只能查看和评论。"
   }
 }

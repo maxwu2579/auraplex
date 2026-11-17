@@ -111,6 +111,7 @@
     "@hcengineering/model-share": "workspace:^0.7.0",
     "@hcengineering/model-materials": "workspace:^0.7.0",
     "@hcengineering/model-prospects": "workspace:^0.7.0",
+    "@hcengineering/model-departments": "workspace:^0.7.0",
     "@hcengineering/model-whatsapp": "workspace:^0.7.0",
     "@hcengineering/model-export": "workspace:^0.7.0",
     "@hcengineering/model-questions": "workspace:^0.7.0",

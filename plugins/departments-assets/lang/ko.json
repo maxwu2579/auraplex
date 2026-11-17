@@ -11,6 +11,25 @@
     "ProjectSpace": "Task project",
     "DocumentSpace": "Document space",
     "DriveSpace": "Drive",
-    "Archived": "Archived"
+    "Archived": "Archived",
+    "Departments": "Departments",
+    "CreateDepartment": "Create department",
+    "DepartmentName": "Department name",
+    "ChooseAdministrator": "Choose department administrator",
+    "Create": "Create",
+    "Save": "Save",
+    "Cancel": "Cancel",
+    "Member": "Member",
+    "CreatePermission": "Create",
+    "UpdatePermission": "Edit",
+    "DeletePermission": "Delete",
+    "CommentPermission": "Comment",
+    "InvitePermission": "Invite",
+    "ManageMembersPermission": "Manage members",
+    "NoPermission": "You do not have permission to grant this role or action.",
+    "Saved": "Saved.",
+    "SaveError": "Could not save. Refresh the page and try again.",
+    "Processing": "Saving…",
+    "InviteHelp": "Invitations are added as read-only members."
   }
 }
