@@ -3,9 +3,22 @@ import {
   canChangeDepartment,
   defaultDepartmentPolicy,
   effectivePermissions,
+  permissionForAction,
   type DepartmentMembers,
   type DepartmentPolicy
 } from './departmentPolicy'
+
+test('maps object actions conservatively', () => {
+  expect(permissionForAction('create', 'comment')).toBe('comment')
+  expect(permissionForAction('create', 'reaction')).toBe('comment')
+  expect(permissionForAction('create', 'commentAttachment')).toBe('comment')
+  expect(permissionForAction('create', 'ordinary')).toBe('create')
+  expect(permissionForAction('update', 'comment', true)).toBe('comment')
+  expect(permissionForAction('update', 'comment', false)).toBe('update')
+  expect(permissionForAction('mixin', 'ordinary')).toBe('update')
+  expect(permissionForAction('remove', 'comment', true)).toBe('delete')
+  expect(permissionForAction('unknown', 'ordinary')).toBeUndefined()
+})
 
 function sample (): { members: DepartmentMembers, policy: DepartmentPolicy } {
   return {

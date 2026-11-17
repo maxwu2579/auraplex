@@ -13,6 +13,20 @@ export const departmentPermissions: DepartmentPermission[] = [
 ]
 export type DepartmentPolicy = Record<DepartmentRole, DepartmentPermission[]>
 export type DepartmentMembers = Record<DepartmentRole, string[]>
+
+/** Object kind and ownership must be resolved from trusted server-side data. */
+export function permissionForAction (
+  action: 'create' | 'update' | 'remove' | 'mixin' | 'unknown',
+  object: 'comment' | 'reaction' | 'commentAttachment' | 'ordinary',
+  ownsComment = false
+): DepartmentPermission | undefined {
+  // Comment messages, reactions and attachments to verified comments use
+  // comment on creation. Tasks, other activity and attachments use create.
+  if (action === 'remove') return 'delete'
+  if (action === 'create') return object === 'ordinary' ? 'create' : 'comment'
+  if (action === 'update' || action === 'mixin') return object === 'comment' && ownsComment ? 'comment' : 'update'
+  return undefined
+}
 export const defaultDepartmentPolicy: DepartmentPolicy = {
   admin: [...departmentPermissions],
   supervisor: ['create', 'update', 'comment', 'invite'],
