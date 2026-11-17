@@ -56,7 +56,7 @@ test('disconnects an idle connection after a permission change', async () => {
       context: { authToken: 'fake' },
       documentName: 'workspace|class|id|body',
       socketId: 'socket',
-      connectionInstance: { readOnly: false, close }
+      connectionInstance: { readOnly: false, close, send: jest.fn() }
     } as any)
     await jest.advanceTimersByTimeAsync(3000)
     expect(close).toHaveBeenCalled()
@@ -76,7 +76,7 @@ test('keeps separate permission checks for multiple documents on one socket', as
       context: { authToken: 'fake' },
       documentName: 'workspace|class|one|body',
       socketId: 'socket',
-      connectionInstance: { readOnly: false, close: jest.fn() }
+      connectionInstance: { readOnly: false, close: jest.fn(), send: jest.fn() }
     }
     await extension.connected(data)
     await extension.connected({ ...data, documentName: 'workspace|class|two|body' })
