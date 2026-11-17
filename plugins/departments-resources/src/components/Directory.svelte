@@ -53,7 +53,34 @@
       if (access === undefined) return []
       return owner || roles.some((role) => access[role.field].includes(me.uuid)) ? [access] : []
     })
+    if (owner) void joinAsOwner(rows)
   })
+  const checked = new Set<string>()
+  /**
+   * A super admin added after a department was set up is not yet a member of its private spaces.
+   * Re-saving the unchanged access makes the server sync them in (and creates spaces never created).
+   */
+  async function joinAsOwner (items: DepartmentAccess[]): Promise<void> {
+    for (const access of items) {
+      if (checked.has(access._id)) continue
+      checked.add(access._id)
+      const ids = [access.projectSpace, access.documentSpace, access.driveSpace]
+      const spaces = await client.findAll(
+        core.class.Space,
+        { _id: { $in: ids.filter((it) => it !== undefined) } },
+        { showArchived: true }
+      )
+      const missing = ids.some((it) => it === undefined) || spaces.length < 3
+      if (!missing && spaces.every((space) => space.members.includes(me.uuid))) continue
+      try {
+        await client.updateMixin(access._id, hr.class.Department, access.space, departments.mixin.DepartmentAccess, {
+          archived: access.archived
+        })
+      } catch {
+        checked.delete(access._id)
+      }
+    }
+  }
   function clone (access: DepartmentAccess): Draft {
     return {
       administrators: [...access.administrators],
@@ -80,7 +107,9 @@
     for (const role of roles) {
       if (selected[role.field].includes(me.uuid)) {
         for (const permission of selected[role.permissions]) result.add(permission)
-        if (role.field === 'administrators') { for (const permission of selected.supervisorPermissions) result.add(permission) }
+        if (role.field === 'administrators') {
+          for (const permission of selected.supervisorPermissions) result.add(permission)
+        }
       }
     }
     return result
@@ -210,7 +239,11 @@
   {#if saved}<p><Label label={departments.string.Saved} /></p>{/if}
   <div class="layout">
     <nav>
-      {#each rows as row (row._id)}<button on:click={() => { choose(row) }}>{row.name}</button>{/each}
+      {#each rows as row (row._id)}<button
+          on:click={() => {
+            choose(row)
+          }}>{row.name}</button
+        >{/each}
     </nav>
     {#if selected !== undefined && draft !== undefined}
       <div class="editor">
@@ -242,7 +275,9 @@
                           type="checkbox"
                           checked={draft[role.field].includes(person.personUuid)}
                           disabled={!canToggleRole(role, person.personUuid)}
-                          on:change={() => { if (person.personUuid != null) toggleRole(role.field, person.personUuid) }}
+                          on:change={() => {
+                            if (person.personUuid != null) toggleRole(role.field, person.personUuid)
+                          }}
                         /></td
                       >{/each}</tr
                   >{/if}{/each}</tbody
@@ -263,7 +298,9 @@
                         type="checkbox"
                         checked={draft[role.permissions].includes(permission.value)}
                         disabled={!canTogglePermission(role, permission.value)}
-                        on:change={() => { togglePermission(role.permissions, permission.value) }}
+                        on:change={() => {
+                          togglePermission(role.permissions, permission.value)
+                        }}
                       /></td
                     >{/each}</tr
                 >{/each}</tbody

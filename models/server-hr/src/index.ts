@@ -25,6 +25,15 @@ import serverNotification from '@hcengineering/server-notification'
 export { serverHrId } from '@hcengineering/server-hr'
 
 export function createModel (builder: Builder): void {
+  // Auraplex: keep each department's private spaces in sync with the department page.
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverHr.trigger.OnDepartmentAccess,
+    txMatch: {
+      _class: { $in: [core.class.TxMixin, core.class.TxUpdateDoc] },
+      objectClass: hr.class.Department
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverHr.trigger.OnDepartmentStaff,
     txMatch: {

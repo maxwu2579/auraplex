@@ -33,6 +33,7 @@ import hr, { Department, fromTzDate, PublicHoliday, Request, Staff, tzDateEqual 
 import notification, { NotificationType } from '@hcengineering/notification'
 import { translate } from '@hcengineering/platform'
 import { TriggerControl } from '@hcengineering/server-core'
+import { OnDepartmentAccess } from './departmentSync'
 import { getEmployee, getSocialStrings } from '@hcengineering/server-contact'
 import { sendEmailNotification } from '@hcengineering/server-gmail-resources'
 import {
@@ -512,6 +513,7 @@ export default async () => ({
     OnRequestUpdate,
     OnRequestRemove,
     OnDepartmentStaff,
+    OnDepartmentAccess,
     OnDepartmentUpdate,
     OnDepartmentRemove,
     OnEmployeeDeactivate,
