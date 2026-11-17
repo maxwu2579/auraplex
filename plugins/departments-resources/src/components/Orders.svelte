@@ -2,7 +2,7 @@
 <script lang="ts">
   import chunter from '@hcengineering/chunter'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, SortingOrder, getCurrentAccount, type AccountUuid, type Ref } from '@hcengineering/core'
+  import core, { AccountRole, SortingOrder, generateId, getCurrentAccount, type AccountUuid, type Ref } from '@hcengineering/core'
   import departments, {
     type DepartmentAccess,
     type Order,
@@ -62,13 +62,14 @@
   $: selected = orders.find((it) => it._id === selectedId)
   $: stage = selected?.stages[selected.current]
 
-  const person = (id: AccountUuid | undefined): Employee | undefined =>
+  // These helpers are reactive so every place using them updates when people or departments load.
+  $: person = (id: AccountUuid | undefined): Employee | undefined =>
     id === undefined ? undefined : staff.find((it) => it.personUuid === id)
-  const name = (id: AccountUuid | undefined): string => {
+  $: name = (id: AccountUuid | undefined): string => {
     const p = person(id)
     return p === undefined ? '—' : formatName(p.name)
   }
-  function roleOf (department: Ref<Department> | undefined, who: AccountUuid): Role | undefined {
+  $: roleOf = (department: Ref<Department> | undefined, who: AccountUuid): Role | undefined => {
     const d = depts.find((it) => it._id === department)
     if (d === undefined || d.archived) return undefined
     if (d.administrators.includes(who)) return 'admin'
@@ -77,8 +78,8 @@
     if (d.readers.includes(who)) return 'reader'
     return undefined
   }
-  const deptName = (id: Ref<Department> | undefined): string => depts.find((it) => it._id === id)?.name ?? '未指定部门'
-  const workers = (department: Ref<Department> | undefined): Employee[] =>
+  $: deptName = (id: Ref<Department> | undefined): string => depts.find((it) => it._id === id)?.name ?? '未指定部门'
+  $: workers = (department: Ref<Department> | undefined): Employee[] =>
     owner && department === undefined
       ? staff
       : staff.filter((it) => {
@@ -114,7 +115,9 @@
     busy = true
     error = ''
     try {
-      const id = await client.createDoc(departments.class.Order, core.space.Workspace, {
+      const id = generateId<Order>()
+      const ops = client.apply(undefined, 'order-create')
+      await ops.createDoc(departments.class.Order, core.space.Workspace, {
         number: '',
         title: title.trim(),
         customer: customer.trim(),
@@ -123,7 +126,8 @@
         stages: [],
         current: 0,
         state: 'active'
-      })
+      }, id)
+      if (!(await ops.commit()).result) throw new Error('refused')
       title = ''
       customer = ''
       note = ''
@@ -141,13 +145,16 @@
     error = ''
     notice = ''
     try {
-      await client.createDoc(departments.class.OrderAction, core.space.Workspace, {
+      const ops = client.apply(undefined, 'order-action')
+      await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
         order: selected._id,
         kind,
         stage: extra.stage ?? stage.id,
         actor: me.uuid,
         ...extra
       })
+      // The server checks who may do this; a refusal must show as an error, not as success.
+      if (!(await ops.commit()).result) throw new Error('refused')
       if (kind !== 'step') notice = `已${kindText[kind]}。`
       reason = ''
       returnTarget = ''
@@ -186,7 +193,7 @@
     const open = await getResource(chunter.function.OpenChannelInSidebar)
     await open(dmId, chunter.class.DirectMessage)
   }
-  const whatsapp = (id: AccountUuid | undefined): string | undefined => {
+  $: whatsapp = (id: AccountUuid | undefined): string | undefined => {
     const p = person(id)
     const value = p === undefined ? undefined : phones.get(p._id)
     const digits = value?.replace(/\D/g, '') ?? ''
