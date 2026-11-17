@@ -1,0 +1,26 @@
+{
+  "name": "@hcengineering/model-departments",
+  "version": "0.7.0",
+  "main": "lib/index.js",
+  "types": "types/index.d.ts",
+  "author": "Copyright © 2026 Auraplex",
+  "license": "EPL-2.0",
+  "scripts": {
+    "build": "compile",
+    "_phase:build": "compile transpile src",
+    "_phase:validate": "compile validate"
+  },
+  "devDependencies": {
+    "@hcengineering/platform-rig": "workspace:^0.7.21",
+    "@types/jest": "^29.5.5",
+    "@types/node": "^22.18.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@hcengineering/core": "workspace:^0.7.26",
+    "@hcengineering/departments": "workspace:^0.7.0",
+    "@hcengineering/model": "workspace:^0.7.17",
+    "@hcengineering/model-core": "workspace:^0.7.0",
+    "@hcengineering/model-hr": "workspace:^0.7.0"
+  }
+}
