@@ -37,8 +37,8 @@ export async function createContent (
 
   const result: Record<string, Ref<Blob>> = {}
   for (const [field, markup] of Object.entries(content)) {
-    // Draft content must never overwrite the deterministic blob of an existing
-    // document if that document is created concurrently after authorization.
+    // Keep pre-creation drafts separate from document-derived blob IDs, even
+    // if the target document is created concurrently after authorization.
     const blob = generateId<Blob>()
     const buffer = Buffer.from(markup)
     await storageAdapter.put(ctx, context.wsIds, blob, buffer, 'application/json', buffer.length)
