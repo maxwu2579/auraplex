@@ -225,8 +225,11 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const attributes = mixinTx.attributes as Record<string, unknown>
     // Space links are written only by the sync trigger.
     if (spaceFields.some((field) => field in attributes)) forbidden()
-    const doc = await this.findOne(ctx, departmentClass, tx.objectId)
-    if (doc === undefined) forbidden()
+    // The page creates the department and its access in one step, so it may not be stored yet;
+    // a department that does not exist has no members, which only super admins may change.
+    const doc =
+      (await this.findOne(ctx, departmentClass, tx.objectId)) ??
+      ({ _id: tx.objectId, _class: departmentClass, space: tx.objectSpace } as unknown as Doc)
     const next = readDepartment(TxProcessor.updateMixin4Doc(clone(doc) as Doc, mixinTx))
     if (next === undefined) forbidden()
     const empty = { admin: [], supervisor: [], employee: [], reader: [] }
