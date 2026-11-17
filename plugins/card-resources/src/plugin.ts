@@ -106,6 +106,7 @@ export default mergeIds(cardId, card, {
     CardRelationshipTable: '' as Ref<Viewlet>
   },
   string: {
+    OnlyOwnerCanEditRoles: '' as IntlString,
     CreateMasterTag: '' as IntlString,
     CreateTag: '' as IntlString,
     Content: '' as IntlString,

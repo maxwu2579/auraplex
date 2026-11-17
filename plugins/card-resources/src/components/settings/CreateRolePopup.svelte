@@ -16,7 +16,7 @@
   import { MasterTag, Tag } from '@hcengineering/card'
   import core, { AccountRole, getCurrentAccount } from '@hcengineering/core'
   import { Card, getClient } from '@hcengineering/presentation'
-  import { EditBox } from '@hcengineering/ui'
+  import { EditBox, Label } from '@hcengineering/ui'
   import { createEventDispatcher } from 'svelte'
   import card from '../../plugin'
 
@@ -47,6 +47,6 @@
 </script>
 
 <Card okAction={handleSave} label={core.string.Role} on:close width={'menu'} canSave={canEditRoles && value.trim().length > 0}>
-  {#if !canEditRoles}<div>只有工作区所有者可以修改角色。</div>{/if}
+  {#if !canEditRoles}<div><Label label={card.string.OnlyOwnerCanEditRoles} /></div>{/if}
   <EditBox bind:value placeholder={core.string.Role} />
 </Card>

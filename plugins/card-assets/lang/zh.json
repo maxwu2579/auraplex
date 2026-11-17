@@ -1,5 +1,6 @@
 {
   "string": {
+    "OnlyOwnerCanEditRoles": "只有工作区所有者可以修改角色。",
     "Card": "卡片",
     "CardApplication": "卡片",
     "Cards": "卡片",

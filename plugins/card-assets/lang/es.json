@@ -1,5 +1,6 @@
 {
   "string": {
+    "OnlyOwnerCanEditRoles": "Only workspace owners can edit roles.",
     "Card": "Tarjeta",
     "CardApplication": "Tarjetas",
     "Cards": "Tarjetas",
