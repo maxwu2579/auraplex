@@ -18,6 +18,14 @@ test('inspects transactions inside a conditional batch', () => {
   expect(modifiesSpaceTypes(batch, same)).toBe(true)
 })
 
+test('ordinary project, task, document space and drive changes are not space type changes', () => {
+  for (const cls of ['tracker:class:Project', 'tracker:class:Issue', 'document:class:Teamspace', 'drive:class:Drive']) {
+    for (const kind of [core.class.TxCreateDoc, core.class.TxUpdateDoc, core.class.TxMixin]) {
+      expect(modifiesSpaceTypes(tx(kind, cls), same)).toBe(false)
+    }
+  }
+})
+
 test('server denies ordinary members and allows owner and system', async () => {
   const middleware = await SpaceTypeGuardMiddleware.create(
     {} as any,

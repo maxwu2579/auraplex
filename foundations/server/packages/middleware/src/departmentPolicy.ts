@@ -22,7 +22,7 @@ export function permissionForAction (
 ): DepartmentPermission | undefined {
   // Comment messages, reactions and attachments to verified comments use
   // comment on creation. Tasks, other activity and attachments use create.
-  if (action === 'remove') return 'delete'
+  if (action === 'remove') return (object === 'comment' || object === 'reaction') && ownsComment ? 'comment' : 'delete'
   if (action === 'create') return object === 'ordinary' ? 'create' : 'comment'
   if (action === 'update' || action === 'mixin') return object === 'comment' && ownsComment ? 'comment' : 'update'
   return undefined
@@ -62,20 +62,17 @@ export function canChangeDepartment (
   oldPolicy: DepartmentPolicy,
   nextPolicy: DepartmentPolicy
 ): boolean {
-  if (privileged) return true
-  const allowed = effectivePermissions(before, oldPolicy, actor)
-  const isAdmin = before.admin.includes(actor)
-  const isSupervisor = before.supervisor.includes(actor)
-  if (!isAdmin && !isSupervisor) return false
-  if (before.admin.length > 0 && after.admin.length === 0) return false
+  if (!privileged && before.admin.length > 0 && after.admin.length === 0) return false
   for (const role of departmentRoles) {
     if (new Set(after[role]).size !== after[role].length) return false
     if (nextPolicy[role].some((permission) => !departmentPermissions.includes(permission))) return false
   }
   // Administrators inherit all supervisor permissions; keep that within their ceiling.
   if (!subset(nextPolicy.supervisor, new Set(nextPolicy.admin))) return false
+  if (privileged) return true
+  const allowed = effectivePermissions(before, oldPolicy, actor)
   const same = (a: string[], b: string[]): boolean => a.length === b.length && a.every((item) => b.includes(item))
-  if (isAdmin && allowed.has('manageMembers')) {
+  if (allowed.has('manageMembers')) {
     if (!same(oldPolicy.admin, nextPolicy.admin)) return false
     if (!same(before.admin, after.admin)) return false
     for (const role of departmentRoles) {
@@ -84,7 +81,7 @@ export function canChangeDepartment (
     }
     return true
   }
-  if (!isSupervisor || !allowed.has('invite')) return false
+  if (!allowed.has('invite')) return false
   if (departmentRoles.some((role) => !same(oldPolicy[role], nextPolicy[role]))) return false
   if (departmentRoles.filter((role) => role !== 'reader').some((role) => !same(before[role], after[role]))) return false
   if (!before.reader.every((id) => after.reader.includes(id))) return false

@@ -16,7 +16,11 @@ test('maps object actions conservatively', () => {
   expect(permissionForAction('update', 'comment', true)).toBe('comment')
   expect(permissionForAction('update', 'comment', false)).toBe('update')
   expect(permissionForAction('mixin', 'ordinary')).toBe('update')
-  expect(permissionForAction('remove', 'comment', true)).toBe('delete')
+  expect(permissionForAction('remove', 'comment', true)).toBe('comment')
+  expect(permissionForAction('remove', 'reaction', true)).toBe('comment')
+  expect(permissionForAction('remove', 'comment', false)).toBe('delete')
+  expect(permissionForAction('remove', 'reaction', false)).toBe('delete')
+  expect(permissionForAction('remove', 'ordinary', true)).toBe('delete')
   expect(permissionForAction('unknown', 'ordinary')).toBeUndefined()
 })
 
@@ -66,4 +70,43 @@ test('only owner or system can change administrators', () => {
   expect(canChangeDepartment('admin', false, members, after, policy, policy)).toBe(false)
   expect(canChangeDepartment('owner', true, members, after, policy, policy)).toBe(true)
   expect(canChangeDepartment('system', true, members, after, policy, policy)).toBe(true)
+})
+
+test('invitation follows permissions even for administrators without manageMembers', () => {
+  const { members, policy } = sample()
+  policy.admin = policy.admin.filter((permission) => permission !== 'manageMembers')
+  const after = structuredClone(members)
+  after.reader.push('visitor')
+  expect(canChangeDepartment('admin', false, members, after, policy, policy)).toBe(true)
+  after.employee.push('visitor')
+  expect(canChangeDepartment('admin', false, members, after, policy, policy)).toBe(false)
+  after.employee.pop()
+  after.admin.push('visitor')
+  expect(canChangeDepartment('admin', false, members, after, policy, policy)).toBe(false)
+})
+
+test('owner and system must still supply valid data', () => {
+  const { members, policy } = sample()
+  const duplicate = structuredClone(members)
+  duplicate.reader = ['visitor', 'visitor']
+  const unknown = structuredClone(policy)
+  unknown.reader.push('bogus' as any)
+  const excessive = structuredClone(policy)
+  excessive.admin = excessive.admin.filter((permission) => permission !== 'create')
+  for (const actor of ['owner', 'system']) {
+    expect(canChangeDepartment(actor, true, members, duplicate, policy, policy)).toBe(false)
+    expect(canChangeDepartment(actor, true, members, members, policy, unknown)).toBe(false)
+    expect(canChangeDepartment(actor, true, members, members, policy, excessive)).toBe(false)
+  }
+})
+
+test('manageMembers is sufficient regardless of assigned role and respects the actor ceiling', () => {
+  const { members, policy } = sample()
+  policy.supervisor.push('manageMembers')
+  const after = structuredClone(members)
+  after.employee.push('visitor')
+  expect(canChangeDepartment('supervisor', false, members, after, policy, policy)).toBe(true)
+  const elevated = structuredClone(policy)
+  elevated.employee.push('delete')
+  expect(canChangeDepartment('supervisor', false, members, after, policy, elevated)).toBe(false)
 })
