@@ -19706,6 +19706,9 @@ importers:
 
   ../../plugins/departments-resources:
     dependencies:
+      '@hcengineering/chunter':
+        specifier: workspace:^0.7.0
+        version: link:../chunter
       '@hcengineering/contact':
         specifier: workspace:^0.7.0
         version: link:../contact
@@ -35538,6 +35541,12 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments
+      '@hcengineering/hr':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/hr
       '@hcengineering/materials':
         specifier: workspace:^0.7.0
         version: link:../../plugins/materials
@@ -63885,7 +63894,7 @@ snapshots:
   node-loader@2.0.0(webpack@5.102.1):
     dependencies:
       loader-utils: 2.0.4
-      webpack: 5.102.1
+      webpack: 5.102.1(esbuild@0.25.12)(webpack-cli@5.1.4)
 
   node-localstorage@2.2.1:
     dependencies:

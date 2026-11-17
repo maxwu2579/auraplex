@@ -17,6 +17,8 @@
 import activity, { ActivityMessage, DocUpdateMessage } from '@hcengineering/activity'
 import { getClient as getAccountClient } from '@hcengineering/account-client'
 import materials, { shouldAlertLowStock, type StockMovement } from '@hcengineering/materials'
+import departments, { defaultOrderStages, type Order, type OrderAction, type OrderStage } from '@hcengineering/departments'
+import hr from '@hcengineering/hr'
 import { generateToken } from '@hcengineering/server-token'
 import { Analytics } from '@hcengineering/analytics'
 import chunter, { ChatMessage } from '@hcengineering/chunter'
@@ -1737,6 +1739,181 @@ export async function OnMaterialStockMovement (txes: Tx[], control: TriggerContr
   return results
 }
 
+// Auraplex orders: fill in a new order from the flow, apply each checked OrderAction and notify people.
+// The server (DepartmentGuardMiddleware) already checked who may do what before these run.
+
+async function departmentLeads (control: TriggerControl, department: Ref<Doc> | undefined): Promise<AccountUuid[]> {
+  if (department === undefined) return []
+  const doc = (await control.findAll(control.ctx, hr.class.Department, { _id: department as Ref<any> }, { limit: 1 }))[0]
+  if (doc === undefined || !control.hierarchy.hasMixin(doc, departments.mixin.DepartmentAccess)) return []
+  const access = control.hierarchy.as(doc, departments.mixin.DepartmentAccess)
+  return [...access.administrators, ...access.supervisors]
+}
+
+async function notifyOrder (
+  control: TriggerControl,
+  results: Tx[],
+  tx: TxCUD<Doc>,
+  order: Order,
+  accounts: AccountUuid[],
+  header: CommonInboxNotification['header'],
+  text: string
+): Promise<void> {
+  const targets = [...new Set(accounts)]
+  if (targets.length === 0) return
+  const receivers = await getReceiversInfo(control.ctx, targets, control)
+  const contexts = await control.findAll(control.ctx, notification.class.DocNotifyContext, { objectId: order._id })
+  const messageHtml = JSON.stringify({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+  }) as any
+  const content: Partial<Data<CommonInboxNotification>> = { header, messageHtml }
+  for (const receiver of receivers) {
+    const existing = contexts.find((context) => context.user === receiver.account)
+    if (existing !== undefined) {
+      results.push(
+        control.txFactory.createTxUpdateDoc(existing._class, existing.space, existing._id, {
+          hidden: false,
+          lastUpdateTimestamp: Math.max(existing.lastUpdateTimestamp ?? 0, tx.modifiedOn)
+        })
+      )
+    }
+    await pushInboxNotifications(
+      control.ctx,
+      control,
+      results,
+      receiver,
+      { socialId: tx.modifiedBy },
+      order._id,
+      order._class,
+      order.space,
+      contexts,
+      content,
+      notification.class.CommonInboxNotification,
+      tx.modifiedOn,
+      [],
+      true,
+      tx
+    )
+  }
+}
+
+async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Promise<Tx[]> {
+  const flow = (
+    await control.findAll(control.ctx, departments.class.OrderFlow, { _id: departments.ids.OrderFlow }, { limit: 1 })
+  )[0]
+  const template = flow?.stages !== undefined && flow.stages.length > 0 ? flow.stages : defaultOrderStages
+  const now = tx.modifiedOn
+  const stages: OrderStage[] = template.map((stage, i) => ({
+    id: stage.id,
+    name: stage.name,
+    department: stage.department,
+    status: i === 0 ? 'active' : 'waiting',
+    // The salesperson who takes the order runs the first stage.
+    assignee: i === 0 ? tx.attributes.salesOwner : undefined,
+    steps: stage.steps.map((name) => ({ name, done: false })),
+    startedOn: i === 0 ? now : undefined
+  }))
+  const orders = await control.findAll(control.ctx, departments.class.Order, {}, { projection: { number: 1 } })
+  const highest = orders.reduce((max, it) => Math.max(max, Number(/(\d+)$/.exec(it.number ?? '')?.[1] ?? 0)), 0)
+  const number = `ORD-${String(highest + 1).padStart(4, '0')}`
+  return [
+    control.txFactory.createTxUpdateDoc(departments.class.Order, tx.objectSpace, tx.objectId, {
+      stages,
+      number,
+      current: 0,
+      state: 'active'
+    })
+  ]
+}
+
+async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderAction>): Promise<Tx[]> {
+  const action = tx.attributes
+  const order = (await control.findAll(control.ctx, departments.class.Order, { _id: action.order }, { limit: 1 }))[0]
+  if (order === undefined) return []
+  const results: Tx[] = []
+  const stages = order.stages.map((it) => ({ ...it, steps: it.steps.map((step) => ({ ...step })) }))
+  const index = stages.findIndex((it) => it.id === action.stage)
+  const stage = stages[index]
+  if (stage === undefined) return []
+  const now = tx.modifiedOn
+  const title = `${order.number} ${order.title}`
+  const reason = action.reason !== undefined && action.reason.trim() !== '' ? `\n原因：${action.reason}` : ''
+  let current = order.current
+  let state = order.state
+  switch (action.kind) {
+    case 'assign':
+      stage.assignee = action.assignee
+      if (action.assignee !== undefined) {
+        await notifyOrder(control, results, tx, order, [action.assignee], departments.string.OrderAssigned, `${title}\n${stage.name}：由你负责`)
+      }
+      break
+    case 'step': {
+      const step = stage.steps[action.step ?? -1]
+      if (step !== undefined) step.done = !step.done
+      break
+    }
+    case 'complete': {
+      stage.status = 'done'
+      stage.doneOn = now
+      const next = stages[index + 1]
+      if (next !== undefined) {
+        next.status = 'active'
+        next.startedOn = now
+        current = index + 1
+        const leads = await departmentLeads(control, next.department)
+        const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
+        await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver, `${title}\n${stage.name} 已完成，轮到：${next.name}，请分配负责人`)
+      } else {
+        current = stages.length
+        state = 'done'
+        await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderFinished, `${title}\n全部完成`)
+      }
+      break
+    }
+    case 'escalate': {
+      const leads = await departmentLeads(control, stage.department)
+      await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated, `${title}\n${stage.name} 上报主管${reason}`)
+      break
+    }
+    case 'return': {
+      const target = stages.findIndex((it) => it.id === action.target)
+      if (target < 0 || target >= index) return []
+      for (let k = target + 1; k <= index; k++) {
+        stages[k].status = 'waiting'
+        stages[k].doneOn = undefined
+      }
+      const back = stages[target]
+      back.status = 'active'
+      back.startedOn = now
+      back.doneOn = undefined
+      if (action.assignee !== undefined) back.assignee = action.assignee
+      current = target
+      const people = [order.salesOwner, ...(back.assignee !== undefined ? [back.assignee] : [])]
+      await notifyOrder(control, results, tx, order, people, departments.string.OrderReturned, `${title}\n${stage.name} 退回到 ${back.name}${reason}`)
+      break
+    }
+  }
+  results.unshift(
+    control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, current, state })
+  )
+  return results
+}
+
+export async function OnOrder (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const results: Tx[] = []
+  for (const tx of txes) {
+    if (tx._class !== core.class.TxCreateDoc) continue
+    const create = tx as TxCreateDoc<Doc>
+    if (create.objectClass === departments.class.Order) {
+      results.push(...(await setupOrder(control, create as TxCreateDoc<Order>)))
+    } else if (create.objectClass === departments.class.OrderAction) {
+      results.push(...(await applyOrderAction(control, create as TxCreateDoc<OrderAction>)))
+    }
+  }
+  return results
+}
+
 export * from './push'
 export * from './types'
 export * from './utils'
@@ -1749,6 +1926,7 @@ export default async () => ({
     OnDocRemove,
     OnEmployeeDeactivate,
     OnMaterialStockMovement,
+    OnOrder,
     PushNotificationsHandler
   },
   function: {

@@ -67,6 +67,16 @@ export function createModel (builder: Builder): void {
     txMatch: { _class: core.class.TxCreateDoc, objectClass: materials.class.StockMovement }
   })
 
+  // Auraplex orders: fill new orders from the flow and apply checked order actions (ids spelled out
+  // for the same build-order reason as above).
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverNotification.trigger.OnOrder,
+    txMatch: {
+      _class: core.class.TxCreateDoc,
+      objectClass: { $in: ['departments:class:Order', 'departments:class:OrderAction'] as any }
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAttributeCreate,
     txMatch: {

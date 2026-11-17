@@ -1,0 +1,76 @@
+// Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import { type DepartmentRole } from './departmentPolicy'
+import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type OrderLike, type RoleOf } from './orderPolicy'
+
+// sales: Wang (employee); production: Ming (admin), Qiang (supervisor), Li (employee), Wang reader
+const roles: Record<string, Record<string, DepartmentRole>> = {
+  sales: { wang: 'employee' },
+  production: { ming: 'admin', qiang: 'supervisor', li: 'employee', zhao: 'reader' }
+}
+const roleOf: RoleOf = (department, person) => (department === undefined ? undefined : roles[department]?.[person])
+
+const order = (): OrderLike => ({
+  salesOwner: 'wang',
+  current: 1,
+  state: 'active',
+  stages: [
+    { id: 's', department: 'sales', status: 'done', steps: [] },
+    { id: 'p', department: 'production', status: 'active', assignee: 'li', steps: [{ name: '切割', done: false }] },
+    { id: 'e', department: 'engineering', status: 'waiting', steps: [] }
+  ]
+})
+
+test('the person in charge finishes their stage; others in the department cannot', () => {
+  expect(canOrderAction(order(), { kind: 'complete', stage: 'p' }, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'complete', stage: 'p' }, 'qiang', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'complete', stage: 'p' }, 'zhao', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'complete', stage: 'p' }, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'complete', stage: 'e' }, 'li', false, roleOf)).toBe(false)
+})
+
+test('supervisors assign people of their own department only', () => {
+  expect(canOrderAction(order(), { kind: 'assign', stage: 'p', assignee: 'li' }, 'qiang', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'assign', stage: 'p', assignee: 'zhao' }, 'qiang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'assign', stage: 'p', assignee: 'wang' }, 'qiang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'assign', stage: 'p', assignee: 'li' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'assign', stage: 's', assignee: 'wang' }, 'qiang', false, roleOf)).toBe(false)
+})
+
+test('staff escalate with a reason; only supervisors return, to an earlier stage', () => {
+  expect(canOrderAction(order(), { kind: 'escalate', stage: 'p', reason: '图纸有问题' }, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'escalate', stage: 'p', reason: ' ' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'return', stage: 'p', target: 's', reason: '价格' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'return', stage: 'p', target: 's', reason: '价格' }, 'qiang', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'return', stage: 'p', target: 'e', reason: '价格' }, 'qiang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'return', stage: 'p', target: 's' }, 'qiang', false, roleOf)).toBe(false)
+})
+
+test('steps are ticked by the person in charge; finished orders are frozen; super admins can do all', () => {
+  expect(canOrderAction(order(), { kind: 'step', stage: 'p', step: 0 }, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(order(), { kind: 'step', stage: 'p', step: 3 }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction({ ...order(), state: 'done' }, { kind: 'complete', stage: 'p' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'return', stage: 'p', target: 's', reason: 'x' }, 'boss', true, roleOf)).toBe(true)
+})
+
+test('orders are created by working members for themselves, without stages', () => {
+  expect(canCreateOrder({ salesOwner: 'wang', title: 'A' }, 'wang', false, true)).toBe(true)
+  expect(canCreateOrder({ salesOwner: 'li', title: 'A' }, 'wang', false, true)).toBe(false)
+  expect(canCreateOrder({ salesOwner: 'wang' }, 'wang', false, false)).toBe(false)
+  expect(canCreateOrder({ salesOwner: 'wang', stages: [{ id: 'x' }] }, 'wang', false, true)).toBe(false)
+  expect(canEditOrder({ title: 'B' }, 'wang', false, order())).toBe(true)
+  expect(canEditOrder({ stages: [] }, 'wang', false, order())).toBe(false)
+  expect(canEditOrder({ title: 'B' }, 'li', false, order())).toBe(false)
+})
+
+test('department admins only change the sub-steps of their own stage', () => {
+  const before = [
+    { id: 's', name: '销售', department: 'sales', steps: [] },
+    { id: 'p', name: '生产', department: 'production', steps: ['进货'] }
+  ]
+  const steps = [before[0], { ...before[1], steps: ['进货', '切割'] }]
+  expect(canChangeFlow(before, steps, 'ming', false, roleOf)).toBe(true)
+  expect(canChangeFlow(before, steps, 'qiang', false, roleOf)).toBe(false)
+  expect(canChangeFlow(before, [before[1], before[0]], 'ming', false, roleOf)).toBe(false)
+  expect(canChangeFlow(before, [before[1], before[0]], 'boss', true, roleOf)).toBe(true)
+  expect(canChangeFlow(before, [before[0], before[0]], 'boss', true, roleOf)).toBe(false)
+})

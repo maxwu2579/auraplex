@@ -5,14 +5,20 @@
   "author": "Copyright © 2026 Auraplex",
   "license": "EPL-2.0",
   "scripts": {
-    "build": "compile ui", "svelte-check": "do-svelte-check",
-    "_phase:build": "compile ui", "_phase:validate": "compile validate"
+    "build": "compile ui",
+    "svelte-check": "do-svelte-check",
+    "_phase:build": "compile ui",
+    "_phase:validate": "compile validate"
   },
   "devDependencies": {
     "@hcengineering/platform-rig": "workspace:^0.7.21",
-    "@types/jest": "^29.5.5", "@types/node": "^22.18.1",
-    "typescript": "^5.9.3", "svelte-check": "^3.6.9",
-    "svelte-loader": "^3.2.0", "svelte-preprocess": "^5.1.4", "sass": "^1.80.0"
+    "@types/jest": "^29.5.5",
+    "@types/node": "^22.18.1",
+    "typescript": "^5.9.3",
+    "svelte-check": "^3.6.9",
+    "svelte-loader": "^3.2.0",
+    "svelte-preprocess": "^5.1.4",
+    "sass": "^1.80.0"
   },
   "dependencies": {
     "@hcengineering/core": "workspace:^0.7.26",
@@ -22,6 +28,7 @@
     "@hcengineering/platform": "workspace:^0.7.20",
     "@hcengineering/presentation": "workspace:^0.7.0",
     "@hcengineering/ui": "workspace:^0.7.0",
-    "svelte": "^4.2.20"
+    "svelte": "^4.2.20",
+    "@hcengineering/chunter": "workspace:^0.7.0"
   }
 }

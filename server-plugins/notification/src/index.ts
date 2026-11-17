@@ -123,6 +123,7 @@ export default plugin(serverNotificationId, {
     OnDocRemove: '' as Resource<TriggerFunc>,
     OnEmployeeDeactivate: '' as Resource<TriggerFunc>,
     OnMaterialStockMovement: '' as Resource<TriggerFunc>,
+    OnOrder: '' as Resource<TriggerFunc>,
     PushNotificationsHandler: '' as Resource<TriggerFunc>
   },
   function: {

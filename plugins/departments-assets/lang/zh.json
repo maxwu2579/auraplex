@@ -30,6 +30,23 @@
     "Saved": "保存成功。",
     "SaveError": "保存失败，请刷新页面后重试。",
     "Processing": "正在保存…",
-    "InviteHelp": "邀请的成员默认只能查看和评论。"
+    "InviteHelp": "邀请的成员默认只能查看和评论。",
+    "Orders": "订单",
+    "OrderFlow": "订单流程",
+    "Order": "订单",
+    "OrderNumber": "订单编号",
+    "OrderTitle": "订单名称",
+    "Customer": "客户",
+    "Note": "备注",
+    "SalesOwner": "接单销售",
+    "Stages": "阶段",
+    "CurrentStage": "当前阶段",
+    "OrderState": "状态",
+    "OrderActionLabel": "操作",
+    "OrderHandedOver": "订单轮到你的部门",
+    "OrderEscalated": "订单上报主管",
+    "OrderReturned": "订单被退回",
+    "OrderAssigned": "你被指定为订单负责人",
+    "OrderFinished": "订单已全部完成"
   }
 }

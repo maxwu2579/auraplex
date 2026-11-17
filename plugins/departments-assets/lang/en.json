@@ -30,6 +30,23 @@
     "Saved": "Saved.",
     "SaveError": "Could not save. Refresh the page and try again.",
     "Processing": "Saving…",
-    "InviteHelp": "Invitations are added as read-only members."
+    "InviteHelp": "Invitations are added as read-only members.",
+    "Orders": "Orders",
+    "OrderFlow": "Order flow",
+    "Order": "Order",
+    "OrderNumber": "Order number",
+    "OrderTitle": "Order",
+    "Customer": "Customer",
+    "Note": "Note",
+    "SalesOwner": "Salesperson",
+    "Stages": "Stages",
+    "CurrentStage": "Current stage",
+    "OrderState": "State",
+    "OrderActionLabel": "Action",
+    "OrderHandedOver": "An order reached your department",
+    "OrderEscalated": "Order escalated",
+    "OrderReturned": "Order returned",
+    "OrderAssigned": "You are in charge of an order stage",
+    "OrderFinished": "Order finished"
   }
 }

@@ -31,11 +31,15 @@ import {
   type DepartmentPermission,
   type DepartmentPolicy
 } from './departmentPolicy'
+import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type OrderLike, type RoleOf } from './orderPolicy'
 import { isOwner, isSystem } from './utils'
 
 // This package sits below the plugins, so their ids are spelled out here.
 export const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
 export const departmentAccessMixin = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
+export const orderClass = 'departments:class:Order' as Ref<Class<Doc>>
+export const orderActionClass = 'departments:class:OrderAction' as Ref<Class<Doc>>
+export const orderFlowClass = 'departments:class:OrderFlow' as Ref<Class<Doc>>
 const spaceFields = ['projectSpace', 'documentSpace', 'driveSpace'] as const
 const memberFields = { admin: 'administrators', supervisor: 'supervisors', employee: 'employees', reader: 'readers' }
 const policyFields = {
@@ -137,6 +141,10 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
     const cud = tx as TxCUD<Doc>
+    if (cud.objectClass === orderClass || cud.objectClass === orderActionClass || cud.objectClass === orderFlowClass) {
+      await this.checkOrders(ctx, cud)
+      return
+    }
     if (cud.objectClass === departmentClass) {
       await this.checkDepartment(ctx, cud)
       return
@@ -210,6 +218,58 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         hierarchy.hasClass(ancestor as Ref<Class<Doc>>) &&
         hierarchy.isDerived(child as Ref<Class<Doc>>, ancestor as Ref<Class<Doc>>)
     })
+  }
+
+  private readonly roleOf: RoleOf = (department, person) => {
+    const record = this.departments.find((it) => it._id === department)
+    if (record === undefined || record.archived) return undefined
+    return departmentRoles.find((role) => record.members[role].includes(person))
+  }
+
+  /** Orders move only through checked OrderAction records; the system applies them. */
+  private async checkOrders (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    const owner = isOwner(ctx.contextData.account, ctx)
+    const actor = ctx.contextData.account.uuid
+    const create = tx._class === core.class.TxCreateDoc
+    const attributes = create ? ((tx as TxCreateDoc<Doc>).attributes as unknown as Record<string, unknown>) : {}
+    if (tx.objectClass === orderActionClass) {
+      // The history is never edited, not even by super admins.
+      if (!create || attributes.actor !== actor) forbidden()
+      const order = await this.findOne(ctx, orderClass, attributes.order as Ref<Doc>)
+      if (order === undefined) forbidden()
+      const ok = canOrderAction(order as unknown as OrderLike, attributes as any, actor, owner, this.roleOf)
+      if (!ok) forbidden()
+      return
+    }
+    if (tx.objectClass === orderClass) {
+      if (create) {
+        const works = this.departments.some(
+          (d) => !d.archived && departmentRoles.some((r) => r !== 'reader' && d.members[r].includes(actor))
+        )
+        if (!canCreateOrder(attributes, actor, owner, works)) forbidden()
+        return
+      }
+      if (tx._class !== core.class.TxUpdateDoc) {
+        if (!owner) forbidden()
+        return
+      }
+      const order = await this.findOne(ctx, orderClass, tx.objectId)
+      if (order === undefined) forbidden()
+      const ops = (tx as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+      if (!canEditOrder(ops, actor, owner, order as unknown as OrderLike)) forbidden()
+      return
+    }
+    // Order flow template
+    if (create) {
+      if (!owner) forbidden()
+      return
+    }
+    if (tx._class !== core.class.TxUpdateDoc) forbidden()
+    const ops = (tx as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+    if (Object.keys(ops).some((key) => key !== 'stages') || !Array.isArray(ops.stages)) forbidden()
+    const flow = await this.findOne(ctx, orderFlowClass, tx.objectId)
+    const before = ((flow as unknown as { stages?: unknown[] } | undefined)?.stages ?? []) as any[]
+    if (!canChangeFlow(before, ops.stages, actor, owner, this.roleOf)) forbidden()
   }
 
   private async checkDepartment (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
