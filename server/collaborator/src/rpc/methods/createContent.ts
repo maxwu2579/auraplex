@@ -15,11 +15,9 @@
 
 import {
   type CreateContentRequest,
-  type CreateContentResponse,
-  decodeDocumentId
+  type CreateContentResponse
 } from '@hcengineering/collaborator-client'
-import { saveCollabJson } from '@hcengineering/collaboration'
-import { type Blob, type Ref, MeasureContext } from '@hcengineering/core'
+import { type Blob, type Ref, MeasureContext, generateId } from '@hcengineering/core'
 import { Context } from '../../context'
 import { RpcMethodParams } from '../rpc'
 
@@ -37,11 +35,13 @@ export async function createContent (
     throw new Error(`Document ${documentName} already exists`)
   }
 
-  const { documentId } = decodeDocumentId(documentName)
-
   const result: Record<string, Ref<Blob>> = {}
   for (const [field, markup] of Object.entries(content)) {
-    const blob = await saveCollabJson(ctx, storageAdapter, context.wsIds, documentId, markup)
+    // Draft content must never overwrite the deterministic blob of an existing
+    // document if that document is created concurrently after authorization.
+    const blob = generateId<Blob>()
+    const buffer = Buffer.from(markup)
+    await storageAdapter.put(ctx, context.wsIds, blob, buffer, 'application/json', buffer.length)
     result[field] = blob
   }
 

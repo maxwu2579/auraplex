@@ -16,11 +16,13 @@
 import { decodeDocumentId } from '@hcengineering/collaborator-client'
 import { MeasureContext } from '@hcengineering/core'
 import { decodeToken } from '@hcengineering/server-token'
-import { Extension, onAuthenticatePayload } from '@hocuspocus/server'
+import { Extension, onAuthenticatePayload, beforeHandleMessagePayload, connectedPayload, onDisconnectPayload } from '@hocuspocus/server'
 import { isReadOnlyOrGuest } from '@hcengineering/account'
 
 import { Context, buildContext } from '../context'
 import { getWorkspaceIds } from '../utils'
+import { checkCollaborationAccess } from '../departmentAccess'
+import config from '../config'
 
 export interface AuthenticationConfiguration {
   ctx: MeasureContext
@@ -28,6 +30,7 @@ export interface AuthenticationConfiguration {
 
 export class AuthenticationExtension implements Extension {
   private readonly configuration: AuthenticationConfiguration
+  private readonly checks = new Map<string, ReturnType<typeof setInterval>>()
 
   constructor (configuration: AuthenticationConfiguration) {
     this.configuration = configuration
@@ -63,9 +66,65 @@ export class AuthenticationExtension implements Extension {
           throw new Error('documentName must include workspace id')
         }
 
-        return buildContext(data, ids)
+        const context = buildContext(data, ids)
+        const access = await checkCollaborationAccess(token, data.token, context, data.documentName, config.AccountsUrl)
+        if (!access.read) throw new Error('Document access denied')
+        if (!access.write) data.connection.readOnly = true
+        return context
       },
       { workspaceId }
     )
+  }
+
+  async beforeHandleMessage (data: beforeHandleMessagePayload): Promise<void> {
+    const context = data.context as Context
+    if (context.authToken === undefined) {
+      data.connection.close()
+      throw new Error('Document access denied')
+    }
+    try {
+      const token = decodeToken(context.authToken)
+      const access = await checkCollaborationAccess(token, context.authToken, context, data.documentName, config.AccountsUrl)
+      if (!access.read || access.write === Boolean(data.connection.readOnly)) {
+        data.connection.close()
+        throw new Error('Document access changed')
+      }
+    } catch (error) {
+      data.connection.close()
+      throw error
+    }
+  }
+
+  async connected (data: connectedPayload): Promise<void> {
+    const context = data.context as Context
+    let running = false
+    const interval = setInterval(() => {
+      if (running) return
+      running = true
+      void (async () => {
+        try {
+          if (context.authToken === undefined) throw new Error('Missing token')
+          const token = decodeToken(context.authToken)
+          const access = await checkCollaborationAccess(token, context.authToken, context, data.documentName, config.AccountsUrl)
+          if (!access.read || access.write === Boolean(data.connectionInstance.readOnly)) data.connectionInstance.close()
+        } catch {
+          data.connectionInstance.close()
+        } finally {
+          running = false
+        }
+      })()
+    }, 3000)
+    interval.unref()
+    const key = `${data.socketId}|${data.documentName}`
+    const previous = this.checks.get(key)
+    if (previous !== undefined) clearInterval(previous)
+    this.checks.set(key, interval)
+  }
+
+  async onDisconnect (data: onDisconnectPayload): Promise<void> {
+    const key = `${data.socketId}|${data.documentName}`
+    const interval = this.checks.get(key)
+    if (interval !== undefined) clearInterval(interval)
+    this.checks.delete(key)
   }
 }

@@ -33,6 +33,7 @@ import { RpcErrorResponse, RpcRequest, RpcResponse, methods } from './rpc'
 import { PlatformStorageAdapter } from './storage/platform'
 import { MarkupTransformer } from './transformers/markup'
 import { getWorkspaceIds } from './utils'
+import { canInvokeCollaborationRpc, canReadCollaborationSource, checkCollaborationAccess } from './departmentAccess'
 
 /**
  * @public
@@ -184,6 +185,22 @@ export async function start (ctx: MeasureContext, config: Config, storageAdapter
     }
 
     const context = await getContext(rawToken, token)
+
+    if (['getContent', 'createContent', 'updateContent'].includes(request.method)) {
+      try {
+        const access = await checkCollaborationAccess(token, rawToken, context, documentId, config.AccountsUrl)
+        const isolatedDraft = request.method === 'createContent' && access.allowDraft === true
+        const service = token.extra?.service !== undefined && token.extra.service !== ''
+        const sourceAllowed = request.method !== 'getContent' || service || canReadCollaborationSource((request.payload as any)?.source, access.storedSource)
+        if ((!isolatedDraft && !canInvokeCollaborationRpc(request.method, access)) || !sourceAllowed) {
+          res.status(403).send({ error: 'Forbidden' })
+          return
+        }
+      } catch {
+        res.status(403).send({ error: 'Forbidden' })
+        return
+      }
+    }
 
     rpcCtx.info('rpc', { method: request.method, connectionId: context.connectionId, mode: token.extra?.mode ?? '' })
     await rpcCtx.with(

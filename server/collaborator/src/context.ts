@@ -22,6 +22,7 @@ export interface Context {
   connectionId: string
   wsIds: WorkspaceIds
   clientFactory: ClientFactory
+  authToken?: string
 
   content?: Ref<Blob>
 }
@@ -45,6 +46,7 @@ export function buildContext (data: onAuthenticatePayload, wsIds: WorkspaceIds):
   return {
     connectionId,
     wsIds,
+    authToken: data.token,
     clientFactory: simpleClientFactory(decodedToken),
     content
   }
