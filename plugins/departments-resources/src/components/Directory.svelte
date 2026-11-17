@@ -130,6 +130,7 @@
         {
           name: newName.trim(),
           description: '',
+          parent: hr.ids.Head,
           teamLead: null,
           members: [],
           managers: []
