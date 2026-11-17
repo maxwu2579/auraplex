@@ -44,6 +44,7 @@ import {
   QueueMiddleware,
   RankMiddleware,
   SpacePermissionsMiddleware,
+  SpaceTypeGuardMiddleware,
   SpaceSecurityMiddleware,
   VersioningMiddleware,
   TriggersMiddleware,
@@ -151,6 +152,7 @@ export function createServerPipeline (
       (ctx: MeasureContext, context: PipelineContext, next?: Middleware) =>
         SpaceSecurityMiddleware.create(opt.adapterSecurity ?? false, ctx, context, next),
       SpacePermissionsMiddleware.create,
+      SpaceTypeGuardMiddleware.create,
       GuestPermissionsMiddleware.create,
       ConfigurationMiddleware.create,
       ContextNameMiddleware.create,

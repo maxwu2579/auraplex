@@ -762,7 +762,7 @@ export function createModel (builder: Builder): void {
         tools: setting.component.ManageSpaceTypesTools
       },
       group: 'settings-editor',
-      role: AccountRole.User,
+      role: AccountRole.Owner,
       order: 6000,
       expandable: true
     },
