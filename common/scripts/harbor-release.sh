@@ -12,8 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 # The Harbor address stays out of this public repo: it is read from a local, git-ignored file.
-REGISTRY="${HARBOR_REGISTRY:-$(tr -d '
- ' < common/scripts/harbor-registry.local 2> /dev/null || true)}"
+REGISTRY="${HARBOR_REGISTRY:-$(tr -d '\r\n ' < common/scripts/harbor-registry.local 2> /dev/null || true)}"
 [ -n "$REGISTRY" ] || { echo "Missing common/scripts/harbor-registry.local (one line: <harbor host>:<port>/<project>)"; exit 1; }
 
 # local image             | name in Harbor        | rush package                         | must carry the version
