@@ -23,7 +23,6 @@ import { Context, buildContext } from '../context'
 import { getWorkspaceIds } from '../utils'
 import { checkCollaborationAccess } from '../departmentAccess'
 import config from '../config'
-import { guardOutgoingMessages } from './outgoingGuard'
 
 export interface AuthenticationConfiguration {
   ctx: MeasureContext
@@ -32,7 +31,6 @@ export interface AuthenticationConfiguration {
 export class AuthenticationExtension implements Extension {
   private readonly configuration: AuthenticationConfiguration
   private readonly checks = new Map<string, ReturnType<typeof setInterval>>()
-  private readonly outgoing = new Map<string, () => void>()
 
   constructor (configuration: AuthenticationConfiguration) {
     this.configuration = configuration
@@ -99,15 +97,6 @@ export class AuthenticationExtension implements Extension {
 
   async connected (data: connectedPayload): Promise<void> {
     const context = data.context as Context
-    const key = `${data.socketId}|${data.documentName}`
-    this.outgoing.get(key)?.()
-    const stopOutgoing = guardOutgoingMessages(data.connectionInstance, async () => {
-      if (context.authToken === undefined) return false
-      const token = decodeToken(context.authToken)
-      const access = await checkCollaborationAccess(token, context.authToken, context, data.documentName, config.AccountsUrl)
-      return access.read && access.write !== Boolean(data.connectionInstance.readOnly)
-    })
-    this.outgoing.set(key, stopOutgoing)
     let running = false
     const interval = setInterval(() => {
       if (running) return
@@ -126,6 +115,7 @@ export class AuthenticationExtension implements Extension {
       })()
     }, 3000)
     interval.unref()
+    const key = `${data.socketId}|${data.documentName}`
     const previous = this.checks.get(key)
     if (previous !== undefined) clearInterval(previous)
     this.checks.set(key, interval)
@@ -136,7 +126,5 @@ export class AuthenticationExtension implements Extension {
     const interval = this.checks.get(key)
     if (interval !== undefined) clearInterval(interval)
     this.checks.delete(key)
-    this.outgoing.get(key)?.()
-    this.outgoing.delete(key)
   }
 }
