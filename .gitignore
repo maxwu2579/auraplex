@@ -117,3 +117,6 @@ ws-tests/docker-compose.override.yml
 CLAUDE.md
 .agents/
 skills-lock.json
+
+# Auraplex: local Harbor address for harbor-release.sh
+common/scripts/harbor-registry.local
