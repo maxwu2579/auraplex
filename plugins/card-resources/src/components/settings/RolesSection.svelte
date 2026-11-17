@@ -15,7 +15,7 @@
 <script lang="ts">
   import { MasterTag, Role, Tag } from '@hcengineering/card'
   import contact from '@hcengineering/contact'
-  import core from '@hcengineering/core'
+  import core, { AccountRole, getCurrentAccount } from '@hcengineering/core'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { clearSettingsStore } from '@hcengineering/setting-resources'
   import { ButtonIcon, getCurrentResolvedLocation, Icon, IconAdd, Label, navigate, showPopup } from '@hcengineering/ui'
@@ -25,6 +25,7 @@
   export let masterTag: MasterTag | Tag
 
   const client = getClient()
+  const canEditRoles = getCurrentAccount().role === AccountRole.Owner
 
   const ancestors = client.getHierarchy().getAncestors(masterTag._id)
 
@@ -73,10 +74,13 @@
 <div class="hulyTableAttr-header font-medium-12">
   <Icon icon={contact.icon.User} size="small" />
   <span><Label label={core.string.Roles} /></span>
-  <ButtonIcon kind="primary" icon={IconAdd} size="small" dataId={'btnAdd'} on:click={addRole} />
+  {#if canEditRoles}
+    <ButtonIcon kind="primary" icon={IconAdd} size="small" dataId={'btnAdd'} on:click={addRole} />
+  {/if}
 </div>
 <div class="hulyTableAttr-content task">
   {#each roles as role}
+    {#if canEditRoles}
     <button
       class="hulyTableAttr-content__row justify-start"
       on:click|stopPropagation={() => {
@@ -87,5 +91,8 @@
         {role.name}
       </div>
     </button>
+    {:else}
+      <div class="hulyTableAttr-content__row justify-start">{role.name}</div>
+    {/if}
   {/each}
 </div>

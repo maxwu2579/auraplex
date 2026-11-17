@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import { MasterTag, Tag } from '@hcengineering/card'
-  import core from '@hcengineering/core'
+  import core, { AccountRole, getCurrentAccount } from '@hcengineering/core'
   import { Card, getClient } from '@hcengineering/presentation'
   import { EditBox } from '@hcengineering/ui'
   import { createEventDispatcher } from 'svelte'
@@ -26,8 +26,10 @@
 
   const dispatch = createEventDispatcher()
   const client = getClient()
+  const canEditRoles = getCurrentAccount().role === AccountRole.Owner
 
   async function handleSave (): Promise<void> {
+    if (!canEditRoles) return
     const _id = await client.addCollection(
       card.class.Role,
       core.space.Model,
@@ -44,6 +46,7 @@
   }
 </script>
 
-<Card okAction={handleSave} label={core.string.Role} on:close width={'menu'} canSave={value.trim().length > 0}>
+<Card okAction={handleSave} label={core.string.Role} on:close width={'menu'} canSave={canEditRoles && value.trim().length > 0}>
+  {#if !canEditRoles}<div>只有工作区所有者可以修改角色。</div>{/if}
   <EditBox bind:value placeholder={core.string.Role} />
 </Card>

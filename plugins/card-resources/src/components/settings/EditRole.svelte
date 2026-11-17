@@ -16,11 +16,13 @@
   import contact from '@hcengineering/contact'
   import core, {
     AnyAttribute,
+    AccountRole,
     AttributePermission,
     Class,
     ClassPermission,
     Doc,
     notEmpty,
+    getCurrentAccount,
     Permission,
     Ref
   } from '@hcengineering/core'
@@ -49,6 +51,7 @@
 
   export let _id: Ref<Role>
   export let readonly: boolean = false
+  $: cannotEdit = readonly || getCurrentAccount().role !== AccountRole.Owner
 
   const client = getClient()
   const h = client.getHierarchy()
@@ -86,7 +89,7 @@
     role?.permissions !== undefined ? allPermissions.filter((p) => role?.permissions?.includes(p._id)) : []
 
   function handleEditPermissions (evt: Event): void {
-    if (role === undefined || readonly) {
+    if (role === undefined || cannotEdit) {
       return
     }
 
@@ -123,6 +126,7 @@
   }
 
   async function handleDeleteRole (): Promise<void> {
+    if (cannotEdit) return
     showPopup(
       MessageBox,
       {
@@ -139,7 +143,7 @@
   const masterTag = getCurrentLocation().path[4] as Ref<MasterTag>
 
   async function performDeleteRole (): Promise<void> {
-    if (role === undefined) {
+    if (role === undefined || cannotEdit) {
       return
     }
 
@@ -218,7 +222,7 @@
                 icon={IconDelete}
                 size="large"
                 kind="secondary"
-                disabled={readonly || !role.types.includes(masterTag)}
+                disabled={cannotEdit || !role.types.includes(masterTag)}
                 on:click={handleDeleteRole}
               />
               <ButtonIcon
@@ -226,15 +230,15 @@
                 size="large"
                 iconProps={{ size: 'small' }}
                 kind="secondary"
-                disabled={readonly}
+                disabled={cannotEdit}
               />
-              <div class="name" class:editable={!readonly}>
+              <div class="name" class:editable={!cannotEdit}>
                 <AttributeEditor
                   _class={core.class.Role}
                   object={role}
                   key="name"
                   editKind="modern-ghost-large"
-                  editable={!readonly}
+                  editable={!cannotEdit}
                 />
               </div>
             </div>
@@ -248,7 +252,7 @@
                   icon={IconEdit}
                   size="small"
                   on:click={handleEditPermissions}
-                  disabled={readonly}
+                  disabled={cannotEdit}
                 />
               </div>
 
