@@ -16,7 +16,7 @@
 import { decodeDocumentId } from '@hcengineering/collaborator-client'
 import { MeasureContext } from '@hcengineering/core'
 import { decodeToken } from '@hcengineering/server-token'
-import { Extension, onAuthenticatePayload, beforeHandleMessagePayload, connectedPayload, onDisconnectPayload } from '@hocuspocus/server'
+import { Extension, onAuthenticatePayload, connectedPayload, onDisconnectPayload } from '@hocuspocus/server'
 import { isReadOnlyOrGuest } from '@hcengineering/account'
 
 import { Context, buildContext } from '../context'
@@ -74,25 +74,6 @@ export class AuthenticationExtension implements Extension {
       },
       { workspaceId }
     )
-  }
-
-  async beforeHandleMessage (data: beforeHandleMessagePayload): Promise<void> {
-    const context = data.context as Context
-    if (context.authToken === undefined) {
-      data.connection.close()
-      throw new Error('Document access denied')
-    }
-    try {
-      const token = decodeToken(context.authToken)
-      const access = await checkCollaborationAccess(token, context.authToken, context, data.documentName, config.AccountsUrl)
-      if (!access.read || access.write === Boolean(data.connection.readOnly)) {
-        data.connection.close()
-        throw new Error('Document access changed')
-      }
-    } catch (error) {
-      data.connection.close()
-      throw error
-    }
   }
 
   async connected (data: connectedPayload): Promise<void> {

@@ -35,17 +35,6 @@ test('marks an allowed reader as readonly', async () => {
   await new AuthenticationExtension({ ctx: ctx as any }).onAuthenticate(data)
   expect(data.connection.readOnly).toBe(true)
 })
-test('closes a connection before accepting messages after permission is revoked', async () => {
-  check.mockResolvedValue({ read: true, write: false })
-  const close = jest.fn()
-  const data: any = {
-    context: { authToken: 'fake' },
-    documentName: 'workspace|class|id|body',
-    connection: { readOnly: false, close }
-  }
-  await expect(new AuthenticationExtension({ ctx: ctx as any }).beforeHandleMessage(data)).rejects.toThrow()
-  expect(close).toHaveBeenCalled()
-})
 test('disconnects an idle connection after a permission change', async () => {
   jest.useFakeTimers()
   try {
