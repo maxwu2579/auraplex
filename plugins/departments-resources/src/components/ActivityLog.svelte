@@ -89,8 +89,44 @@
     'contact:class:SocialIdentity',
     'departments:class:AuditEvent',
     'departments:class:TrackingSettings',
-    'chunter:class:ChatSyncInfo'
+    'chunter:class:ChatSyncInfo',
+    'tracker:class:ProjectTargetPreference',
+    'contact:class:Person'
   ]
+  const orderKinds: Record<string, string> = {
+    assign: '指定负责人',
+    step: '勾选步骤',
+    complete: '本段完成',
+    escalate: '上报主管',
+    return: '退回'
+  }
+  /** Plain text of a rich-text message (comments are stored as a document tree). */
+  function plainText (markup: string): string {
+    try {
+      const parts: string[] = []
+      const walk = (node: any): void => {
+        if (typeof node?.text === 'string') parts.push(node.text)
+        if (Array.isArray(node?.content)) node.content.forEach(walk)
+      }
+      walk(JSON.parse(markup))
+      return parts.join(' ')
+    } catch {
+      return markup
+    }
+  }
+  const fieldLabels = new Map<string, string>()
+  async function fieldLabel (_class: Ref<Class<Doc>>, key: string): Promise<string> {
+    const id = `${_class}.${key}`
+    const cached = fieldLabels.get(id)
+    if (cached !== undefined) return cached
+    let text = key
+    try {
+      const label = hierarchy.findAttribute(_class, key)?.label
+      if (label !== undefined) text = await translate(label, {}, 'zh')
+    } catch {}
+    fieldLabels.set(id, text)
+    return text
+  }
   const comments = ['chunter:class:ChatMessage', 'chunter:class:ThreadMessage']
   const auditText: Record<string, string> = { login: '登录', view: '打开', export: '导出', search: '搜索', alert: '异常提醒' }
   const labels = new Map<string, string>()
@@ -180,17 +216,22 @@
             tx._class === core.class.TxUpdateDoc
               ? (tx as TxUpdateDoc<Doc>).operations
               : (tx as TxMixin<Doc, Doc>).attributes
-          detail = Object.entries(ops as Record<string, unknown>)
-            .map(([key, value]) => `${key}: ${short(value)}`)
-            .join('；')
+          const parts: string[] = []
+          for (const [key, value] of Object.entries(ops as Record<string, unknown>)) {
+            parts.push(key.startsWith('$') ? `${key}: ${short(value)}` : `${await fieldLabel(tx.objectClass, key)}：${short(value)}`)
+          }
+          detail = parts.join('；')
         } else if (isComment) {
           const message = ((tx as TxCreateDoc<Doc>).attributes as unknown as { message?: string }).message ?? ''
-          detail = short(message.replace(/"type":"[a-z]+"|[{}[\]"]|content:|text:/g, ' ').replace(/\s+/g, ' ').trim())
+          detail = short(plainText(message))
+        } else if (tx.objectClass === departments.class.OrderAction && tx._class === core.class.TxCreateDoc) {
+          const a = (tx as TxCreateDoc<Doc>).attributes as unknown as { kind: string, reason?: string }
+          detail = `${orderKinds[a.kind] ?? a.kind}${a.reason !== undefined && a.reason !== '' ? '：' + a.reason : ''}`
         }
         next.push({
           at: tx.modifiedOn,
           who: bySocial.get(tx.modifiedBy),
-          kind: k,
+          kind: tx.objectClass === departments.class.OrderAction ? '订单操作' : k,
           what: `${cls}${titles.get(tx.objectId) !== undefined && titles.get(tx.objectId) !== '' ? '：' + titles.get(tx.objectId) : ''}`,
           detail
         })
@@ -241,7 +282,7 @@
       <label>到<input type="date" bind:value={to} /></label>
       <label>类型<select bind:value={kind}>
           <option value="">全部</option>
-          {#each ['新建', '修改', '删除', '评论', '登录', '打开', '导出', '异常提醒'] as k}<option value={k}>{k}</option>{/each}
+          {#each ['新建', '修改', '删除', '评论', '订单操作', '登录', '打开', '导出', '异常提醒'] as k}<option value={k}>{k}</option>{/each}
         </select></label>
       <button disabled={loading} on:click={load}>{loading ? '正在读取…' : '查询'}</button>
       <button disabled={shown.length === 0} on:click={exportExcel}>导出 Excel</button>

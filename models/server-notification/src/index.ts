@@ -70,16 +70,14 @@ export function createModel (builder: Builder): void {
   // Auraplex tracking: record logins (online status itself is temporary) and watch page opens.
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAuditLogin,
-    txMatch: { objectClass: core.class.UserStatus },
-    isAsync: true
+    txMatch: { objectClass: core.class.UserStatus }
   })
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAuditView,
     txMatch: {
       _class: { $in: [core.class.TxCreateDoc, core.class.TxUpdateDoc] as any },
       objectClass: 'departments:class:AuditEvent' as any
-    },
-    isAsync: true
+    }
   })
 
   // Auraplex orders: fill new orders from the flow and apply checked order actions (ids spelled out
