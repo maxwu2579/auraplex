@@ -15,11 +15,12 @@
 <script lang="ts">
   import contact, { Employee, formatName } from '@hcengineering/contact'
   import { EmployeePresenter } from '@hcengineering/contact-resources'
-  import { Account, AccountRole, type AccountUuid, type Class, type Doc, type Mixin, type Ref, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
+  import { Account, AccountRole, SocialIdType, type DepartmentModuleDefaults, type ModuleAccess, type AccountUuid, type Class, type Doc, type Mixin, type Ref, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { Breadcrumb, Button, DropdownIntlItem, DropdownLabelsIntl, Header, Label, Scroller, SearchInput, getCurrentResolvedLocation, navigate } from '@hcengineering/ui'
   import { onMount } from 'svelte'
 
+  import MemberModulePermissions from './MemberModulePermissions.svelte'
   import setting from '../plugin'
   import { getAccountClient } from '../utils'
   import { Analytics } from '@hcengineering/analytics'
@@ -32,6 +33,7 @@
   const roleFields = ['administrators', 'supervisors', 'employees', 'readers'] as const
   type RoleField = typeof roleFields[number]
   type DepartmentAccess = Doc & Record<RoleField, AccountUuid[]> & {
+    archived?: boolean, modules?: string[], moduleAccess?: ModuleAccess
     adminPermissions: string[], supervisorPermissions: string[], employeePermissions: string[], readerPermissions: string[]
   }
   const accessMixin = 'departments:mixin:DepartmentAccess' as Ref<Mixin<DepartmentAccess>>
@@ -170,6 +172,53 @@
     }
   }
   let search = ''
+  let departmentFilter = ''
+  let roleFilter = ''
+  let visibleCount = 50
+  let permissionPerson: AccountUuid | undefined
+  let emailByEmployee = new Map<string, string[]>()
+
+  createQuery().query(contact.class.SocialIdentity, { type: SocialIdType.EMAIL }, (identities) => {
+    const map = new Map<string, string[]>()
+    for (const identity of identities) {
+      if (identity.isDeleted === true) continue
+      const emails = map.get(identity.attachedTo) ?? []
+      emails.push(identity.displayValue ?? identity.value)
+      map.set(identity.attachedTo, emails)
+    }
+    emailByEmployee = map
+  })
+
+  $: permissionDepartments = departmentRows.map(({ access, name }): DepartmentModuleDefaults & { name: string } => ({
+    name, archived: access.archived === true, modules: access.modules, moduleAccess: access.moduleAccess,
+    members: { admin: access.administrators, supervisor: access.supervisors, employee: access.employees, reader: access.readers }
+  }))
+  $: permissionEmployee = employees.find((employee) => employee.personUuid === permissionPerson)
+  $: resetPaging(search, departmentFilter, roleFilter)
+  $: filteredEmployees = employees.filter((employee) => {
+    const key = employee.personUuid
+    if (key == null || workspaceMembers[key] === undefined) return false
+    const role = workspaceMembers[key]
+    const companyRole = guestRoles.includes(role) ? AccountRole.Guest : role
+    if (roleFilter !== '' && roleFilter !== companyRole) return false
+    if (departmentFilter !== '' && !(memberships.get(key) ?? []).some(({ id }) => id === departmentFilter)) return false
+    const term = search.trim().toLocaleLowerCase()
+    return term === '' || [formatName(employee.name), ...(emailByEmployee.get(employee._id) ?? [])]
+      .some((part) => part.toLocaleLowerCase().includes(term))
+  })
+
+  function resetPaging (_search: string, _department: string, _role: string): void {
+    visibleCount = 50
+  }
+
+  function loadOnScroll (node: HTMLElement) {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) visibleCount += 50
+    })
+    observer.observe(node)
+    return { destroy: () => observer.disconnect() }
+  }
+
 
   $: ownersCount = employees.filter(
     (e) => e.personUuid != null && workspaceMembers[e.personUuid] === AccountRole.Owner
@@ -183,25 +232,41 @@
 <div class="hulyComponent">
   <Header adaptive={'disabled'}>
     <Breadcrumb icon={setting.icon.Members} label={setting.string.Members} size={'large'} isCurrent />
-    <svelte:fragment slot="search">
-      <SearchInput bind:value={search} collapsed />
-    </svelte:fragment>
+
   </Header>
-  <div class="hulyComponent-content__column content">
+  <div class="member-filters">
+    <label>姓名 / 邮箱 <SearchInput bind:value={search} /></label>
+    <label>部门
+      <select bind:value={departmentFilter}>
+        <option value="">全部部门</option>
+        {#each departmentRows as row (row.doc._id)}<option value={row.doc._id}>{row.name}</option>{/each}
+      </select>
+    </label>
+    <label>公司级角色
+      <select bind:value={roleFilter}>
+        <option value="">全部角色</option>
+        {#each items as item (item.id)}<option value={item.id}><Label label={item.label} /></option>{/each}
+      </select>
+    </label>
+  </div>
+  <div class="member-body">
+  <div class="hulyComponent-content__column content member-list">
     <Scroller align={'center'} padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
       <div class="hulyComponent-content">
         <div class="member-columns p-2">
           <strong><Label label={setting.string.Members} /></strong>
           <strong><Label label={setting.string.Role} /></strong>
           <strong><Label label={departmentLabel} /></strong>
+          <strong>权限</strong>
         </div>
-        {#each employees as employee (employee._id)}
+        {#each filteredEmployees.slice(0, visibleCount) as employee (employee._id)}
           {@const personUuid = employee.personUuid ?? undefined}
           {@const role = personUuid !== undefined ? workspaceMembers[personUuid] : undefined}
-          {#if personUuid !== undefined && role !== undefined && employee.name?.includes(search)}
+          {#if personUuid !== undefined && role !== undefined}
             <div class="member-columns p-2 flex-no-shrink" data-id="owners-member-row">
               <div class="p-1 min-w-80">
                 <EmployeePresenter value={employee} disabled={false} />
+                {#each emailByEmployee.get(employee._id) ?? [] as email}<small class="member-email">{email}</small>{/each}
               </div>
               <div class="workspace-role">
               <DropdownLabelsIntl
@@ -262,16 +327,44 @@
                   </div>
                 {/if}
               </div>
+              <Button kind="regular" size="small" on:click={() => { permissionPerson = personUuid }}>
+                <span slot="content">权限</span>
+              </Button>
             </div>
           {/if}
+        {:else}
+          <p>没有符合筛选条件的成员。</p>
         {/each}
+        {#if visibleCount < filteredEmployees.length}
+          {#key visibleCount}
+            <div use:loadOnScroll>
+              <Button kind="regular" on:click={() => { visibleCount += 50 }}><span slot="content">加载更多</span></Button>
+            </div>
+          {/key}
+        {/if}
       </div>
     </Scroller>
+  </div>
+  {#if permissionPerson !== undefined && permissionEmployee && workspaceMembers[permissionPerson]}
+    {#key permissionPerson}
+      <MemberModulePermissions person={permissionPerson} name={formatName(permissionEmployee.name)}
+        role={workspaceMembers[permissionPerson]} departments={permissionDepartments}
+        on:close={() => { permissionPerson = undefined }} />
+    {/key}
+  {/if}
   </div>
 </div>
 
 <style>
-  .member-columns { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(9rem, auto) minmax(12rem, 2fr); align-items: center; gap: 1rem; }
+  .member-body { display: flex; min-height: 0; flex: 1; width: 100%; overflow: hidden; }
+  .member-list { flex: 1; min-width: 0; }
+  .member-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: 0.75rem; color: var(--theme-caption-color); }
+  .member-filters label { display: flex; align-items: center; gap: 0.45rem; }
+  .member-filters select {
+    background: var(--theme-panel-color); color: var(--theme-caption-color); border: 1px solid var(--theme-button-border);
+  }
+  .member-email { display: block; color: var(--theme-content-color); overflow-wrap: anywhere; }
+  .member-columns { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(8rem, 1fr) minmax(8rem, 1.5fr) auto; align-items: center; gap: 1rem; }
   .workspace-role { display: grid; gap: 0.25rem; color: var(--theme-content-color); }
   .department-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; flex-basis: 100%; }
   .department-editor select {
