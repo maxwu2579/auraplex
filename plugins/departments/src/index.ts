@@ -115,17 +115,28 @@ export interface TrackingSettings extends Doc {
 
 export const defaultTrackingSettings = { viewRetentionDays: 365, alertCount: 100, alertMinutes: 60 }
 
+export interface ModuleSettings extends Doc {
+  enabled: boolean
+}
+export interface ModuleGrant extends Doc {
+  person: AccountUuid
+  extra: string[]
+  blocked: string[]
+}
+
 export const departmentsId = 'departments' as Plugin
 export default plugin(departmentsId, {
   mixin: { DepartmentAccess: '' as Ref<Mixin<DepartmentAccess>> },
   class: {
+    ModuleSettings: '' as Ref<Class<ModuleSettings>>,
+    ModuleGrant: '' as Ref<Class<ModuleGrant>>,
     Order: '' as Ref<Class<Order>>,
     OrderFlow: '' as Ref<Class<OrderFlow>>,
     OrderAction: '' as Ref<Class<OrderAction>>,
     AuditEvent: '' as Ref<Class<AuditEvent>>,
     TrackingSettings: '' as Ref<Class<TrackingSettings>>
   },
-  ids: { OrderFlow: '' as Ref<OrderFlow>, TrackingSettings: '' as Ref<TrackingSettings> },
+  ids: { ModuleSettings: '' as Ref<ModuleSettings>, OrderFlow: '' as Ref<OrderFlow>, TrackingSettings: '' as Ref<TrackingSettings> },
   app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc>, Tracking: '' as Ref<Doc> },
   component: {
     Directory: '' as AnyComponent,

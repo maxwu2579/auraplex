@@ -23,6 +23,8 @@ import departments, {
   type AuditEvent,
   type AuditKind,
   type Order,
+  type ModuleSettings,
+  type ModuleGrant,
   type OrderAction,
   type TrackingSettings,
   type OrderActionKind,
@@ -118,8 +120,22 @@ export class TTrackingSettings extends TDoc implements TrackingSettings {
   @Hidden() lastCleanup?: number
 }
 
+const DOMAIN_MODULE_ACCESS = 'department_module_access' as Domain
+
+@Model(departments.class.ModuleSettings, core.class.Doc, DOMAIN_MODULE_ACCESS)
+export class TModuleSettings extends TDoc implements ModuleSettings {
+  @Hidden() enabled!: boolean
+}
+
+@Model(departments.class.ModuleGrant, core.class.Doc, DOMAIN_MODULE_ACCESS)
+export class TModuleGrant extends TDoc implements ModuleGrant {
+  @Hidden() person!: ModuleGrant['person']
+  @Hidden() extra!: string[]
+  @Hidden() blocked!: string[]
+}
+
 export function createModel (builder: Builder): void {
-  builder.createModel(TDepartmentAccess, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings)
+  builder.createModel(TDepartmentAccess, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Tracking,
     icon: hr.icon.Department,

@@ -19,6 +19,11 @@
   import { myEmployeeStore } from '@hcengineering/contact-resources'
   import core, {
     AccountRole,
+    departmentModuleGrantClass,
+    departmentModuleSettingsClass,
+    departmentModuleSettingsId,
+    effectiveDepartmentModules,
+    type DepartmentModuleException,
     Class,
     Doc,
     getCurrentAccount,
@@ -160,10 +165,43 @@
 
   const client = getClient()
 
-  const apps: Application[] = client
+  const allApps: Application[] = client
     .getModel()
     .findAllSync<Application>(workbench.class.Application, { hidden: false, _id: { $nin: excludedApps } })
     .filter((it) => isAllowedToRole(it.accessLevel, account))
+
+  const settingsClass = departmentModuleSettingsClass as Ref<Class<Doc & { enabled: boolean }>>
+  const grantClass = departmentModuleGrantClass as Ref<Class<Doc & DepartmentModuleException>>
+  const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
+  const departmentMixin = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
+  let available: ((alias: string) => boolean) | undefined
+  let blockedModule = false
+  $: apps = allApps.filter((app) => available?.(app.alias) ?? true)
+
+  async function readModuleAccess (): Promise<void> {
+    const hierarchy = client.getHierarchy()
+    if (account.role === AccountRole.Owner || !hierarchy.hasClass(settingsClass)) return
+    const settings = await client.findOne(settingsClass, { _id: departmentModuleSettingsId as Ref<Doc> })
+    if (settings?.enabled !== true) {
+      available = undefined
+      return
+    }
+    const [docs, grant] = await Promise.all([
+      client.findAll(departmentClass, {}),
+      client.findOne(grantClass, { _id: ('departments:module-grant:' + account.uuid) as Ref<Doc> })
+    ])
+    const defaults = docs.flatMap((doc) => {
+      const department = (doc as unknown as Record<string, any>)[departmentMixin]
+      if (department === undefined) return []
+      return [{
+        members: [department.administrators, department.supervisors, department.employees, department.readers].flat(),
+        administrators: department.administrators,
+        archived: department.archived === true,
+        modules: department.modules
+      }]
+    })
+    available = effectiveDepartmentModules(account.uuid, false, true, defaults, grant)
+  }
 
   let panelInstance: PanelInstance
   let popupInstance: Popup
@@ -425,6 +463,15 @@
 
   async function syncLoc (loc: Location): Promise<void> {
     accessDeniedStore.set(false)
+    blockedModule = false
+    await readModuleAccess()
+    const requestedApp = loc.path[2]
+    if (requestedApp !== undefined && available?.(requestedApp) === false) {
+      clear(1)
+      closePanel(false)
+      blockedModule = true
+      return
+    }
     const originalLoc = JSON.stringify(loc)
     if ($tabIdStore !== $prevTabIdStore) {
       if ($prevTabIdStore) {
@@ -1106,6 +1153,8 @@
               is={currentView.component}
               props={{ ...currentView.componentProps, currentSpace, currentView, workbenchWidth }}
             />
+          {:else if blockedModule}
+            <div class="flex-center h-full"><h2>没有权限使用这个模块，请联系部门管理员</h2></div>
           {:else if $accessDeniedStore}
             <div class="flex-center h-full">
               <h2><Label label={workbench.string.AccessDenied} /></h2>

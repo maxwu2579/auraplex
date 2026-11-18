@@ -3,8 +3,8 @@
   import chunter from '@hcengineering/chunter'
   import { getResource, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
-  import departments, { type DepartmentAccess, type DepartmentPermission } from '@hcengineering/departments'
+  import core, { AccountRole, departmentModuleSettingsId, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { Label } from '@hcengineering/ui'
@@ -70,6 +70,77 @@
     })
     if (owner) void joinAsOwner(rows)
   })
+  const settingsId = departmentModuleSettingsId as Ref<ModuleSettings>
+  let moduleSettings: ModuleSettings | undefined
+  let grantPerson: AccountUuid | undefined
+  let grant: ModuleGrant | undefined
+  let extra: string[] = []
+  let blocked: string[] = []
+  createQuery().query(departments.class.ModuleSettings, { _id: settingsId }, (items) => {
+    moduleSettings = items[0]
+  })
+
+  const grantId = (person: AccountUuid): Ref<ModuleGrant> => ('departments:module-grant:' + person) as Ref<ModuleGrant>
+
+  async function toggleModuleSettings (enabled: boolean): Promise<void> {
+    if (!owner || busy) return
+    busy = true
+    error = false
+    try {
+      const ops = client.apply('department-module-settings')
+      if (moduleSettings === undefined) {
+        ops.notMatch(departments.class.ModuleSettings, { _id: settingsId })
+        await ops.createDoc(departments.class.ModuleSettings, core.space.Workspace, { enabled }, settingsId)
+      } else {
+        await ops.update(moduleSettings, { enabled })
+      }
+      if (!(await ops.commit()).result) throw new Error('Could not save module settings')
+    } catch {
+      error = true
+    } finally {
+      busy = false
+    }
+  }
+
+  async function editGrant (person: AccountUuid | undefined): Promise<void> {
+    if (person === undefined || !canEdit || busy) return
+    busy = true
+    error = false
+    try {
+      grant = await client.findOne(departments.class.ModuleGrant, { _id: grantId(person) })
+      extra = [...(grant?.extra ?? [])]
+      blocked = [...(grant?.blocked ?? [])]
+      grantPerson = person
+    } catch {
+      error = true
+    } finally {
+      busy = false
+    }
+  }
+
+  async function saveGrant (): Promise<void> {
+    if (grantPerson === undefined || !canEdit || busy) return
+    busy = true
+    error = false
+    try {
+      const ops = client.apply('department-module-grant')
+      if (grant === undefined) {
+        const id = grantId(grantPerson)
+        ops.notMatch(departments.class.ModuleGrant, { _id: id })
+        await ops.createDoc(departments.class.ModuleGrant, core.space.Workspace, { person: grantPerson, extra, blocked }, id)
+      } else {
+        ops.match(departments.class.ModuleGrant, { _id: grant._id, modifiedOn: grant.modifiedOn })
+        await ops.update(grant, { extra, blocked })
+      }
+      if (!(await ops.commit()).result) throw new Error('Could not save module grants')
+      grantPerson = undefined
+    } catch {
+      error = true
+    } finally {
+      busy = false
+    }
+  }
+
   const checked = new Set<string>()
   /**
    * A super admin added after a department was set up is not yet a member of its private spaces.
@@ -144,6 +215,7 @@
   }
 
   function choose (value: DepartmentAccess): void {
+    grantPerson = undefined
     selected = value
     draft = clone(value)
     name = value.name
@@ -271,6 +343,15 @@
 <section class="departments">
   <h2><Label label={departments.string.Departments} /></h2>
   {#if owner && selected === undefined}
+    <label>
+      <input type="checkbox" checked={moduleSettings?.enabled === true} disabled={busy}
+        on:change={(event) => {
+          const enabled = event.currentTarget.checked
+          event.currentTarget.checked = moduleSettings?.enabled === true
+          void toggleModuleSettings(enabled)
+        }} />
+      按部门控制模块
+    </label>
     <div class="create">
       <input bind:value={newName} aria-label="Department name" />
       <label
@@ -313,6 +394,9 @@
               <div class="member">
                 <strong>{formatName(person.name)}</strong>
                 <span>{role.field === 'administrators' || canSeeContacts ? details(person) || '—' : '（不公开）'}</span>
+                {#if canEdit && person.personUuid !== undefined}
+                  <button disabled={busy} on:click={() => editGrant(person.personUuid)}>模块例外</button>
+                {/if}
                 {#if role.field === 'administrators' && person.personUuid !== me.uuid}
                   <button on:click={() => chat(person.personUuid)}>私信</button>
                 {/if}
@@ -320,6 +404,27 @@
             {/each}
           </section>
         {/each}
+        {#if canEdit && grantPerson !== undefined}
+          <fieldset>
+            <legend>{names([grantPerson])} 的模块例外</legend>
+            <div class="member">
+              <fieldset><legend>额外给</legend>
+                {#each applications as app (app._id)}
+                  <label><input type="checkbox" bind:group={extra} value={app.alias} disabled={busy} />
+                    <Label label={app.label} /></label>
+                {/each}
+              </fieldset>
+              <fieldset><legend>单独关掉</legend>
+                {#each applications as app (app._id)}
+                  <label><input type="checkbox" bind:group={blocked} value={app.alias} disabled={busy} />
+                    <Label label={app.label} /></label>
+                {/each}
+              </fieldset>
+            </div>
+            <button disabled={busy} on:click={saveGrant}>保存例外</button>
+            <button disabled={busy} on:click={() => { grantPerson = undefined }}>取消</button>
+          </fieldset>
+        {/if}
         <section>
           <h4>这个部门能用的模块</h4>
           {#if live.modules === undefined}

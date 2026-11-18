@@ -1,6 +1,16 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import core, {
   TxProcessor,
+  canChangeDepartmentModuleException,
+  departmentModuleGrantClass,
+  departmentModuleSettingsClass,
+  departmentModuleSettingsId,
+  effectiveDepartmentModules,
+  toFindResult,
+  type DepartmentModuleException,
+  type DocumentQuery,
+  type FindOptions,
+  type FindResult,
   clone,
   type Class,
   type Doc,
@@ -111,6 +121,11 @@ function forbidden (): never {
   throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
 }
 
+const moduleSettings = departmentModuleSettingsClass as Ref<Class<Doc & { enabled: boolean }>>
+const moduleGrant = departmentModuleGrantClass as Ref<Class<Doc & DepartmentModuleException & { person: string }>>
+const settingsId = departmentModuleSettingsId as Ref<Doc>
+const grantId = (person: string): Ref<Doc> => ('departments:module-grant:' + person) as Ref<Doc>
+
 /** Server-side enforcement of department roles on department pages and department spaces. */
 export class DepartmentGuardMiddleware extends BaseMiddleware implements Middleware {
   private departments: DepartmentRecord[] = []
@@ -132,6 +147,71 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const docs = (await this.next?.findAll(ctx, departmentClass, {})) ?? []
     this.departments = docs.flatMap((doc) => readDepartment(doc) ?? [])
     this.bySpace = new Map(this.departments.flatMap((d) => d.spaces.map((space) => [space, d] as const)))
+  }
+
+  private moduleDefaults () {
+    return this.departments.map((dept) => ({
+      members: departmentRoles.flatMap((role) => dept.members[role]),
+      administrators: dept.members.admin,
+      archived: dept.archived,
+      modules: Array.isArray(dept.modules) ? list(dept.modules) : undefined
+    }))
+  }
+
+  private async moduleAccess (ctx: MeasureContext<SessionData>) {
+    const account = ctx.contextData.account
+    if (isOwner(account, ctx) || !this.context.hierarchy.hasClass(moduleSettings)) return undefined
+    const settings = await this.findOne(ctx, moduleSettings, settingsId) as { enabled?: boolean } | undefined
+    if (settings?.enabled !== true) return undefined
+    await this.load(ctx)
+    const grant = await this.findOne(ctx, moduleGrant, grantId(account.uuid)) as (Doc & DepartmentModuleException) | undefined
+    return effectiveDepartmentModules(account.uuid, false, true, this.moduleDefaults(), grant)
+  }
+
+  private protectedModule (_class: Ref<Class<Doc>>): string | undefined {
+    if ([orderClass, orderActionClass, orderFlowClass].includes(_class)) return 'orders'
+    if ([auditEventClass, trackingSettingsClass].includes(_class)) return 'tracking'
+    const alias = _class.split(':')[0]
+    if (alias === 'inventory' || alias === 'prospects') return alias
+  }
+
+  override async findAll<T extends Doc> (
+    ctx: MeasureContext<SessionData>,
+    _class: Ref<Class<T>>,
+    query: DocumentQuery<T>,
+    options?: FindOptions<T>
+  ): Promise<FindResult<T>> {
+    const alias = this.protectedModule(_class)
+    if (alias !== undefined && !isSystem(ctx.contextData.account, ctx)) {
+      if ((await this.moduleAccess(ctx))?.(alias) === false) return toFindResult([])
+    }
+    return await this.provideFindAll(ctx, _class, query, options)
+  }
+
+  private async checkModuleConfiguration (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    const account = ctx.contextData.account
+    const owner = isOwner(account, ctx)
+    if (tx.objectSpace !== core.space.Workspace) forbidden()
+    const creating = tx._class === core.class.TxCreateDoc
+    if (!creating && tx._class !== core.class.TxUpdateDoc) forbidden()
+    const fields = (creating ? (tx as TxCreateDoc<Doc>).attributes : (tx as TxUpdateDoc<Doc>).operations) as Record<string, unknown>
+    if (tx.objectClass === moduleSettings) {
+      if (!owner || tx.objectId !== settingsId || typeof fields.enabled !== 'boolean' ||
+        Object.keys(fields).some((key) => key !== 'enabled')) forbidden()
+      return
+    }
+    const existing = creating ? undefined : await this.findOne(ctx, moduleGrant, tx.objectId)
+    if (!creating && existing === undefined) forbidden()
+    const before = existing as (Doc & DepartmentModuleException & { person: string }) | undefined
+    const person = creating ? fields.person : before?.person
+    if (typeof person !== 'string' || tx.objectId !== grantId(person) ||
+      Object.keys(fields).some((key) => key !== 'extra' && key !== 'blocked' && !(creating && key === 'person'))) forbidden()
+    const extra = fields.extra
+    const blocked = fields.blocked
+    if (!Array.isArray(extra) || !Array.isArray(blocked) ||
+      [...extra, ...blocked].some((alias) => typeof alias !== 'string' || alias.trim() === '')) forbidden()
+    if (!owner && !canChangeDepartmentModuleException(account.uuid, person, this.moduleDefaults(),
+      await this.moduleAccess(ctx), before ?? { extra: [], blocked: [] }, { extra, blocked })) forbidden()
   }
 
   private touchesDepartments (tx: Tx): boolean {
@@ -159,6 +239,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
     const cud = tx as TxCUD<Doc>
+    if (cud.objectClass === moduleSettings || cud.objectClass === moduleGrant) {
+      await this.checkModuleConfiguration(ctx, cud)
+      return
+    }
+    const alias = this.protectedModule(cud.objectClass)
+    if (alias !== undefined && (await this.moduleAccess(ctx))?.(alias) === false) forbidden()
     if (cud.objectClass === auditEventClass || cud.objectClass === trackingSettingsClass) {
       await this.checkAudit(ctx, cud)
       return

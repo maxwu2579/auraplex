@@ -47,3 +47,5 @@ export * from './collaborators'
 export * from './versioning'
 
 export default core
+
+export * from './departmentPolicy'
