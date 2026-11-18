@@ -179,3 +179,25 @@ test('blocked WhatsApp messages are hidden and writes are rejected before reachi
   await expect(guard.tx(ctx, [{ ...update({}), objectClass: messageClass, objectSpace: core.space.Workspace }])).rejects.toThrow()
   expect(tx).not.toHaveBeenCalled()
 })
+
+test('workspace administrators can create departments with themselves as the only initial admin', async () => {
+  const dept = 'hr:class:Department' as Ref<Class<Doc>>
+  const id = 'new-department' as Ref<Doc>
+  const ctx = (role: AccountRole) => ({ contextData: { account: { uuid: 'creator', role }, broadcast: { txes: [] } } }) as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = { findAll: jest.fn(async () => []), tx: jest.fn(async () => []) } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx(AccountRole.Maintainer), pipeline, next)
+  const target = { objectClass: dept, objectId: id, objectSpace: core.space.Workspace }
+  const create = { ...target, _class: core.class.TxCreateDoc, attributes: { name: '测试部门' } }
+  const mixin = (admin: string) => ({ ...target, _class: core.class.TxMixin, mixin: departmentAccessMixin, attributes: {
+    administrators: [admin], supervisors: [], employees: [], readers: [],
+    adminPermissions: ['manageMembers'], supervisorPermissions: [], employeePermissions: [], readerPermissions: []
+  } })
+  const batch = (...txes: unknown[]) => ({ _class: core.class.TxApplyIf, txes }) as TxCUD<Doc>
+  await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create, mixin('creator'))])).resolves.toBeDefined()
+  await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create, mixin('other'))])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create)])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(mixin('creator'))])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.User), [batch(create, mixin('creator'))])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.Owner), [batch(create, mixin('other'))])).resolves.toBeDefined()
+})

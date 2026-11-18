@@ -78,7 +78,7 @@
     "ReadonlyGuest": "Readonly",
     "Guest": "Guest",
     "User": "Staff",
-    "Maintainer": "System administrator",
+    "Maintainer": "Administrator",
     "Owner": "Super administrator",
     "OwnerFirstName": "Owner's First name",
     "OwnerLastName": "Owner's Last name",

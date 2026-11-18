@@ -28,6 +28,7 @@
   const allInviteRoleItems: DropdownIntlItem[] = [
     { id: AccountRole.Guest, label: settingRes.string.Guest },
     { id: AccountRole.User, label: settingRes.string.User },
+    { id: AccountRole.Maintainer, label: settingRes.string.Maintainer },
     { id: AccountRole.Owner, label: settingRes.string.Owner }
   ]
 
@@ -43,7 +44,6 @@
 <DropdownLabelsIntl
   kind={'regular'}
   size={'medium'}
-  label={selected === AccountRole.Maintainer ? settingRes.string.Maintainer : undefined}
   items={inviteRoleItems}
   {selected}
   {disabled}

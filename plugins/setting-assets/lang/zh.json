@@ -78,7 +78,7 @@
     "ReadonlyGuest": "只读",
     "Guest": "访客",
     "User": "员工",
-    "Maintainer": "系统管理员",
+    "Maintainer": "管理员",
     "Owner": "超级管理员",
     "OwnerFirstName": "所有者的名字",
     "OwnerLastName": "所有者的姓氏",

@@ -1,5 +1,6 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import core, {
+  AccountRole,
   TxProcessor,
   canChangeDepartmentModuleException,
   departmentModuleGrantClass,
@@ -359,9 +360,17 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     return result
   }
 
-  private async check (ctx: MeasureContext<SessionData>, tx: Tx): Promise<void> {
+  private async check (ctx: MeasureContext<SessionData>, tx: Tx, newDepartments?: Set<Ref<Doc>>): Promise<void> {
     if (tx._class === core.class.TxApplyIf) {
-      for (const it of (tx as TxApplyIf).txes) await this.check(ctx, it)
+      const pending = new Set<Ref<Doc>>()
+      const children = (tx as TxApplyIf).txes
+      for (const it of children) {
+        await this.check(ctx, it, pending)
+        if (it._class === core.class.TxCreateDoc && (it as TxCreateDoc<Doc>).objectClass === departmentClass) {
+          pending.add((it as TxCreateDoc<Doc>).objectId)
+        }
+      }
+      if (ctx.contextData.account.role === AccountRole.Maintainer && pending.size !== 0) forbidden()
       return
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
@@ -392,7 +401,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       return
     }
     if (cud.objectClass === departmentClass) {
-      await this.checkDepartment(ctx, cud)
+      await this.checkDepartment(ctx, cud, newDepartments)
       return
     }
     const owner = isOwner(ctx.contextData.account, ctx)
@@ -549,10 +558,19 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (!canChangeFlow(before, ops.stages, actor, owner, this.roleOf)) forbidden()
   }
 
-  private async checkDepartment (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+  private async checkDepartment (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>, newDepartments?: Set<Ref<Doc>>): Promise<void> {
     const owner = isOwner(ctx.contextData.account, ctx)
     const before = this.departments.find((d) => d._id === tx.objectId)
-    if (tx._class === core.class.TxCreateDoc) return // A plain HR department; access is added by a mixin.
+    const account = ctx.contextData.account
+    if (tx._class === core.class.TxCreateDoc) {
+      if (owner) return
+      const attributes = (tx as TxCreateDoc<Doc>).attributes
+      if (account.role !== AccountRole.Maintainer || newDepartments === undefined ||
+        tx.objectSpace !== core.space.Workspace || Object.keys(attributes).some((key) =>
+          !['name', 'description', 'parent', 'teamLead', 'members', 'managers'].includes(key)) ||
+        await this.findOne(ctx, departmentClass, tx.objectId) !== undefined) forbidden()
+      return
+    }
     if (tx._class !== core.class.TxMixin || (tx as TxMixin<Doc, Doc>).mixin !== departmentAccessMixin) {
       // Renaming, moving or removing a managed department belongs to the super admins.
       if (before !== undefined && !owner) forbidden()
@@ -569,6 +587,15 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       ({ _id: tx.objectId, _class: departmentClass, space: tx.objectSpace } as unknown as Doc)
     const next = readDepartment(TxProcessor.updateMixin4Doc(clone(doc) as Doc, mixinTx))
     if (next === undefined) forbidden()
+    const initializing = !owner && account.role === AccountRole.Maintainer && before === undefined &&
+      newDepartments?.has(tx.objectId) === true
+    if (initializing) {
+      newDepartments?.delete(tx.objectId)
+      if (next.members.admin.length !== 1 || next.members.admin[0] !== account.uuid ||
+        next.members.supervisor.length !== 0 || next.members.employee.length !== 0 || next.members.reader.length !== 0 ||
+        next.autoJoin !== undefined || next.archived || next.supervisorsSeeTracking || next.employeesSeeTracking) forbidden()
+    }
+    const trustedConfiguration = owner || initializing
     const empty = { admin: [], supervisor: [], employee: [], reader: [] }
     const old = before ?? { members: empty, policy: empty, archived: false }
     if (!owner && next.archived !== old.archived) forbidden()
@@ -578,7 +605,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (!owner && next.employeesSeeTracking !== before2.employeesSeeTracking && !(old.members.admin as string[]).includes(ctx.contextData.account.uuid)) {
       forbidden()
     }
-    if (!canChangeDepartmentOptions(owner, old.members.admin.includes(ctx.contextData.account.uuid), before ?? {}, next)) forbidden()
+    if (!canChangeDepartmentOptions(trustedConfiguration, old.members.admin.includes(ctx.contextData.account.uuid), before ?? {}, next)) forbidden()
     if (JSON.stringify(next.autoJoin) !== JSON.stringify(before?.autoJoin)) {
       const actor = ctx.contextData.account.uuid
       if (!owner && !old.members.admin.includes(actor)) forbidden()
@@ -597,7 +624,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     const matrix = next.moduleAccess
     if (JSON.stringify(matrix) !== JSON.stringify(before?.moduleAccess)) {
-      if (!owner || matrix === null || typeof matrix !== 'object' || Array.isArray(matrix)) forbidden()
+      if (!trustedConfiguration || matrix === null || typeof matrix !== 'object' || Array.isArray(matrix)) forbidden()
       for (const [alias, row] of Object.entries(matrix)) {
         if (alias.trim() === '' || row === null || typeof row !== 'object' ||
           Object.keys(row).length !== moduleRoles.length ||
@@ -606,7 +633,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     const ok = canChangeDepartment(
       ctx.contextData.account.uuid,
-      owner,
+      trustedConfiguration,
       old.members,
       next.members,
       old.policy,

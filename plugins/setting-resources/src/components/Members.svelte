@@ -126,6 +126,7 @@
   const items: DropdownIntlItem[] = [
     { id: AccountRole.Guest, label: setting.string.Guest },
     { id: AccountRole.User, label: setting.string.User },
+    { id: AccountRole.Maintainer, label: setting.string.Maintainer },
     { id: AccountRole.Owner, label: setting.string.Owner }
   ]
 
@@ -216,7 +217,7 @@
                   void change(personUuid, e.detail)
                 }}
               />
-                <small>这里是公司级角色；管理员、主管在「部门」列里设。</small>
+                <small>公司级角色。部门里的管理员/主管在'部门'列里设。</small>
               </div>
               <div class="department-links">
                 {#each memberships.get(personUuid) ?? [] as department (department.id)}

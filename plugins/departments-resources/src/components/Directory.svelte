@@ -31,6 +31,7 @@
   const selectSpacesLabel = 'setting:string:GuestSelectSpaces' as IntlString
   const me = getCurrentAccount()
   const owner = me.role === AccountRole.Owner
+  const canCreateDepartment = owner || me.role === AccountRole.Maintainer
   const rosterQuery = createQuery()
   const departmentQuery = createQuery()
   let channels: Channel[] = []
@@ -419,12 +420,13 @@
     else delete extra[alias]
   }
   async function create (): Promise<void> {
-    if (!owner || busy || newName.trim() === '' || newAdmin === '') return
+    if (!canCreateDepartment || busy || newName.trim() === '' || (owner && newAdmin === '')) return
     busy = true
     error = false
     try {
       const id = generateId<Department>()
       const ops = client.apply('department-management')
+      ops.notMatch(hr.class.Department, { _id: id })
       await ops.createDoc(
         hr.class.Department,
         core.space.Workspace,
@@ -439,7 +441,7 @@
         id
       )
       await ops.createMixin(id, hr.class.Department, core.space.Workspace, departments.mixin.DepartmentAccess, {
-        administrators: [newAdmin as AccountUuid],
+        administrators: [owner ? newAdmin as AccountUuid : me.uuid],
         supervisors: [],
         employees: [],
         readers: [],
@@ -511,14 +513,16 @@
       按部门控制模块
       <small>启用后按部门角色和个人例外分配模块。</small>
     </label>
+  {/if}
+  {#if canCreateDepartment && selected === undefined}
     <Button kind="regular" label={departments.string.CreateDepartment} on:click={() => { showCreate = !showCreate }} />
   {/if}
     </svelte:fragment>
   </Header>
-  {#if owner && selected === undefined && showCreate}
+  {#if canCreateDepartment && selected === undefined && showCreate}
     <div class="create">
       <input bind:value={newName} aria-label="Department name" />
-      <label
+      {#if owner}<label
         ><Label label={departments.string.ChooseAdministrator} /><select
           bind:value={newAdmin}
           aria-label="Department administrator"
@@ -529,8 +533,9 @@
               >{/if}{/each}
         </select></label
       >
+      {/if}
       <Button kind="regular" label={departments.string.CreateDepartment} on:click={create}
-        disabled={busy || newName.trim() === '' || newAdmin === ''} />
+        disabled={busy || newName.trim() === '' || (owner && newAdmin === '')} />
     </div>
   {/if}
   {#if error}<p class="error"><Label label={departments.string.SaveError} /></p>{/if}
