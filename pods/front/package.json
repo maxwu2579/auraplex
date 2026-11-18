@@ -14,7 +14,7 @@
     "_phase:package": "rushx package",
     "_phase:docker-build": "rushx docker:build",
     "_phase:docker-staging": "rushx docker:staging",
-    "bundle": "node ../../common/scripts/esbuild.js --entry=src/__start.ts --keep-names=true --define=MODEL_VERSION --define=VERSION --sourcemap=external --minify --external=sharp",
+    "bundle": "node ../../common/scripts/esbuild.js --entry=src/__start.ts --keep-names=true --define=MODEL_VERSION --define=VERSION --define=RELEASE --sourcemap=external --minify --external=sharp",
     "package": "node ../../common/scripts/bash.js --script package",
     "docker:build": "node ../../common/scripts/bash.js ../../common/scripts/docker_build.sh hardcoreeng/front",
     "docker:staging": "node ../../common/scripts/bash.js ../../common/scripts/docker_tag.sh hardcoreeng/front staging",

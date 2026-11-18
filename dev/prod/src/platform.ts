@@ -170,6 +170,7 @@ export interface Config {
   DATALAKE_URL?: string
   MODEL_VERSION: string
   VERSION: string
+  RELEASE?: string
   COLLABORATOR_URL: string
   COLLABORATOR?: string
   REKONI_URL: string
@@ -527,6 +528,9 @@ export async function configurePlatform() {
   if (config.VERSION != null) {
     console.log('Minimal version requirement', config.VERSION)
     setMetadata(presentation.metadata.FrontVersion, config.VERSION)
+  }
+  if (config.RELEASE != null && config.RELEASE !== '') {
+    setMetadata(presentation.metadata.FrontRelease, config.RELEASE)
   }
   setMetadata(telegram.metadata.TelegramURL, config.TELEGRAM_URL ?? 'http://localhost:8086')
   setMetadata(telegram.metadata.BotUrl, config.TELEGRAM_BOT_URL ?? 'http://huly.local:4020')

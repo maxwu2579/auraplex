@@ -36,6 +36,15 @@ function getVersionFromScript(scriptPath) {
   }
 }
 
+function getRelease() {
+  try {
+    const value = fs.readFileSync(path.resolve(SCRIPT_DIR, 'release.txt'), 'utf8').replace(/["\s]/g, '')
+    return value.length > 0 ? JSON.stringify(value) : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function bundle(config) {
   // Ensure output directory exists
   fs.mkdirSync(config.outdir, { recursive: true })
@@ -96,7 +105,9 @@ async function main() {
   const env = {
     MODEL_VERSION: define['MODEL_VERSION'] ? getVersionFromScript('./show_version.js') : undefined,
     VERSION: getVersionFromScript('./show_tag.js'),
-    GIT_REVISION: define['GIT_REVISION'] ? getGitRevision() : undefined
+    GIT_REVISION: define['GIT_REVISION'] ? getGitRevision() : undefined,
+    // Auraplex: release name (v3, v4...) shown next to the version; optional.
+    RELEASE: define['RELEASE'] ? getRelease() : undefined
   }
 
   Object.entries(env).forEach(([key, value]) => {

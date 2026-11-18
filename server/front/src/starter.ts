@@ -84,6 +84,8 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     process.exit(1)
   }
 
+  const release = process.env.RELEASE
+
   const serverSecret = process.env.SERVER_SECRET
   if (serverSecret === undefined) {
     console.log('Please provide server secret')
@@ -141,6 +143,7 @@ export function startFront (ctx: MeasureContext, extraConfig?: Record<string, st
     filesUrl,
     modelVersion,
     version,
+    release,
     gmailUrl,
     whatsappUrl,
     telegramUrl,

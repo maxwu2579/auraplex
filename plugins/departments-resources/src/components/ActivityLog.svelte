@@ -129,7 +129,7 @@
     return text
   }
   const comments = ['chunter:class:ChatMessage', 'chunter:class:ThreadMessage']
-  const auditText: Record<string, string> = { login: '登录', view: '打开', export: '导出', search: '搜索', alert: '异常提醒' }
+  const auditText: Record<string, string> = { login: '登录', view: '打开', export: '导出', search: '搜索', alert: '异常提醒', whatsapp: 'WhatsApp 往来' }
   const labels = new Map<string, string>()
   async function classLabel (_class: Ref<Class<Doc>>): Promise<string> {
     const cached = labels.get(_class)
@@ -201,7 +201,7 @@
       }
       const next: Row[] = []
       for (const tx of work) {
-        const cls = await classLabel(tx.objectClass)
+        const cls = tx.objectClass === departments.class.OrderAction ? '订单操作' : await classLabel(tx.objectClass)
         const isComment = comments.includes(tx.objectClass)
         const k =
           tx._class === core.class.TxCreateDoc

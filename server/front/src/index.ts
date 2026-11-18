@@ -260,6 +260,7 @@ export function start (
     filesUrl: string
     modelVersion: string
     version: string
+    release?: string
     rekoniUrl: string
     telegramUrl: string
     gmailUrl: string
@@ -406,6 +407,7 @@ export function start (
       FILES_URL: config.filesUrl,
       MODEL_VERSION: config.modelVersion,
       VERSION: config.version,
+      RELEASE: config.release,
       REKONI_URL: config.rekoniUrl,
       TELEGRAM_URL: config.telegramUrl,
       GMAIL_URL: config.gmailUrl,

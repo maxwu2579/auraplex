@@ -168,6 +168,7 @@ export default plugin(presentationId, {
   metadata: {
     ModelVersion: '' as Metadata<string>,
     FrontVersion: '' as Metadata<string>,
+    FrontRelease: '' as Metadata<string>,
     Draft: '' as Metadata<Record<string, any>>,
     UploadURL: '' as Metadata<string>,
     DatalakeUrl: '' as Metadata<string>,

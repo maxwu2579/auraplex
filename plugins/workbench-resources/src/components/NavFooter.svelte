@@ -25,6 +25,8 @@
   let selected: boolean = false
 
   const version = getMetadata(presentation.metadata.FrontVersion)
+  const release = getMetadata(presentation.metadata.FrontRelease)
+  const versionLabel = release === undefined || release === '' ? version : `${version ?? ''} · ${release}`
 
   $: extensions = [...$navFooterExtensions].sort((a, b) => a.order - b.order)
 </script>
@@ -55,8 +57,8 @@
     <span class="an-element__label">
       <Label label={workbench.string.HelpAndSupport} />
     </span>
-    {#if version}
-      <span class="version-label">{version}</span>
+    {#if versionLabel}
+      <span class="version-label">{versionLabel}</span>
     {/if}
   </div>
 </div>

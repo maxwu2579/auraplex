@@ -19,33 +19,41 @@ function titleOf (doc: Doc): string {
  * within 30 minutes only raises the count. Never blocks or breaks opening the page.
  */
 export async function recordView (doc: Doc): Promise<void> {
-  try {
-    const client = getClient()
-    if (!client.getHierarchy().hasClass(auditClass)) return
-    const me = getCurrentAccount().uuid
-    const now = Date.now()
-    const last = (await client.findOne(auditClass, {
-      kind: 'view',
-      actor: me,
-      objectId: doc._id,
-      lastOn: { $gte: now - MERGE_MS }
-    } as any)) as (Doc & { count: number }) | undefined
-    if (last !== undefined) {
-      await client.update(last, { count: last.count + 1, lastOn: now } as any)
-    } else {
-      await client.createDoc(auditClass, core.space.Workspace, {
+  // Right after login on a direct link the connection can still be settling, so a first
+  // attempt may fail or be dropped; try a few times, but never get in the way of work.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 700 * attempt))
+    try {
+      const client = getClient()
+      if (!client.getHierarchy().hasClass(auditClass)) continue
+      const me = getCurrentAccount().uuid
+      const now = Date.now()
+      const last = (await client.findOne(auditClass, {
         kind: 'view',
         actor: me,
-        label: titleOf(doc),
         objectId: doc._id,
-        objectClass: doc._class,
-        objectSpace: doc.space,
-        count: 1,
-        firstOn: now,
-        lastOn: now
-      } as any)
+        lastOn: { $gte: now - MERGE_MS }
+      } as any)) as (Doc & { count: number }) | undefined
+      const ops = client.apply(undefined, 'auraplex-audit-view')
+      if (last !== undefined) {
+        await ops.update(last, { count: last.count + 1, lastOn: now } as any)
+      } else {
+        await ops.createDoc(auditClass, core.space.Workspace, {
+          kind: 'view',
+          actor: me,
+          label: titleOf(doc),
+          objectId: doc._id,
+          objectClass: doc._class,
+          objectSpace: doc.space,
+          count: 1,
+          firstOn: now,
+          lastOn: now
+        } as any)
+      }
+      const { result } = await ops.commit()
+      if (result) return
+    } catch {
+      // Try again below.
     }
-  } catch {
-    // Tracking must never get in the way of work.
   }
 }
