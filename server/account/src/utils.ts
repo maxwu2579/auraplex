@@ -2129,6 +2129,10 @@ export async function findExistingIntegration (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
+  if (String(kind) === 'whatsapp' && extra?.service !== 'whatsapp') {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+  }
+
   if (verifyAllowedServices(integrationServices, extra, false)) {
     const existingSocialId = await db.socialId.findOne({ _id: socialId, verifiedOn: { $gt: 0 } })
     if (existingSocialId == null) {

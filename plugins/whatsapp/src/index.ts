@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-import type { AttachedDoc, Class, IntegrationKind, Ref, Timestamp } from '@hcengineering/core'
+import type { AttachedDoc, Class, Doc, IntegrationKind, Ref, Timestamp } from '@hcengineering/core'
 import { plugin, type Plugin, type IntlString, type Metadata } from '@hcengineering/platform'
 import type { IntegrationType, Handler } from '@hcengineering/setting'
 import type { AnyComponent } from '@hcengineering/ui'
@@ -24,6 +24,7 @@ export const whatsappIntegrationKind = 'whatsapp' as IntegrationKind
 export type MessageStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'
 
 export interface WhatsappMessage extends AttachedDoc {
+  owner?: import('@hcengineering/core').AccountUuid
   content: string
   direction: 'incoming' | 'outgoing'
   status: MessageStatus
@@ -99,10 +100,12 @@ export function isValidTemplateParameter (value: string): boolean {
 
 export default plugin(whatsappId, {
   class: { Message: '' as Ref<Class<WhatsappMessage>> },
-  integrationType: { Whatsapp: '' as Ref<IntegrationType> },
+  integrationType: { Whatsapp: '' as Ref<IntegrationType>, WeCom: '' as Ref<IntegrationType> },
   metadata: { WhatsappURL: '' as Metadata<string> },
-  ids: { NotificationGroup: '' as Ref<NotificationGroup>, NewMessageNotification: '' as Ref<NotificationType> },
+  ids: { Connections: '' as Ref<Doc>, NotificationGroup: '' as Ref<NotificationGroup>, NewMessageNotification: '' as Ref<NotificationType> },
   component: {
+    Connections: '' as AnyComponent,
+    WeComNotice: '' as AnyComponent,
     Chat: '' as AnyComponent,
     Connect: '' as AnyComponent,
     State: '' as AnyComponent,
@@ -110,6 +113,10 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    Connections: '' as IntlString,
+    WeCom: '' as IntlString,
+    WeComNotice: '' as IntlString,
+    ConnectionUnknown: '' as IntlString,
     ChannelLabel: '' as IntlString,
     NewMessage: '' as IntlString,
     Messages: '' as IntlString,

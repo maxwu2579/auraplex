@@ -36,7 +36,7 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
     },
     ...['owner', 'follower', 'unrelated'].flatMap((user) => [
       { _id: user + '-person', _class: contact.class.Person, personUuid: user, active: true, employee: true },
-      { _id: user + '-space', _class: contact.class.PersonSpace, person: user + '-person' }
+      { _id: user + '-space', _class: contact.class.PersonSpace, person: user + '-person', private: true, members: [user] }
     ]),
     { _id: 'watch-1', _class: core.class.Collaborator, attachedTo: 'customer', collaborator: 'owner' },
     { _id: 'watch-2', _class: core.class.Collaborator, attachedTo: 'customer', collaborator: 'follower' }
@@ -113,8 +113,12 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
       return ops
     }
   }
-  const account = { findPersonBySocialId: async () => 'owner' }
-  const store = { findByPhoneNumberId: async () => integration }
+  const account = { findPersonBySocialId: async (id: string) => id === 'social-two' ? 'follower' : 'owner' }
+  const store = {
+    findByPhoneNumberId: async (number: string) => number === '100002'
+      ? { ...integration, socialId: 'social-two' as PersonId }
+      : integration
+  }
   const receiver = new WorkspaceReceiver(account as unknown as AccountClient, store as unknown as ConnectionStore)
   return {
     client: client as TxOperations,
@@ -139,7 +143,7 @@ const incoming: IncomingMessage = {
   timestamp: 1700000000000
 }
 
-it('matches old formatted numbers without changing them and notifies owner plus followers once', async () => {
+it('matches old formatted numbers without changing them and notifies only the owner once', async () => {
   const f = fixture()
   await f.receiver.receive(f.client, integration, incoming)
   const messages = f.records().filter((doc) => doc._class === whatsapp.class.Message)
@@ -148,7 +152,7 @@ it('matches old formatted numbers without changing them and notifies owner plus 
   expect(f.records().find((doc) => doc._id === 'old-channel').value).toBe('+65 (8888) 0001')
   expect(f.records().find((doc) => doc._id === 'customer').name).toBe('Existing name')
   const notifications = f.records().filter((doc) => doc._class === notification.class.CommonInboxNotification)
-  expect(notifications.map((doc) => doc.user).sort((a, b) => a.localeCompare(b))).toEqual(['follower', 'owner'])
+  expect(notifications.map((doc) => doc.user).sort((a, b) => a.localeCompare(b))).toEqual(['owner'])
   expect(notifications.every((doc) => doc.space === doc.user + '-space')).toBe(true)
   expect(JSON.parse(notifications[0].messageHtml).content[0].content[0]).toEqual({
     type: 'text',
@@ -156,7 +160,7 @@ it('matches old formatted numbers without changing them and notifies owner plus 
   })
   await f.receiver.receive(f.client, integration, incoming)
   expect(f.records().filter((doc) => doc._class === whatsapp.class.Message)).toHaveLength(1)
-  expect(f.records().filter((doc) => doc._class === notification.class.CommonInboxNotification)).toHaveLength(2)
+  expect(f.records().filter((doc) => doc._class === notification.class.CommonInboxNotification)).toHaveLength(1)
 })
 
 it('creates one new contact and channel for an unknown number and reuses them', async () => {
@@ -240,4 +244,14 @@ it('keeps a failure when an older sent callback arrives afterwards', async () =>
     statuses: [{ phoneNumberId: '100001', wamid: 'wamid.failed', status: 'sent' }]
   })
   expect(message.status).toBe('failed')
+})
+
+it('puts two numbers for the same customer in separate private spaces', async () => {
+  const f = fixture()
+  jest.spyOn(f.receiver, 'getClient').mockResolvedValue(f.client)
+  await f.receiver.consume({ messages: [incoming, { ...incoming, phoneNumberId: '100002' }], statuses: [] })
+  expect(f.records().filter((doc) => doc._class === whatsapp.class.Message)).toMatchObject([
+    { attachedTo: 'old-channel', owner: 'owner', space: 'owner-space' },
+    { attachedTo: 'old-channel', owner: 'follower', space: 'follower-space' }
+  ])
 })

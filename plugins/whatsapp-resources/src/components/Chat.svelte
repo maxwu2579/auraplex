@@ -16,8 +16,8 @@
 
 -->
 <script lang="ts">
-  import type { Channel } from '@hcengineering/contact'
-  import { SortingOrder, generateId } from '@hcengineering/core'
+  import contact, { type Channel } from '@hcengineering/contact'
+  import { SortingOrder, generateId, getCurrentAccount } from '@hcengineering/core'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { InboxNotificationsClientImpl } from '@hcengineering/notification-resources'
   import { Button, Dialog, Label, Scroller } from '@hcengineering/ui'
@@ -50,6 +50,7 @@
   let connection: ConnectionState | undefined
   let error: IntlString | undefined
   const client = getClient()
+  const owner = getCurrentAccount().uuid
   const statusLabels = {
     pending: whatsapp.string.Pending,
     sending: whatsapp.string.Sending,
@@ -135,16 +136,20 @@
         error = whatsapp.string.ConnectionRequired
         return
       }
+      const employee = await client.findOne(contact.mixin.Employee, { personUuid: owner, active: true })
+      const space = employee === undefined ? undefined : await client.findOne(contact.class.PersonSpace, { person: employee._id })
+      if (space === undefined || !space.private || !space.members.includes(owner)) throw new Error('Missing private space')
       const id = generateId<WhatsappMessage>()
       const ops = client.apply('whatsapp-outgoing')
       ops.notMatch(whatsapp.class.Message, { _id: id })
       await ops.addCollection(
         whatsapp.class.Message,
-        target.space,
+        space._id,
         target._id,
         target._class,
         'items',
         {
+          owner,
           content: text,
           direction: 'outgoing',
           status: 'pending',
@@ -174,7 +179,7 @@
 
   $: query.query(
     whatsapp.class.Message,
-    { attachedTo: channel._id },
+    { attachedTo: channel._id, owner },
     (result) => {
       messages = result.slice().reverse()
       loaded = true
@@ -216,6 +221,7 @@
   <form class="composer" on:submit|preventDefault={send}>
     {#if !loaded}
       <!-- Wait for the messages so the 24 hour check does not flash the wrong mode. -->
+    {:else if connection?.connected !== true}
     {:else if windowOpen}
       <label for="whatsapp-reply"><Label label={whatsapp.string.Reply} /></label>
       <textarea
@@ -269,6 +275,7 @@
         <Label label={whatsapp.string.ConnectionRequired} />
       </p>{/if}
     {#if error !== undefined}<p class="error" role="alert"><Label label={error} /></p>{/if}
+    {#if connection?.connected === true}
     <div class="actions">
       <Button
         label={whatsapp.string.Send}
@@ -281,6 +288,7 @@
         on:click={send}
       />
     </div>
+    {/if}
   </form>
 </Dialog>
 

@@ -14,10 +14,10 @@
     "Connected": "Connected",
     "LocalMode": "Local simulator",
     "TokenStored": "Access token saved on server",
-    "Unavailable": "Cannot reach the service. Please try again.",
+    "Unavailable": "Not configured. Please contact your administrator.",
     "InvalidParameters": "Enter numeric account IDs and an access token.",
     "Forbidden": "Only workspace owners and administrators can manage this connection.",
-    "Conflict": "This workspace or phone number already has a connection.",
+    "Conflict": "This number is already bound, or you must disconnect your current number first.",
     "Failed": "Could not save the connection. Please try again.",
     "Message": "WhatsApp message",
     "Content": "Content",
@@ -40,7 +40,7 @@
     "Read": "Read",
     "SendFailed": "Failed",
     "SaveMessageFailed": "Could not save the message. Your draft is kept. Please try again.",
-    "ConnectionRequired": "Connect WhatsApp Business in Settings → Integrations to reply.",
+    "ConnectionRequired": "You have not linked WhatsApp. Link your own WhatsApp Business number in Settings → Integrations.",
     "WindowClosed": "The customer's last message was more than 24 hours ago. WhatsApp only allows approved template messages now. Once the customer replies, you can type freely again.",
     "NeverWrote": "This customer has not messaged you yet. WhatsApp only allows an approved template message to start the chat.",
     "Template": "Template",
@@ -50,6 +50,10 @@
     "NoTemplates": "No approved templates. Create one in WhatsApp Manager and wait for approval.",
     "TemplatesFailed": "Could not load templates. Please try again later.",
     "LoadingTemplates": "Loading templates…",
-    "InvalidTemplateParameter": "Fill in every variable. Variables cannot contain line breaks, tabs or more than 4 spaces in a row."
+    "InvalidTemplateParameter": "Fill in every variable. Variables cannot contain line breaks, tabs or more than 4 spaces in a row.",
+    "Connections": "WhatsApp connections",
+    "WeCom": "WeCom",
+    "WeComNotice": "Waiting for the company to enable WeCom and conversation archiving. Once available, each person can link their own account and only see their own conversations.",
+    "ConnectionUnknown": "Not verified"
   }
 }

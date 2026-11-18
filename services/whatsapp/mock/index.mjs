@@ -64,8 +64,8 @@ const secret = process.env.WHATSAPP_APP_SECRET
 if (!secret) throw new Error('请先按 README 配置 dev/.env.whatsapp.local')
 const phoneNumberId = String(options['phone-number-id'] ?? '100001')
 
-function payload (value) {
-  return { object: 'whatsapp_business_account', entry: [{ id: String(options['waba-id'] ?? '200001'), changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, ...value } }] }] }
+function payload (value, numberId = phoneNumberId) {
+  return { object: 'whatsapp_business_account', entry: [{ id: String(options['waba-id'] ?? '200001'), changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: numberId }, ...value } }] }] }
 }
 async function push (data, badSignature = false) {
   const body = JSON.stringify(data)
@@ -134,6 +134,10 @@ async function main () {
       if (req.headers.authorization !== 'Bearer ' + expectedToken || errorMode === 'token') {
         json(res, 401, { error: { code: 190, message: '模拟令牌无效' } }); return
       }
+      const numberMatch = url.pathname.match(/\/(\d+)(?:\/messages)?$/)
+      if (numberMatch !== null && req.method === 'GET') {
+        json(res, 200, { display_phone_number: '+' + numberMatch[1] }); return
+      }
       if (url.pathname.endsWith('/message_templates') && req.method === 'GET') {
         json(res, 200, { data: TEMPLATES }); return
       }
@@ -152,11 +156,11 @@ async function main () {
           if (expected !== given) { json(res, 400, { error: { code: 132000, message: '模拟模板变量数量不对' } }); return }
         }
         const id = 'wamid.mock.' + randomUUID()
-        received.push({ id, to: request.to, type: request.type, text: request.text?.body, template: request.template, receivedOn: new Date().toISOString() })
+        received.push({ id, phoneNumberId: numberMatch?.[1], to: request.to, type: request.type, text: request.text?.body, template: request.template, receivedOn: new Date().toISOString() })
         if (received.length > 1000) received.shift()
         json(res, 200, { messaging_product: 'whatsapp', messages: [{ id }] })
         for (const [index, status] of ['delivered', 'read'].entries()) {
-          setTimeout(() => { void push(payload({ statuses: [{ id, status, recipient_id: request.to, timestamp: String(Math.floor(Date.now() / 1000)) }] })).catch(() => console.error('本地消息状态推送失败')) }, (index + 1) * 1500)
+          setTimeout(() => { void push(payload({ statuses: [{ id, status, recipient_id: request.to, timestamp: String(Math.floor(Date.now() / 1000)) }] }, numberMatch?.[1])).catch(() => console.error('本地消息状态推送失败')) }, (index + 1) * 1500)
         }
         console.log('模拟接口已接收发送请求，消息编号 ' + id)
         return

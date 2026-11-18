@@ -79,6 +79,13 @@ export class WorkspaceReceiver {
   async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<void> {
     const id = stableId<WhatsappMessage>('message', message.phoneNumberId, message.wamid)
     if ((await client.findOne(whatsapp.class.Message, { _id: id })) !== undefined) return
+    const owner = await this.account.findPersonBySocialId(integration.socialId, true) as AccountUuid | undefined
+    if (owner === undefined) throw new Error('Missing integration owner')
+    const employee = await client.findOne(contact.mixin.Employee, { personUuid: owner, active: true })
+    const personalSpace = employee === undefined ? undefined : await client.findOne(contact.class.PersonSpace, { person: employee._id })
+    if (personalSpace === undefined || !personalSpace.private || !personalSpace.members.includes(owner)) {
+      throw new Error('Missing private integration space')
+    }
     const ops = client.apply('whatsapp-incoming')
     ops.notMatch(whatsapp.class.Message, { _id: id })
     let channel = await client.findOne(contact.class.Channel, {
@@ -150,11 +157,12 @@ export class WorkspaceReceiver {
     }
     await ops.addCollection(
       whatsapp.class.Message,
-      channel.space,
+      personalSpace._id,
       channel._id,
       channel._class,
       'items',
       {
+        owner,
         content: message.content,
         direction: 'incoming',
         status: 'received',
@@ -165,8 +173,7 @@ export class WorkspaceReceiver {
       },
       id
     )
-    if ((channel.lastMessage ?? 0) < message.timestamp) await ops.update(channel, { lastMessage: message.timestamp })
-    await this.addNotifications(client, ops, integration, customer, channel, message, id)
+    await this.addNotifications(client, ops, owner, customer, channel, message, id)
     const result = await ops.commit()
     if (!result.result && (await client.findOne(whatsapp.class.Message, { _id: id })) === undefined) {
       throw new Error('Message transaction was not committed')
@@ -176,16 +183,13 @@ export class WorkspaceReceiver {
   private async addNotifications (
     client: TxOperations,
     ops: ApplyOperations,
-    integration: Integration,
+    owner: AccountUuid,
     customer: Contact,
     channel: Channel,
     message: IncomingMessage,
     messageId: Ref<WhatsappMessage>
   ): Promise<void> {
-    const owner = await this.account.findPersonBySocialId(integration.socialId, true)
-    const collaborators = await client.findAll(core.class.Collaborator, { attachedTo: customer._id })
-    const recipients = new Set<AccountUuid>(collaborators.map((entry) => entry.collaborator))
-    if (owner !== undefined) recipients.add(owner as AccountUuid)
+    const recipients = [owner]
     const providerSettings = await client.findAll(notification.class.NotificationProviderSetting, {
       attachedTo: notification.providers.InboxNotificationProvider
     })

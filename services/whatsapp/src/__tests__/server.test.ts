@@ -30,7 +30,7 @@ let server: Server
 let base: string
 const getLogin = jest.fn()
 const inbox = { enqueue: jest.fn().mockResolvedValue(undefined) }
-const store = { get: jest.fn(), connect: jest.fn(), disconnect: jest.fn(), accessToken: jest.fn() }
+const store = { list: jest.fn(), get: jest.fn(), connect: jest.fn(), disconnect: jest.fn().mockResolvedValue(undefined), accessToken: jest.fn() }
 const graphRequest = jest.fn()
 const config: Config = {
   port: 0,
@@ -72,11 +72,11 @@ beforeEach(() => {
   })
 })
 
-it('provides health, rejects missing credentials and rejects ordinary members', async () => {
+it('provides health, rejects missing credentials and allows ordinary members to bind', async () => {
   expect((await fetch(base + '/health')).status).toBe(200)
   expect((await fetch(base + '/api/key')).status).toBe(401)
   getLogin.mockResolvedValue({ workspace: 'ws', account: 'owner', role: AccountRole.User })
-  expect((await fetch(base + '/api/key', { headers: { Authorization: 'Bearer local-test' } })).status).toBe(403)
+  expect((await fetch(base + '/api/key', { headers: { Authorization: 'Bearer local-test' } })).status).toBe(200)
   expect(store.get).not.toHaveBeenCalled()
 })
 
@@ -163,15 +163,16 @@ it('returns 503 if durable queue persistence fails so delivery can retry', async
   ).toBe(503)
 })
 
-it('lets members read non-secret connection settings for replies while restricting configuration changes', async () => {
+it('lets members read non-secret connection settings for replies and manage their own connection', async () => {
   getLogin.mockResolvedValue({ workspace: 'ws', account: 'member', role: AccountRole.User })
   store.get.mockResolvedValue({ data: { phoneNumberId: '100001', wabaId: '200001', accessToken: 'hidden' } })
   const headers = { Authorization: 'Bearer local-test', 'Content-Type': 'application/json' }
   const state = await fetch(base + '/api/connection', { headers })
   expect(state.status).toBe(200)
   expect(await state.text()).not.toContain('hidden')
-  expect((await fetch(base + '/api/connection', { headers, method: 'DELETE' })).status).toBe(403)
-  expect(store.disconnect).not.toHaveBeenCalled()
+  expect((await fetch(base + '/api/connection', { headers, method: 'DELETE' })).status).toBe(200)
+  expect(store.disconnect).toHaveBeenCalledWith('ws', 'social')
+  expect((await fetch(base + '/api/connections', { headers })).status).toBe(403)
 })
 
 it('lists only sendable approved templates with the server-side token', async () => {
@@ -240,4 +241,16 @@ it('reports template errors with fixed text and refuses when not connected', asy
   expect(JSON.parse(body)).toMatchObject({ code: 'TemplatesFailed', errorCode: '190' })
   store.get.mockResolvedValue(undefined)
   expect((await fetch(base + '/api/templates', { headers: { Authorization: 'Bearer local-test' } })).status).toBe(409)
+})
+
+it('returns only safe connection summaries to the workspace owner', async () => {
+  store.list.mockResolvedValue([
+    { workspaceUuid: 'ws', socialId: 'person-a', data: { phoneNumberId: '123', connectedOn: 42, token: 'hidden', content: 'private' } },
+    { workspaceUuid: 'other', socialId: 'person-b', data: { phoneNumberId: '456' } }
+  ])
+  store.accessToken.mockResolvedValue('never-return')
+  graphRequest.mockResolvedValue({ ok: true, json: async () => ({ display_phone_number: '+123' }) })
+  const res = await fetch(base + '/api/connections', { headers: { Authorization: 'Bearer local-test' } })
+  expect(res.status).toBe(200)
+  expect(await res.json()).toEqual([{ person: 'person-a', phoneNumberId: '123', connectedOn: 42, status: 'valid', displayPhone: '+123' }])
 })

@@ -18,9 +18,11 @@ import Connect from './components/Connect.svelte'
 import State from './components/State.svelte'
 import Icon from './components/Icon.svelte'
 import Chat from './components/Chat.svelte'
+import Connections from './components/Connections.svelte'
+import WeComNotice from './components/WeComNotice.svelte'
 import { disconnect } from './api'
 
 export default async (): Promise<Resources> => ({
-  component: { Connect, State, Icon, Chat },
+  component: { Connect, State, Icon, Chat, Connections, WeComNotice },
   handler: { Disconnect: disconnect }
 })

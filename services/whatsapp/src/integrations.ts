@@ -32,7 +32,7 @@ export function validIds (value: ConnectionIds): boolean {
 }
 
 // One service process owns connection writes. Serializing them prevents two administrators
-// from connecting different numbers to the same workspace at the same time.
+// from reserving the same provider number at the same time.
 export class ConnectionStore {
   private pending: Promise<unknown> = Promise.resolve()
   constructor (private readonly account: AccountClient) {}
@@ -52,9 +52,9 @@ export class ConnectionStore {
     return matches[0]
   }
 
-  async get (workspaceUuid: WorkspaceUuid): Promise<Integration | undefined> {
+  async get (workspaceUuid: WorkspaceUuid, socialId: PersonId): Promise<Integration | undefined> {
     const entries = await this.account.listIntegrations({ kind: whatsappIntegrationKind, workspaceUuid })
-    return entries[0]
+    return entries.find((entry) => entry.socialId === socialId)
   }
 
   async list (): Promise<Integration[]> {
@@ -70,14 +70,15 @@ export class ConnectionStore {
     workspaceUuid: WorkspaceUuid,
     socialId: PersonId,
     ids: ConnectionIds,
-    token?: string
+    token?: string,
+    displayPhone?: string
   ): Promise<Integration> {
     return await this.serialize(async () => {
       const entries = await this.account.listIntegrations({ kind: whatsappIntegrationKind })
-      const existing = entries.find((entry) => entry.workspaceUuid === workspaceUuid)
+      const existing = entries.find((entry) => entry.workspaceUuid === workspaceUuid && entry.socialId === socialId)
       if (
         entries.some(
-          (entry) => entry.workspaceUuid !== workspaceUuid && entry.data?.phoneNumberId === ids.phoneNumberId
+          (entry) => entry !== existing && entry.data?.phoneNumberId === ids.phoneNumberId
         ) ||
         (existing !== undefined &&
           (existing.socialId !== socialId ||
@@ -93,7 +94,7 @@ export class ConnectionStore {
         return existing
       }
       if (token === undefined) throw new Error('TOKEN_REQUIRED')
-      const integration: Integration = { socialId, kind: whatsappIntegrationKind, workspaceUuid, data: { ...ids } }
+      const integration: Integration = { socialId, kind: whatsappIntegrationKind, workspaceUuid, data: { ...ids, connectedOn: Date.now(), ...(displayPhone !== undefined ? { displayPhone } : {}) } }
       await this.account.createIntegration(integration)
       try {
         await this.account.addIntegrationSecret({ ...this.key(integration), key: 'access-token', secret: token })
@@ -106,9 +107,9 @@ export class ConnectionStore {
     })
   }
 
-  async disconnect (workspaceUuid: WorkspaceUuid): Promise<void> {
+  async disconnect (workspaceUuid: WorkspaceUuid, socialId: PersonId): Promise<void> {
     await this.serialize(async () => {
-      const existing = await this.get(workspaceUuid)
+      const existing = await this.get(workspaceUuid, socialId)
       if (existing !== undefined) await this.account.deleteIntegration(this.key(existing))
     })
   }

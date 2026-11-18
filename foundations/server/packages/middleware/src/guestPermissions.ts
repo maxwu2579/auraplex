@@ -12,6 +12,7 @@ import core, {
   type ClassPermission,
   type Permission,
   hasAccountRole,
+  systemAccountUuid,
   type MeasureContext,
   type PersonId,
   type Ref,
@@ -123,6 +124,25 @@ export class GuestPermissionsMiddleware extends BaseMiddleware implements Middle
 
   async tx (ctx: MeasureContext<SessionData>, txes: Tx[]): Promise<TxMiddlewareResult> {
     const account = ctx.contextData.account
+    if (account.uuid !== systemAccountUuid) {
+      const checkWhatsapp = async (tx: Tx): Promise<void> => {
+        if (tx._class === core.class.TxApplyIf) {
+          for (const child of (tx as TxApplyIf).txes) await checkWhatsapp(child)
+          return
+        }
+        const message = tx as TxCreateDoc<Doc & { owner: string, direction: string, status: string }>
+        if (message.objectClass !== 'whatsapp:class:Message') return
+        if (tx._class === core.class.TxCreateDoc && message.attributes.owner === account.uuid &&
+          message.attributes.direction === 'outgoing' && message.attributes.status === 'pending' &&
+          account.socialIds.includes(tx.modifiedBy) && account.socialIds.includes(tx.createdBy ?? tx.modifiedBy)) {
+          const space = (await this.findAll(ctx, contact.class.PersonSpace, { _id: message.objectSpace as never }))[0]
+          const employee = (await this.findAll(ctx, contact.mixin.Employee, { personUuid: account.uuid, active: true }))[0]
+          if (employee !== undefined && space?.person === employee._id && space.private && space.members.includes(account.uuid)) return
+        }
+        throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+      }
+      for (const tx of txes) await checkWhatsapp(tx)
+    }
     const deniesProspectRemoval = (tx: Tx): boolean => {
       if (tx._class === core.class.TxApplyIf) return (tx as TxApplyIf).txes.some(deniesProspectRemoval)
       return (

@@ -140,6 +140,27 @@ export function toSendableTemplate (raw: any): WhatsappTemplate | undefined {
   return { name: raw.name, language: raw.language, body, parameterCount }
 }
 
+export async function getPhoneStatus (
+  config: Pick<Config, 'graphUrl' | 'graphVersion'>,
+  token: string | undefined,
+  phoneNumberId: unknown,
+  request: typeof fetch
+): Promise<{ status: 'valid' | 'invalid' | 'unknown', displayPhone?: string }> {
+  if (token === undefined || typeof phoneNumberId !== 'string' || !/^\d+$/.test(phoneNumberId)) return { status: 'invalid' }
+  try {
+    const res = await request(graphBase(config) + '/' + phoneNumberId + '?fields=display_phone_number', {
+      headers: { Authorization: 'Bearer ' + token },
+      signal: AbortSignal.timeout(5000),
+      redirect: 'error'
+    })
+    const data = await res.json()
+    if (res.ok) return { status: 'valid', displayPhone: typeof data.display_phone_number === 'string' ? data.display_phone_number : undefined }
+    return { status: String(data.error?.code) === '190' ? 'invalid' : 'unknown' }
+  } catch {
+    return { status: 'unknown' }
+  }
+}
+
 export async function listTemplates (
   config: Pick<Config, 'graphUrl' | 'graphVersion'>,
   token: string,

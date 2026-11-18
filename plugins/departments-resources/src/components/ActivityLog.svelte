@@ -76,6 +76,7 @@
   // Bookkeeping that is not someone's work: notifications, read marks, presence, our own records.
   const noise = [
     'notification:',
+    'whatsapp:class:Message',
     'activity:',
     'preference:',
     'workbench:',

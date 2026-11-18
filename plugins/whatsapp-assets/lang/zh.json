@@ -14,10 +14,10 @@
     "Connected": "已连接",
     "LocalMode": "本地模拟器",
     "TokenStored": "令牌已保存在服务器",
-    "Unavailable": "连接不到后台服务，请稍后再试。",
+    "Unavailable": "未配置，请联系管理员。",
     "InvalidParameters": "请填写纯数字的账户编号和访问令牌。",
     "Forbidden": "只有工作区所有者或管理员可以管理这个连接。",
-    "Conflict": "这个工作区或号码已经连接，请先断开原连接。",
+    "Conflict": "这个号码已经被别人绑定，或你需要先解绑原号码。",
     "Failed": "保存连接失败，请稍后再试。",
     "Message": "WhatsApp 消息",
     "Content": "内容",
@@ -40,7 +40,7 @@
     "Read": "已读",
     "SendFailed": "发送失败",
     "SaveMessageFailed": "消息保存失败，输入内容已保留，请重试。",
-    "ConnectionRequired": "请先到设置 → 集成连接 WhatsApp Business，再回复。",
+    "ConnectionRequired": "你还没有绑定 WhatsApp，到设置 → 集成里绑定自己的 WhatsApp Business 号。",
     "WindowClosed": "客户最后一条消息已超过 24 小时，WhatsApp 现在只允许发送已审核的模板消息。客户回复后，就可以正常打字回复。",
     "NeverWrote": "这个客户还没有给你发过消息，WhatsApp 只允许先发送一条已审核的模板消息。",
     "Template": "模板",
@@ -50,6 +50,10 @@
     "NoTemplates": "还没有已审核的模板。请先在 Meta 的 WhatsApp 管理工具里建模板，等审核通过。",
     "TemplatesFailed": "读取模板失败，请稍后再试。",
     "LoadingTemplates": "正在读取模板…",
-    "InvalidTemplateParameter": "请填写每个变量。变量里不能有换行、制表符，也不能有连续 4 个以上的空格。"
+    "InvalidTemplateParameter": "请填写每个变量。变量里不能有换行、制表符，也不能有连续 4 个以上的空格。",
+    "Connections": "WhatsApp 连接",
+    "WeCom": "企业微信",
+    "WeComNotice": "企业微信等待公司开通。开通企业微信和“会话存档”后，每个人可以绑定自己的企业微信账号，聊天内容只有本人能看。",
+    "ConnectionUnknown": "尚未验证"
   }
 }

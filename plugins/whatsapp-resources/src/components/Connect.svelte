@@ -74,7 +74,7 @@
       inputmode="numeric"
       pattern="[0-9]+"
       required
-      disabled={busy || connected}
+      disabled={busy || error === whatsapp.string.Unavailable || connected}
     />
   </label>
   <label>
@@ -85,7 +85,7 @@
       inputmode="numeric"
       pattern="[0-9]+"
       required
-      disabled={busy || connected}
+      disabled={busy || error === whatsapp.string.Unavailable || connected}
     />
   </label>
   <label>
@@ -114,7 +114,7 @@
       label={connected ? whatsapp.string.Save : whatsapp.string.Connect}
       kind="primary"
       loading={busy}
-      disabled={busy ||
+      disabled={busy || error === whatsapp.string.Unavailable ||
         !/^[0-9]+$/.test(phoneNumberId) ||
         !/^[0-9]+$/.test(wabaId) ||
         (!connected && token.trim() === '')}

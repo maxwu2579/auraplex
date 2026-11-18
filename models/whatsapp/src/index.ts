@@ -13,8 +13,8 @@
 // limitations under the License.
 //
 
-import { type Domain, IndexKind } from '@hcengineering/core'
-import { type Builder, Model, Prop, TypeString, TypeTimestamp, Index } from '@hcengineering/model'
+import { AccountRole, type Domain, IndexKind } from '@hcengineering/core'
+import { type Builder, Model, Prop, TypeAccountUuid, TypeString, TypeTimestamp, Index } from '@hcengineering/model'
 import core, { TAttachedDoc } from '@hcengineering/model-core'
 import setting from '@hcengineering/setting'
 import contact from '@hcengineering/contact'
@@ -27,6 +27,8 @@ export const DOMAIN_WHATSAPP = 'whatsapp' as Domain
 
 @Model(whatsapp.class.Message, core.class.AttachedDoc, DOMAIN_WHATSAPP)
 export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
+  @Prop(TypeAccountUuid(), whatsapp.string.Messages)
+    owner?: WhatsappMessage['owner']
   @Prop(TypeString(), whatsapp.string.Content)
     content!: string
 
@@ -59,6 +61,23 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
 
 export function createModel (builder: Builder): void {
   builder.createModel(TWhatsappMessage)
+  builder.createDoc(setting.class.SettingsCategory, core.space.Model, {
+    name: 'whatsapp-connections',
+    label: whatsapp.string.Connections,
+    icon: contact.icon.Whatsapp,
+    component: whatsapp.component.Connections,
+    group: 'settings-editor',
+    role: AccountRole.Owner,
+    order: 6100
+  }, whatsapp.ids.Connections)
+  builder.createDoc(setting.class.IntegrationType, core.space.Model, {
+    label: whatsapp.string.WeCom,
+    description: whatsapp.string.WeComNotice,
+    icon: whatsapp.component.Icon,
+    allowMultiple: false,
+    kind: 'wecom-preview' as import('@hcengineering/core').IntegrationKind,
+    createComponent: whatsapp.component.WeComNotice
+  }, whatsapp.integrationType.WeCom)
   builder.createDoc(
     contact.class.ChannelProvider,
     core.space.Model,

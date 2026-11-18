@@ -42,7 +42,9 @@ function fixture (): {
     _id: 'msg',
     _class: whatsapp.class.Message,
     attachedTo: 'channel',
-    space: 'contacts',
+    space: 'owner-space',
+    owner: 'owner',
+    createdBy: 'owner-social',
     content: '你好，产品有货',
     direction: 'outgoing',
     status: 'pending',
@@ -56,7 +58,11 @@ function fixture (): {
     provider: contact.channelProvider.Whatsapp,
     space: 'contacts'
   }
-  const records = [message, channel]
+  const records = [message, channel,
+    { _id: 'owner-person', _class: contact.mixin.Employee, personUuid: 'owner', active: true },
+    { _id: 'owner-space', _class: contact.class.PersonSpace, person: 'owner-person', private: true, members: ['owner'] },
+    { _id: 'owner-social', _class: contact.class.SocialIdentity, attachedTo: 'owner-person' }
+  ]
   const client: any = {
     findAll: async (cls: string, query: object) =>
       records.filter(
@@ -87,7 +93,7 @@ function fixture (): {
     }
   }
   const store: any = {
-    get: async () => ({ data: { phoneNumberId: '100001' } }),
+    get: jest.fn(async (_workspace: string, person: string) => person === 'owner-social' ? { data: { phoneNumberId: '100001' } } : undefined),
     accessToken: async () => 'test-secret',
     list: async () => [{ workspaceUuid: 'workspace' }]
   }
@@ -256,4 +262,11 @@ it('maps template errors to Chinese hints', async () => {
   await f.sender.handle(workspace, f.message._id)
   expect(f.message).toMatchObject({ status: 'failed', errorCode: '132000' })
   expect(f.message.errorMessage).toContain('模板变量')
+})
+
+it('looks up the authenticated message author’s personal binding', async () => {
+  const f = fixture()
+  await f.sender.handle(workspace, f.message._id)
+  expect(f.store.get).toHaveBeenCalledWith(workspace, 'owner-social')
+  expect(f.request).toHaveBeenCalledTimes(1)
 })

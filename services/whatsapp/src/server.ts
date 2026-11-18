@@ -20,7 +20,7 @@ import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
-import { SendError, listTemplates } from './graph'
+import { SendError, getPhoneStatus, listTemplates } from './graph'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
 export function createApp (
@@ -113,11 +113,7 @@ export function createApp (
         return
       }
       // Members who reply may read the (secret-free) connection and the template list.
-      const readConnection =
-        req.method === 'GET' &&
-        (req.path === '/connection' || req.path === '/templates') &&
-        login.role === AccountRole.User
-      if (!readConnection && ![AccountRole.Owner, AccountRole.Admin, AccountRole.Maintainer].includes(login.role)) {
+      if (![AccountRole.User, AccountRole.Owner, AccountRole.Admin, AccountRole.Maintainer].includes(login.role)) {
         res.status(403).json({ code: 'Forbidden' })
         return
       }
@@ -127,6 +123,7 @@ export function createApp (
         res.sendStatus(403)
         return
       }
+      res.locals.role = login.role
       res.locals.workspace = login.workspace
       res.locals.socialId = social._id
       res.locals.owner = login.workspace + ':' + login.account
@@ -141,7 +138,7 @@ export function createApp (
   })
   app.get('/api/connection', (_req, res) => {
     void store
-      .get(res.locals.workspace)
+      .get(res.locals.workspace, res.locals.socialId)
       .then((integration) => {
         // Return a whitelist of non-secret fields only.
         res.json({
@@ -157,9 +154,25 @@ export function createApp (
         res.status(503).json({ code: 'Unavailable' })
       })
   })
+  app.get('/api/connections', (_req, res) => {
+    if (res.locals.role !== AccountRole.Owner) {
+      res.status(403).json({ code: 'Forbidden' })
+      return
+    }
+    void store.list().then(async (entries) => {
+      const summaries = await Promise.all(entries.filter((entry) => entry.workspaceUuid === res.locals.workspace).map(async (entry) => ({
+        person: entry.socialId,
+        phoneNumberId: entry.data?.phoneNumberId,
+        connectedOn: entry.data?.connectedOn,
+        displayPhone: entry.data?.displayPhone,
+        ...await getPhoneStatus(config, await store.accessToken(entry), entry.data?.phoneNumberId, request)
+      })))
+      res.json(summaries)
+    }).catch(() => { res.status(503).json({ code: 'Unavailable' }) })
+  })
   app.get('/api/templates', (_req, res) => {
     void (async () => {
-      const integration = await store.get(res.locals.workspace)
+      const integration = await store.get(res.locals.workspace, res.locals.socialId)
       const wabaId = integration?.data?.wabaId
       if (integration === undefined || typeof wabaId !== 'string' || !/^\d+$/.test(wabaId)) {
         res.status(409).json({ code: 'NotConnected' })
@@ -201,7 +214,8 @@ export function createApp (
           res.locals.workspace,
           res.locals.socialId,
           { phoneNumberId: req.body.phoneNumberId, wabaId: req.body.wabaId },
-          token
+          token,
+          (await getPhoneStatus(config, token, req.body.phoneNumberId, request)).displayPhone
         )
         res.json({ connected: true, phoneNumberId: integration.data?.phoneNumberId, wabaId: integration.data?.wabaId })
       } catch (err) {
@@ -215,7 +229,7 @@ export function createApp (
   })
   app.delete('/api/connection', (_req, res) => {
     void store
-      .disconnect(res.locals.workspace)
+      .disconnect(res.locals.workspace, res.locals.socialId)
       .then(() => {
         res.json({ connected: false })
       })

@@ -47,12 +47,14 @@ async function request<T> (path: string, method = 'GET', body?: object): Promise
         'Content-Type': 'application/json'
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000)
     })
   } catch {
     throw new ConnectionError(whatsapp.string.Unavailable)
   }
-  const result = await response.json()
+  if (response.status === 503) throw new ConnectionError(whatsapp.string.Unavailable)
+  const result = await response.json().catch(() => { throw new ConnectionError(whatsapp.string.Unavailable) })
   if (!response.ok) {
     const labels: Record<string, IntlString> = {
       Forbidden: whatsapp.string.Forbidden,
@@ -64,6 +66,17 @@ async function request<T> (path: string, method = 'GET', body?: object): Promise
     throw new ConnectionError(labels[result.code] ?? whatsapp.string.Failed)
   }
   return result as T
+}
+
+export interface ConnectionSummary {
+  person: string
+  phoneNumberId?: string
+  displayPhone?: string
+  connectedOn?: number
+  status: 'valid' | 'invalid' | 'unknown'
+}
+export async function getConnections (): Promise<ConnectionSummary[]> {
+  return await request<ConnectionSummary[]>('connections')
 }
 
 export async function getConnection (): Promise<ConnectionState> {
