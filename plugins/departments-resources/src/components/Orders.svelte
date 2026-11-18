@@ -92,6 +92,8 @@
 
   $: role = stage === undefined ? undefined : roleOf(stage.department, me.uuid)
   $: lead = owner || role === 'admin' || role === 'supervisor'
+  $: canApprove = stage?.status === 'approval' && (owner ||
+    (stage.approval?.by === 'person' ? stage.approval.person === me.uuid : role === 'admin'))
   $: inCharge = stage?.assignee === me.uuid
   $: canWork = lead || inCharge || (role !== undefined && role !== 'reader')
   $: active = selected?.state === 'active'
@@ -115,7 +117,9 @@
     escalate: '上报主管',
     return: '退回',
     insert: '插入一段',
-    reorder: '调整顺序'
+    reorder: '调整顺序',
+    approve: '批准',
+    reject: '拒绝'
   }
 
   function open (it: Order): void {
@@ -168,7 +172,7 @@
       })
       // The server checks who may do this; a refusal must show as an error, not as success.
       if (!(await ops.commit()).result) throw new Error('refused')
-      if (kind !== 'step') notice = `已${kindText[kind]}。`
+      if (kind !== 'step') notice = kind === 'complete' && stage.approval ? '已提交审批。' : `已${kindText[kind]}。`
       reason = ''
       returnTarget = ''
       returnPerson = ''
@@ -300,7 +304,16 @@
                 </select>
               {:else}<span>{name(inspected.assignee)}</span>{/if}
             </label>
-            {#if stage !== undefined && inspected.id === stage.id}
+            {#if stage !== undefined && inspected.id === stage.id && stage.status === 'approval'}
+              <p>等待审批</p>
+              {#if canApprove}
+                <div class="row">
+                  <button disabled={busy} on:click={() => act('approve')}>批准</button>
+                  <input placeholder="拒绝原因" bind:value={reason} maxlength="500" />
+                  <button disabled={busy || reason.trim() === ''} on:click={() => act('reject', { reason })}>拒绝</button>
+                </div>
+              {/if}
+            {:else if stage !== undefined && inspected.id === stage.id && stage.status === 'active'}
             {#if stage.steps.length > 0}
               <div class="steps">
                 {#each stage.steps as step, i (i)}
@@ -316,7 +329,7 @@
               </div>
             {/if}
             <div class="row">
-              <button disabled={busy || !(lead || inCharge)} on:click={() => act('complete')}>本段完成 → 交给下一段</button>
+              <button disabled={busy || !(lead || inCharge)} on:click={() => act('complete')}>{stage.approval ? '本段完成 → 提交审批' : '本段完成 → 交给下一段'}</button>
             </div>
             <div class="row">
               <input placeholder="遇到问题？写下原因" bind:value={reason} maxlength="500" />
@@ -365,7 +378,7 @@
           {#each actions.filter((a) => a.kind !== 'step') as a (a._id)}
             <li>
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
-              {name(a.actor)}：{kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
+              {name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? '提交审批' : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
                 ? ` → ${selected.stages.find((s) => s.id === a.target)?.name ?? ''}`
                 : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>

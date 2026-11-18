@@ -99,7 +99,11 @@
     step: '勾选步骤',
     complete: '本段完成',
     escalate: '上报主管',
-    return: '退回'
+    return: '退回',
+    insert: '插入一段',
+    reorder: '调整顺序',
+    approve: '批准',
+    reject: '拒绝'
   }
   /** Plain text of a rich-text message (comments are stored as a document tree). */
   function plainText (markup: string): string {

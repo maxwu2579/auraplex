@@ -7,6 +7,7 @@ export interface OrderStageLike {
   department?: string
   status: string
   assignee?: string
+  approval?: { by: string, person?: string }
   steps: Array<{ name: string, done: boolean }>
 }
 export interface OrderLike {
@@ -77,6 +78,11 @@ export function canOrderAction (
     const ids = action.stageOrder
     return Array.isArray(ids) && ids.length === waiting.length && new Set(ids).size === ids.length &&
       waiting.every((item) => item.status === 'waiting' && ids.includes(item.id))
+  }
+  if (action.kind === 'approve' || action.kind === 'reject') {
+    if (stage.status !== 'approval' || stage.approval === undefined) return false
+    const approver = stage.approval.by === 'person' ? stage.approval.person === actor : role === 'admin'
+    return (owner || approver) && (action.kind !== 'reject' || hasText(action.reason))
   }
   if (stage.status !== 'active') return false
   const inCharge = stage.assignee === actor

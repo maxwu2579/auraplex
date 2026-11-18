@@ -54,6 +54,8 @@ export interface OrderStage {
   approval?: OrderApproval
   startedOn?: number
   doneOn?: number
+  todo?: Ref<Doc>
+  remindedOn?: number
 }
 
 /** A customer order moving through the stages. Only the system changes stages (via OrderAction). */
@@ -68,7 +70,7 @@ export interface Order extends Doc {
   state: 'active' | 'done'
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {

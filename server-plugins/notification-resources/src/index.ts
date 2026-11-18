@@ -1808,6 +1808,73 @@ async function notifyOrder (
   }
 }
 
+const orderTodoClass = 'time:class:ToDo' as Ref<Class<Doc>>
+const orderTodoSpace = 'time:space:ToDos' as Ref<Space>
+
+async function syncOrderTodo (
+  control: TriggerControl, results: Tx[], order: Order, stage: OrderStage, now: number
+): Promise<void> {
+  if (stage.todo !== undefined && stage.status !== 'active') {
+    results.push(control.txFactory.createTxUpdateDoc(orderTodoClass, orderTodoSpace, stage.todo, { doneOn: now } as any))
+    delete stage.todo
+    return
+  }
+  if (stage.status !== 'active' || stage.assignee === undefined) return
+  const [employee] = await control.findAll(control.ctx, contact.mixin.Employee,
+    { personUuid: stage.assignee, active: true }, { limit: 1 })
+  if (employee === undefined) return
+  if (stage.todo !== undefined) {
+    const [todo] = await control.findAll(control.ctx, orderTodoClass, { _id: stage.todo }, { limit: 1 })
+    if (todo !== undefined) {
+      results.push(control.txFactory.createTxUpdateDoc(orderTodoClass, orderTodoSpace, stage.todo, {
+        user: employee._id, doneOn: null
+      } as any))
+      return
+    }
+  }
+  stage.todo = generateId()
+  results.push(control.txFactory.createTxCreateDoc(orderTodoClass, orderTodoSpace, {
+    attachedTo: order._id,
+    attachedToClass: order._class,
+    attachedSpace: order.space,
+    collection: 'todos',
+    user: employee._id,
+    title: `${order.number} ${order.title}：${stage.name}`,
+    description: '',
+    workslots: 0,
+    priority: 3,
+    visibility: 'private',
+    doneOn: null,
+    rank: '0|hzzzzz:'
+  } as any, stage.todo))
+}
+
+async function checkOverdueOrders (control: TriggerControl, tx: TxCUD<Doc>, exclude?: Ref<Order>): Promise<Tx[]> {
+  const results: Tx[] = []
+  const orders = await control.findAll(control.ctx, departments.class.Order, { state: 'active' })
+  for (const order of orders) {
+    if (order._id === exclude) continue
+    const stages = order.stages.map((item) => ({ ...item }))
+    if (!(await markOrderOverdue(control, results, tx, order, stages[order.current]))) continue
+    results.push(control.txFactory.createTxUpdateDoc(order._class, order.space, order._id, { stages }))
+  }
+  return results
+}
+
+async function markOrderOverdue (
+  control: TriggerControl, results: Tx[], tx: TxCUD<Doc>, order: Order, stage: OrderStage | undefined
+): Promise<boolean> {
+  if (stage?.status !== 'active' || stage.startedOn === undefined || stage.limitDays === undefined ||
+    stage.remindedOn !== undefined || tx.modifiedOn - stage.startedOn <= stage.limitDays * 86400000) return false
+  const leads = await departmentLeads(control, stage.department)
+  if (leads.length === 0) return false
+  const days = Math.floor((tx.modifiedOn - stage.startedOn) / 86400000)
+  await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated,
+    `${order.number} ${order.title}：${stage.name} 已经 ${days} 天还没完成`)
+  stage.remindedOn = tx.modifiedOn
+  return true
+}
+
 async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Promise<Tx[]> {
   const flow = (
     await control.findAll(control.ctx, departments.class.OrderFlow, { _id: departments.ids.OrderFlow }, { limit: 1 })
@@ -1829,7 +1896,11 @@ async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Pro
   const orders = await control.findAll(control.ctx, departments.class.Order, {}, { projection: { number: 1 } })
   const highest = orders.reduce((max, it) => Math.max(max, Number(/(\d+)$/.exec(it.number ?? '')?.[1] ?? 0)), 0)
   const number = `ORD-${String(highest + 1).padStart(4, '0')}`
+  const results: Tx[] = []
+  const order = { ...TxProcessor.createDoc2Doc(tx), number }
+  if (stages[0] !== undefined) await syncOrderTodo(control, results, order, stages[0], now)
   return [
+    ...results,
     control.txFactory.createTxUpdateDoc(departments.class.Order, tx.objectSpace, tx.objectId, {
       stages,
       number,
@@ -1865,13 +1936,34 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       if (step !== undefined) step.done = !step.done
       break
     }
+    case 'reject':
+      if (stage.status !== 'approval') return []
+      stage.status = 'active'
+      if (stage.assignee !== undefined) {
+        await notifyOrder(control, results, tx, order, [stage.assignee], departments.string.OrderReturned,
+          title + '\n' + stage.name + ' 审批未通过' + reason)
+      }
+      break
+    case 'approve':
     case 'complete': {
+      if (action.kind === 'complete' && stage.approval !== undefined) {
+        stage.status = 'approval'
+        const [department] = stage.department === undefined ? [] :
+          await control.findAll(control.ctx, hr.class.Department, { _id: stage.department }, { limit: 1 })
+        const admins = department === undefined ? [] :
+          control.hierarchy.asIf(department, departments.mixin.DepartmentAccess)?.administrators ?? []
+        const people = stage.approval.by === 'person' ? [stage.approval.person] : admins
+        await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
+          title + '\n' + stage.name + ' 等待审批')
+        break
+      }
       stage.status = 'done'
       stage.doneOn = now
       const next = stages[index + 1]
       if (next !== undefined) {
         next.status = 'active'
         next.startedOn = now
+        delete next.remindedOn
         current = index + 1
         const leads = await departmentLeads(control, next.department)
         const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
@@ -1898,6 +1990,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       const back = stages[target]
       back.status = 'active'
       back.startedOn = now
+      delete back.remindedOn
       back.doneOn = undefined
       if (action.assignee !== undefined) back.assignee = action.assignee
       current = target
@@ -1926,6 +2019,14 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       break
     }
   }
+  for (const item of stages) {
+    const before = order.stages.find((original) => original.id === item.id)
+    if (item.status !== before?.status || item.assignee !== before?.assignee) {
+      await syncOrderTodo(control, results, order, item, now)
+    }
+  }
+  await markOrderOverdue(control, results, tx, order, stages[current])
+  results.push(...await checkOverdueOrders(control, tx, order._id))
   results.unshift(
     control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, current, state })
   )
@@ -1969,6 +2070,7 @@ async function workspaceOwners (control: TriggerControl): Promise<AccountUuid[]>
 
 export async function OnAuditLogin (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
   const results: Tx[] = []
+  let checkedOverdue = false
   for (const tx of txes as Array<TxCUD<UserStatus>>) {
     let user: AccountUuid | undefined
     if (tx._class === core.class.TxCreateDoc && (tx as TxCreateDoc<UserStatus>).attributes.online) {
@@ -1977,6 +2079,10 @@ export async function OnAuditLogin (txes: Tx[], control: TriggerControl): Promis
       user = (await control.findAll(control.ctx, core.class.UserStatus, { _id: tx.objectId }, { limit: 1 }))[0]?.user
     }
     if (user === undefined || user === systemAccountUuid) continue
+    if (!checkedOverdue) {
+      results.push(...await checkOverdueOrders(control, tx))
+      checkedOverdue = true
+    }
     const now = tx.modifiedOn
     // Page reloads reconnect often; one record per 30 minutes is enough to see when someone worked.
     const last = (

@@ -99,3 +99,14 @@ test('reorder accepts exactly the waiting suffix and insert checks its position'
   expect(canOrderAction(value, { kind: 'insert', stage, name: '返工', department: 'p', position: value.current }, 'admin', false, roleOf, scope)).toBe(false)
   expect(canOrderAction(value, { kind: 'insert', stage, name: '返工', department: 'p', position: value.stages.length }, 'admin', false, roleOf, scope)).toBe(true)
 })
+
+test('approval and rejection are limited to the selected approver and owner', () => {
+  const value = order()
+  const stage = value.stages[value.current]
+  stage.status = 'approval'
+  Object.assign(stage, { approval: { by: 'person', person: 'li' } })
+  expect(canOrderAction(value, { kind: 'approve', stage: stage.id }, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(value, { kind: 'approve', stage: stage.id }, 'qiang', false, roleOf)).toBe(false)
+  expect(canOrderAction(value, { kind: 'reject', stage: stage.id }, 'boss', true, roleOf)).toBe(false)
+  expect(canOrderAction(value, { kind: 'reject', stage: stage.id, reason: '缺资料' }, 'boss', true, roleOf)).toBe(true)
+})
