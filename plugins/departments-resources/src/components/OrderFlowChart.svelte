@@ -15,12 +15,47 @@
     dropDepartment: { id: string, position: number }
   }>()
   const statuses: Record<string, string> = { done: '完成', active: '进行中', waiting: '等待', approval: '等审批' }
+  let dragging: { kind: 'stage' | 'department', id: string } | undefined
+  let target: number | undefined
+
+  function canDrop (position: number): boolean {
+    const status = cards[position]?.status
+    return editable && position >= firstEditable &&
+      (status === undefined || status === 'waiting') && (dragging?.id !== cards[position]?.id)
+  }
+
+  function beginDrag (event: DragEvent, kind: 'stage' | 'department', id: string, position?: number): void {
+    if (!editable || (position !== undefined && !canDrop(position)) || event.dataTransfer === null) {
+      event.preventDefault()
+      return
+    }
+    dragging = { kind, id }
+    event.dataTransfer.effectAllowed = kind === 'stage' ? 'move' : 'copy'
+    event.dataTransfer.setData('application/x-auraplex-' + kind, id)
+  }
+
+  function finishDrag (): void {
+    dragging = undefined
+    target = undefined
+  }
+
+  function dragOver (event: DragEvent, position: number): void {
+    if (dragging === undefined || !canDrop(position)) {
+      target = undefined
+      return
+    }
+    event.preventDefault()
+    if (event.dataTransfer !== null) event.dataTransfer.dropEffect = dragging.kind === 'stage' ? 'move' : 'copy'
+    target = position
+  }
+
   function drop (event: DragEvent, position: number): void {
-    if (!editable || position < firstEditable) return
-    const stage = event.dataTransfer?.getData('application/x-auraplex-stage')
-    const department = event.dataTransfer?.getData('application/x-auraplex-department')
-    if (stage) dispatch('dropStage', { id: stage, position })
-    else if (department) dispatch('dropDepartment', { id: department, position })
+    if (dragging === undefined || !canDrop(position)) return
+    event.preventDefault()
+    const { kind, id } = dragging
+    finishDrag()
+    if (kind === 'stage') dispatch('dropStage', { id, position })
+    else dispatch('dropDepartment', { id, position })
   }
 </script>
 
@@ -28,7 +63,8 @@
   <div class="palette">
     {#each departments as department (department.id)}
       <button draggable="true"
-        on:dragstart={(event) => event.dataTransfer?.setData('application/x-auraplex-department', department.id)}
+        on:dragstart={(event) => beginDrag(event, 'department', department.id)}
+        on:dragend={finishDrag}
         on:click={() => dispatch('dropDepartment', { id: department.id, position: cards.length })}>{department.name}</button>
     {/each}
   </div>
@@ -36,12 +72,18 @@
 <div class="chart">
   {#each cards as card, index (card.id)}
     {#if index > 0 || editable}
-      <span class="gap" role="presentation" on:dragover|preventDefault
-        on:drop|preventDefault={(event) => drop(event, index)}>{index > 0 ? '→' : '+'}</span>
+      <span class="gap" role="presentation" on:dragover={(event) => dragOver(event, index)}
+        on:drop={(event) => drop(event, index)}>{index > 0 ? '→' : '+'}</span>
     {/if}
     <button class="card {card.status ?? ''}" class:selected={selected === card.id}
       draggable={editable && index >= firstEditable && (card.status === undefined || card.status === 'waiting')}
-      on:dragstart={(event) => event.dataTransfer?.setData('application/x-auraplex-stage', card.id)}
+      class:drop-allowed={dragging !== undefined && canDrop(index)}
+      class:drop-target={target === index}
+      class:drop-blocked={dragging !== undefined && !canDrop(index)}
+      on:dragstart={(event) => beginDrag(event, 'stage', card.id, index)}
+      on:dragend={finishDrag}
+      on:dragover={(event) => dragOver(event, index)}
+      on:drop={(event) => drop(event, index)}
       on:click={() => dispatch('select', card.id)}>
       <strong>{card.name}</strong>
       <span>{card.department}</span>
@@ -55,8 +97,10 @@
     </button>
   {/each}
   {#if editable}
-    <span class="gap" role="presentation" on:dragover|preventDefault
-      on:drop|preventDefault={(event) => drop(event, cards.length)}>＋</span>
+    <span class="gap" role="presentation" class:drop-target={target === cards.length}
+      class:drop-allowed={dragging !== undefined && canDrop(cards.length)}
+      on:dragover={(event) => dragOver(event, cards.length)}
+      on:drop={(event) => drop(event, cards.length)}>＋</span>
   {/if}
 </div>
 
@@ -69,7 +113,7 @@
     border: 2px solid var(--theme-button-border);
     border-radius: 0.5rem;
   }
-  .palette button { padding: 0.5rem 0.75rem; color: var(--theme-caption-color); }
+  .palette button { padding: 0.65rem 1rem; min-height: 2.75rem; min-width: 7rem; cursor: grab; color: var(--theme-caption-color); }
   .card {
     box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start;
     gap: 0.2rem; text-align: start; padding: 0.6rem; width: 10rem; max-width: 100%;
@@ -82,5 +126,9 @@
   .active { border-color: var(--theme-link-color); }
   .approval { border-color: var(--theme-warning-color); }
   .waiting { border-style: dashed; }
+  .card[draggable='true'] { cursor: grab; }
+  .drop-allowed { outline: 2px dashed var(--theme-link-color); }
+  .drop-allowed.drop-target { outline: 3px solid var(--theme-link-color); background: var(--theme-button-hovered); }
+  .drop-blocked { opacity: 0.5; filter: grayscale(1); cursor: not-allowed; }
   .gap { padding: 0.65rem 0.2rem; color: var(--theme-caption-color); }
 </style>
