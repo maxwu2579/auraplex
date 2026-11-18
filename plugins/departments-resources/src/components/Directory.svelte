@@ -45,6 +45,7 @@
   let newName = ''
   let showCreate = false
   let memberSearch = ''
+  let moduleFilter: 'all' | 'available' | 'unavailable' = 'all'
   let expandedModules = new Set<string>()
   let tab: 'members' | 'modules' | 'settings' = 'members'
   let newAdmin = ''
@@ -243,6 +244,7 @@
     tab = 'members'
     memberSearch = ''
     expandedModules = new Set()
+    moduleFilter = 'all'
     selected = value
     draft = clone(value)
     name = value.name
@@ -368,6 +370,18 @@
       navigate({ ...loc, query })
     }
   }
+
+  const moduleFilters = [
+    { id: 'all', label: '全部' },
+    { id: 'available', label: '可用模块' },
+    { id: 'unavailable', label: '不可用模块' }
+  ] as const
+
+  $: moduleCards = applications.map((app) => {
+    const row = draft?.moduleAccess?.[app.alias] ??
+      (draft?.moduleAccess === undefined || app.alias === 'whatsapp' ? initialMatrix(selected)[app.alias] : undefined)
+    return { app, row, enabled: row !== undefined && moduleRoles.some((role) => row[role] !== 'none') }
+  })
 
   function toggleModuleDetails (alias: string): void {
     const next = new Set(expandedModules)
@@ -617,11 +631,14 @@
         {/if}
         {/if}
         {#if tab === 'modules'}
+          <div class="tabs" aria-label="筛选模块权限">
+            {#each moduleFilters as filter (filter.id)}
+              <button type="button" aria-pressed={moduleFilter === filter.id}
+                on:click={() => { moduleFilter = filter.id }}>{filter.label}</button>
+            {/each}
+          </div>
           <div class="module-cards">
-            {#each applications as app (app.alias)}
-              {@const row = draft.moduleAccess?.[app.alias] ??
-                (draft.moduleAccess === undefined || app.alias === 'whatsapp' ? initialMatrix(selected)[app.alias] : undefined)}
-              {@const enabled = row !== undefined && moduleRoles.some((role) => row[role] !== 'none')}
+            {#each moduleCards.filter(({ enabled }) => moduleFilter === 'all' || enabled === (moduleFilter === 'available')) as { app, row, enabled } (app.alias)}
               {@const hasSpaces = departmentAutoJoinClasses[app.alias] !== undefined}
               {@const expanded = expandedModules.has(app.alias)}
               <section class="permissionModuleCard">
