@@ -39,21 +39,21 @@ test('reads department access from the stored mixin and ignores garbage', () => 
 
 test('module guard rejects view writes and none queries, and reads refreshed grants', async () => {
   const doc = { _id: 'product' } as Doc
-  const inventory = 'inventory:class:Product' as Ref<Class<Doc>>
-  let extra: Record<string, string> = { inventory: 'view' }
+  const materials = 'materials:class:Product' as Ref<Class<Doc>>
+  let extra: Record<string, string> = { materials: 'view' }
   const ctx = { contextData: { account: { uuid: 'reader', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
   const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
   const next = {
     findAll: jest.fn(async (_ctx, cls) => {
       if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
       if (cls === 'departments:class:ModuleGrant') return [{ person: 'reader', extra, blocked: [] }]
-      return cls === inventory ? [doc] : []
+      return cls === materials ? [doc] : []
     }),
     tx: jest.fn(async () => [])
   } as unknown as Middleware
   const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, next)
-  const tx = { ...update({ name: 'changed' }), objectClass: inventory, objectSpace: core.space.Workspace }
-  expect(await guard.findAll(ctx, inventory, {})).toEqual([doc])
+  const tx = { ...update({ name: 'changed' }), objectClass: materials, objectSpace: core.space.Workspace }
+  expect(await guard.findAll(ctx, materials, {})).toEqual([doc])
   await expect(guard.tx(ctx, [tx])).rejects.toThrow()
   const ownerCtx = { contextData: { account: { uuid: 'owner', role: AccountRole.Owner }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
   const grantWrite = (value: Record<string, string>) => ({
@@ -63,31 +63,31 @@ test('module guard rejects view writes and none queries, and reads refreshed gra
     objectSpace: core.space.Workspace
   })
   extra = {}
-  expect(await guard.findAll(ctx, inventory, {})).toEqual([doc])
+  expect(await guard.findAll(ctx, materials, {})).toEqual([doc])
   await guard.tx(ownerCtx, [grantWrite(extra)])
-  expect(await guard.findAll(ctx, inventory, {})).toHaveLength(0)
+  expect(await guard.findAll(ctx, materials, {})).toHaveLength(0)
   await expect(guard.tx(ctx, [tx])).rejects.toThrow()
-  extra = { inventory: 'edit' }
+  extra = { materials: 'edit' }
   await guard.tx(ownerCtx, [grantWrite(extra)])
   await expect(guard.tx(ctx, [tx])).resolves.toBeDefined()
 })
 
 test('indirect queries remove blocked lookup and association targets before reading', async () => {
-  const inventory = 'inventory:class:Product' as Ref<Class<Doc>>
+  const materials = 'materials:class:Product' as Ref<Class<Doc>>
   const contact = 'contact:class:Person' as Ref<Class<Doc>>
   const ctx = { contextData: { account: { uuid: 'reader', role: AccountRole.User } } } as unknown as MeasureContext<SessionData>
   const pipeline = {
     hierarchy: { hasClass: () => true },
-    modelDb: { findObject: () => ({ classA: contact, classB: inventory }) }
+    modelDb: { findObject: () => ({ classA: contact, classB: materials }) }
   } as unknown as PipelineContext
-  const row = { _id: 'contact', _class: contact, $lookup: { product: { _id: 'product', _class: inventory } } }
+  const row = { _id: 'contact', _class: contact, $lookup: { product: { _id: 'product', _class: materials } } }
   const findAll = jest.fn(async (_ctx, cls, _query, _options) => {
     if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
     if (cls === contact) return [row]
     return []
   })
   const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, { findAll } as unknown as Middleware)
-  const options = { lookup: { product: inventory }, associations: [['association', 1]] } as any
+  const options = { lookup: { product: materials }, associations: [['association', 1]] } as any
   const result = await guard.findAll(ctx, contact, {}, options)
   expect((result[0] as typeof row).$lookup).toEqual({})
   expect(findAll).toHaveBeenLastCalledWith(ctx, contact, {}, { lookup: {}, associations: [] })
@@ -120,7 +120,7 @@ test('module grants keep the department administrator ceiling while module contr
       if (cls === 'departments:class:ModuleSettings') return [{ enabled: false }]
       if (cls === 'hr:class:Department') return [{ _id: 'sales', [departmentAccessMixin]: {
         administrators: ['admin'], employees: ['worker'],
-        moduleAccess: { inventory: { admin: 'view', supervisor: 'none', employee: 'none', reader: 'none' } }
+        moduleAccess: { materials: { admin: 'view', supervisor: 'none', employee: 'none', reader: 'none' } }
       } }]
       return []
     }),
@@ -130,9 +130,35 @@ test('module grants keep the department administrator ceiling while module contr
   const create = (level: string) => ({
     _class: core.class.TxCreateDoc, objectClass: 'departments:class:ModuleGrant',
     objectId: 'departments:module-grant:worker', objectSpace: core.space.Workspace,
-    attributes: { person: 'worker', extra: { inventory: level }, blocked: [] }
+    attributes: { person: 'worker', extra: { materials: level }, blocked: [] }
   }) as unknown as TxCUD<Doc>
-  expect(await guard.findAll(ctx, 'inventory:class:Product' as Ref<Class<Doc>>, {})).toHaveLength(0)
+  expect(await guard.findAll(ctx, 'materials:class:Product' as Ref<Class<Doc>>, {})).toHaveLength(0)
   await expect(guard.tx(ctx, [create('edit')])).rejects.toThrow()
   await expect(guard.tx(ctx, [create('view')])).resolves.toBeDefined()
+})
+
+test('department auto join can only be configured by authorized admins for a matching space', async () => {
+  const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
+  const department = {
+    _id: 'dept', _class: departmentClass, space: core.space.Workspace,
+    [departmentAccessMixin]: { administrators: ['admin'], employees: ['worker'] }
+  }
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => {
+      if (cls === departmentClass) return [department]
+      if (cls === 'tracker:class:Project') return [{ _id: 'project', owners: ['admin'], private: true }]
+      return []
+    }),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const context = (uuid: string) => ({ contextData: { account: { uuid, role: AccountRole.User }, broadcast: { txes: [] } } }) as unknown as MeasureContext<SessionData>
+  const guard = await DepartmentGuardMiddleware.create(context('admin'), pipeline, next)
+  const tx = (alias: string) => ({
+    _class: core.class.TxMixin, objectClass: departmentClass, objectId: department._id,
+    objectSpace: department.space, mixin: departmentAccessMixin, attributes: { autoJoin: { [alias]: ['project'] } }
+  }) as unknown as TxCUD<Doc>
+  await expect(guard.tx(context('worker'), [tx('tracker')])).rejects.toThrow()
+  await expect(guard.tx(context('admin'), [tx('drive')])).rejects.toThrow()
+  await expect(guard.tx(context('admin'), [tx('tracker')])).resolves.toBeDefined()
 })

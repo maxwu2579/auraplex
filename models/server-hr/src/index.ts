@@ -29,7 +29,7 @@ export function createModel (builder: Builder): void {
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverHr.trigger.OnDepartmentAccess,
     txMatch: {
-      _class: { $in: [core.class.TxMixin, core.class.TxUpdateDoc] },
+      _class: { $in: [core.class.TxMixin, core.class.TxUpdateDoc, core.class.TxRemoveDoc] },
       objectClass: hr.class.Department
     }
   })

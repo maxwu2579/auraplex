@@ -20,6 +20,7 @@ export interface DepartmentAccess extends Department {
   archived: boolean
   contactVisibility?: 'company' | 'department' | 'admins'
   modules?: string[]
+  autoJoin?: Record<string, Ref<Space>[]>
   moduleAccess?: ModuleAccess
   /** Tracking access: supervisors (set by super admins) and staff (set by the department admin). */
   supervisorsSeeTracking?: boolean
@@ -135,9 +136,16 @@ export interface ModuleGrant extends Doc {
   blocked: string[]
 }
 
+export interface DepartmentAutoMembers extends Space {
+  departmentAdded: AccountUuid[]
+}
+
 export const departmentsId = 'departments' as Plugin
 export default plugin(departmentsId, {
-  mixin: { DepartmentAccess: '' as Ref<Mixin<DepartmentAccess>> },
+  mixin: {
+    DepartmentAccess: '' as Ref<Mixin<DepartmentAccess>>,
+    DepartmentAutoMembers: '' as Ref<Mixin<DepartmentAutoMembers>>
+  },
   class: {
     ModuleSettings: '' as Ref<Class<ModuleSettings>>,
     ModuleGrant: '' as Ref<Class<ModuleGrant>>,

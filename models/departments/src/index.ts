@@ -14,7 +14,7 @@ import {
   UX,
   type Builder
 } from '@hcengineering/model'
-import core, { TDoc } from '@hcengineering/model-core'
+import core, { TDoc, TSpace } from '@hcengineering/model-core'
 import hr, { TDepartment } from '@hcengineering/model-hr'
 import workbench from '@hcengineering/model-workbench'
 import departments, {
@@ -24,6 +24,7 @@ import departments, {
   type AuditKind,
   type Order,
   type ModuleSettings,
+  type DepartmentAutoMembers,
   type ModuleGrant,
   type OrderAction,
   type TrackingSettings,
@@ -62,6 +63,7 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Prop(TypeBoolean(), departments.string.Archived) archived!: boolean
   @Hidden() contactVisibility?: DepartmentAccess['contactVisibility']
   @Hidden() modules?: string[]
+  @Hidden() autoJoin?: DepartmentAccess['autoJoin']
   @Hidden() moduleAccess?: DepartmentAccess['moduleAccess']
   @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
@@ -137,8 +139,13 @@ export class TModuleGrant extends TDoc implements ModuleGrant {
   @Hidden() blocked!: string[]
 }
 
+@Mixin(departments.mixin.DepartmentAutoMembers, core.class.Space)
+class TDepartmentAutoMembers extends TSpace implements DepartmentAutoMembers {
+  @Hidden() departmentAdded!: DepartmentAutoMembers['departmentAdded']
+}
+
 export function createModel (builder: Builder): void {
-  builder.createModel(TDepartmentAccess, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
+  builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Tracking,
     icon: hr.icon.Department,

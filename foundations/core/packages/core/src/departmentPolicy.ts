@@ -1,5 +1,12 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 
+export const departmentAutoJoinClasses: Record<string, string> = {
+  tracker: 'tracker:class:Project',
+  document: 'document:class:Teamspace',
+  chunter: 'chunter:class:Channel',
+  drive: 'drive:class:Drive'
+}
+
 export const departmentModuleSettingsClass = 'departments:class:ModuleSettings'
 export const departmentModuleGrantClass = 'departments:class:ModuleGrant'
 export const departmentModuleSettingsId = 'departments:ids:ModuleSettings'

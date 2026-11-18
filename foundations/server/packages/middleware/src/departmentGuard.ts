@@ -3,6 +3,7 @@ import core, {
   TxProcessor,
   canChangeDepartmentModuleException,
   departmentModuleGrantClass,
+  departmentAutoJoinClasses,
   departmentModuleSettingsClass,
   departmentModuleSettingsId,
   effectiveDepartmentModules,
@@ -80,6 +81,7 @@ export interface DepartmentRecord {
   contactVisibility?: unknown
   modules?: unknown
   moduleAccess?: unknown
+  autoJoin?: unknown
   supervisorsSeeTracking: boolean
   employeesSeeTracking: boolean
 }
@@ -109,6 +111,7 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     contactVisibility: access.contactVisibility,
     modules: access.modules,
     moduleAccess: access.moduleAccess,
+    autoJoin: access.autoJoin,
     supervisorsSeeTracking: access.supervisorsSeeTracking === true,
     employeesSeeTracking: access.employeesSeeTracking === true
   }
@@ -362,6 +365,8 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
     const cud = tx as TxCUD<Doc>
+    if (cud._class === core.class.TxMixin &&
+      (cud as TxMixin<Doc, Doc>).mixin === 'departments:mixin:DepartmentAutoMembers') forbidden()
     if (cud.objectClass === moduleSettings || cud.objectClass === moduleGrant) {
       await this.checkModuleConfiguration(ctx, cud)
       return
@@ -573,6 +578,22 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       forbidden()
     }
     if (!canChangeDepartmentOptions(owner, old.members.admin.includes(ctx.contextData.account.uuid), before ?? {}, next)) forbidden()
+    if (JSON.stringify(next.autoJoin) !== JSON.stringify(before?.autoJoin)) {
+      const actor = ctx.contextData.account.uuid
+      if (!owner && !old.members.admin.includes(actor)) forbidden()
+      if (next.autoJoin === null || typeof next.autoJoin !== 'object' || Array.isArray(next.autoJoin)) forbidden()
+      const previous = (before?.autoJoin ?? {}) as Record<string, string[]>
+      for (const [alias, ids] of Object.entries(next.autoJoin)) {
+        const cls = departmentAutoJoinClasses[alias] as Ref<Class<Doc>> | undefined
+        if (cls === undefined || !Array.isArray(ids) || new Set(ids).size !== ids.length) forbidden()
+        for (const id of ids) {
+          if (typeof id !== 'string') forbidden()
+          if (previous[alias]?.includes(id)) continue
+          const space = await this.findOne(ctx, cls, id as Ref<Doc>) as Space | undefined
+          if (space === undefined || space.archived || (!owner && !space.owners?.includes(actor))) forbidden()
+        }
+      }
+    }
     const matrix = next.moduleAccess
     if (JSON.stringify(matrix) !== JSON.stringify(before?.moduleAccess)) {
       if (!owner || matrix === null || typeof matrix !== 'object' || Array.isArray(matrix)) forbidden()

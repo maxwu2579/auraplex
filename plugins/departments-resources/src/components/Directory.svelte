@@ -3,15 +3,15 @@
   import chunter from '@hcengineering/chunter'
   import { getResource, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, departmentModuleSettingsId, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Breadcrumb, Header, Label, location } from '@hcengineering/ui'
+  import { Breadcrumb, Header, Label, location, Toggle } from '@hcengineering/ui'
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
-  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules' | 'moduleAccess'>
+  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules' | 'moduleAccess' | 'autoJoin'>
   const client = getClient()
   const hierarchy = client.getHierarchy()
   interface ModuleApplication extends Doc {
@@ -192,6 +192,7 @@
       employeePermissions: [...access.employeePermissions],
       readerPermissions: [...access.readerPermissions],
       archived: access.archived,
+      ...(access.autoJoin !== undefined ? { autoJoin: access.autoJoin } : {}),
       ...(access.moduleAccess !== undefined ? { moduleAccess: access.moduleAccess } : {}),
       contactVisibility: access.contactVisibility ?? 'company',
       ...(access.modules !== undefined ? { modules: [...access.modules] } : {}),
@@ -295,6 +296,32 @@
           alias === 'tracking' ? (role === 'admin' ? 'view' : 'none') : defaultModuleLevel(alias, role)
       ]))
     ])) as ModuleAccess
+  }
+
+  let joinableSpaces: Record<string, Space[]> = {}
+  for (const [alias, id] of Object.entries(departmentAutoJoinClasses)) {
+    const cls = id as Ref<Class<Space>>
+    if (!hierarchy.hasClass(cls)) continue
+    createQuery().query(cls, { archived: false }, (items) => {
+      joinableSpaces = { ...joinableSpaces, [alias]: items }
+    })
+  }
+  $: spaceOptions = (alias: string): Space[] => (joinableSpaces[alias] ?? [])
+    .filter((space) => owner || space.owners?.includes(me.uuid) || draft?.autoJoin?.[alias]?.includes(space._id))
+
+  function setAutoJoin (alias: string, select: HTMLSelectElement): void {
+    if (!canEdit || draft === undefined) return
+    const ids = Array.from(select.selectedOptions, (option) => option.value as Ref<Space>)
+    draft = { ...draft, autoJoin: { ...draft.autoJoin, [alias]: ids } }
+  }
+
+  function toggleCard (alias: string, enabled: boolean): void {
+    if (!owner || draft === undefined) return
+    const matrix = { ...initialMatrix(selected), ...draft.moduleAccess }
+    const row = Object.fromEntries(moduleRoles.map((role) => [role,
+      enabled ? defaultModuleLevel(alias, role) : 'none'
+    ])) as ModuleAccess[string]
+    draft = { ...draft, moduleAccess: { ...matrix, [alias]: row } }
   }
 
   function changeModule (alias: string, role: ModuleRole, level: string): void {
@@ -498,31 +525,51 @@
             </ul>
           {/if}
         </section>
-          {#if owner}
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>模块</th>{#each moduleRoles as role}<th>{roleLabels[role]}</th>{/each}</tr></thead>
-                <tbody>
-                  {#each applications as app (app._id)}
-                    <tr>
-                      <th><Label label={app.label} />{#if !ownModules.has(app.alias)} <small>由部门空间权限决定</small>{/if}</th>
-                      {#each moduleRoles as role}
-                        {@const value = draft.moduleAccess?.[app.alias]?.[role] ??
-                          (draft.moduleAccess === undefined ? defaultModuleLevel(app.alias, role, draft.modules) : 'none')}
-                        <td><select aria-label={app.alias + ' ' + roleLabels[role]} disabled={busy}
-                          value={ownModules.has(app.alias) || value === 'none' ? value : 'edit'}
+          <div class="module-cards">
+            {#each applications as app (app._id)}
+              {@const row = draft.moduleAccess?.[app.alias] ??
+                (draft.moduleAccess === undefined ? initialMatrix(selected)[app.alias] : undefined)}
+              {@const enabled = row !== undefined && moduleRoles.some((role) => row[role] !== 'none')}
+              <section class="department-card">
+                <div class="module-card-header">
+                  <strong><Label label={app.label} /></strong>
+                  <Toggle on={enabled} disabled={!owner || busy} on:change={(event) => toggleCard(app.alias, event.detail)} />
+                </div>
+                {#if enabled}
+                  {#if ownModules.has(app.alias)}
+                    {#each moduleRoles as role}
+                      <label>{roleLabels[role]}
+                        <select value={row?.[role] ?? 'none'} disabled={!owner || busy}
                           on:change={(event) => changeModule(app.alias, role, event.currentTarget.value)}>
-                          <option value="none">不能用</option>
-                          {#if ownModules.has(app.alias)}<option value="view">只能看</option>{/if}
-                          <option value="edit">{ownModules.has(app.alias) ? '能编辑' : '能用'}</option>
-                        </select></td>
+                          {#if row?.[role] === 'none'}<option value="none" disabled>不能用</option>{/if}
+                          <option value="view">只能看</option>
+                          <option value="edit">能编辑</option>
+                        </select>
+                      </label>
+                    {/each}
+                  {:else}
+                    <small>由部门空间权限决定</small>
+                  {/if}
+                {/if}
+                {#if departmentAutoJoinClasses[app.alias] !== undefined}
+                  {@const spaces = spaceOptions(app.alias)}
+                  <label>自动加入空间
+                    <select multiple disabled={!canEdit || busy}
+                      on:change={(event) => setAutoJoin(app.alias, event.currentTarget)}>
+                      {#each spaces as space (space._id)}
+                        <option value={space._id} selected={draft.autoJoin?.[app.alias]?.includes(space._id) ?? false}>
+                          {space.name}
+                        </option>
                       {/each}
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {/if}
+                      {#each (draft.autoJoin?.[app.alias] ?? []).filter((id) => !spaces.some((space) => space._id === id)) as id (id)}
+                        <option value={id} selected>已配置的空间</option>
+                      {/each}
+                    </select>
+                  </label>
+                {/if}
+              </section>
+            {/each}
+          </div>
         {/if}
         {#if canEdit && tab === 'settings'}
           <label>成员联系方式给谁看
@@ -649,6 +696,8 @@
     border-radius: 0.75rem;
     background: var(--theme-bg-color);
   }
+  .module-cards { display: grid; gap: 1rem; }
+  .module-card-header { display: flex; justify-content: space-between; align-items: center; }
   .tabs { display: flex; gap: 0.5rem; }
   .tabs button[aria-pressed='true'] { font-weight: 600; }
   .archived { opacity: 0.55; }

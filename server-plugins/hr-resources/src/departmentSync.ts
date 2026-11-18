@@ -3,6 +3,8 @@ import { getClient as getAccountClient } from '@hcengineering/account-client'
 import core, {
   AccountRole,
   generateId,
+  departmentAutoJoinClasses,
+  type Class,
   systemAccountUuid,
   type AccountUuid,
   type Mixin,
@@ -40,6 +42,62 @@ export function nextIdentifier (used: ReadonlySet<string>): string {
 
 const sameMembers = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && [...a].sort().every((it, i) => it === [...b].sort()[i])
+
+export function planAutoMembership (
+  current: readonly AccountUuid[], added: readonly AccountUuid[], desired: ReadonlySet<AccountUuid>,
+  required: ReadonlySet<AccountUuid> = new Set()
+): { members: AccountUuid[], departmentAdded: AccountUuid[] } {
+  const existing = new Set(current)
+  const automatic = new Set(added)
+  const members = current.filter((person) => !automatic.has(person) || desired.has(person) || required.has(person))
+  for (const person of desired) if (!existing.has(person)) members.push(person)
+  return {
+    members,
+    departmentAdded: [...desired].filter((person) => !required.has(person) && (automatic.has(person) || !existing.has(person)))
+  }
+}
+
+async function reconcileAutoMembership (control: TriggerControl, result: Tx[], owners: AccountUuid[]): Promise<void> {
+  const departmentsList = await control.findAll(control.ctx, hr.class.Department, {})
+  const desired = new Map<Ref<Space>, Set<AccountUuid>>()
+  const managed = new Map<Ref<Space>, Set<AccountUuid>>()
+  for (const department of departmentsList) {
+    const access = control.hierarchy.asIf(department, departments.mixin.DepartmentAccess)
+    if (access === undefined) continue
+    for (const id of [access.projectSpace, access.documentSpace, access.driveSpace]) {
+      if (id !== undefined) managed.set(id, new Set(departmentSpaceMembers(access, owners)))
+    }
+    if (access.archived) continue
+    const people = departmentSpaceMembers(access, [])
+    for (const ids of Object.values(access.autoJoin ?? {})) {
+      for (const id of ids) {
+        const members = desired.get(id) ?? new Set<AccountUuid>()
+        for (const person of people) members.add(person)
+        desired.set(id, members)
+      }
+    }
+  }
+  for (const cls of Object.values(departmentAutoJoinClasses)) {
+    const spaces = await control.findAll(control.ctx, cls as Ref<Class<Space>>, {}, { showArchived: true })
+    for (const space of spaces) {
+      const next = desired.get(space._id)
+      const state = control.hierarchy.asIf(space, departments.mixin.DepartmentAutoMembers)
+      if (next === undefined && state === undefined) continue
+      const required = new Set([...(managed.get(space._id) ?? []), ...(space.owners ?? [])])
+      const base = managed.get(space._id)
+      const current = base === undefined ? space.members : [...new Set([...base,
+        ...(state?.departmentAdded ?? []).filter((person) => space.members.includes(person))])]
+      const plan = planAutoMembership(current, state?.departmentAdded ?? [], next ?? new Set(), required)
+      if (!sameMembers(space.members, plan.members)) {
+        result.push(control.txFactory.createTxUpdateDoc(space._class, space.space, space._id, { members: plan.members }))
+      }
+      if (!sameMembers(state?.departmentAdded ?? [], plan.departmentAdded)) {
+        result.push(control.txFactory.createTxMixin(space._id, space._class, space.space,
+          departments.mixin.DepartmentAutoMembers, { departmentAdded: plan.departmentAdded }))
+      }
+    }
+  }
+}
 
 async function workspaceOwners (control: TriggerControl): Promise<AccountUuid[]> {
   const token = generateToken(systemAccountUuid, control.workspace.uuid, { service: 'transactor' })
@@ -155,12 +213,15 @@ export async function OnDepartmentAccess (txes: Tx[], control: TriggerControl): 
       if (space.name !== common.name) update.name = common.name
       if (!space.private) update.private = true
       if (space.archived !== common.archived) update.archived = common.archived
-      if (!sameMembers(space.members, members)) update.members = members
+      const added = control.hierarchy.asIf(space, departments.mixin.DepartmentAutoMembers)?.departmentAdded ?? []
+      const combined = [...new Set([...members, ...added.filter((person) => space.members.includes(person))])]
+      if (!sameMembers(space.members, combined)) update.members = combined
       if (!sameMembers(space.owners ?? [], owners)) update.owners = owners
       if (Object.keys(update).length > 0) {
         result.push(control.txFactory.createTxUpdateDoc(space._class, space.space, space._id, update))
       }
     }
   }
+  if (ids.size > 0) await reconcileAutoMembership(control, result, owners ?? await workspaceOwners(control))
   return result
 }
