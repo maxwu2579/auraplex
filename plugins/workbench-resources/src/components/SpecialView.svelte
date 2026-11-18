@@ -13,6 +13,7 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
   import { Class, Doc, DocumentQuery, FindOptions, Ref, Space, WithLookup, mergeQueries } from '@hcengineering/core'
   import { Asset, getResource, IntlString, Resource } from '@hcengineering/platform'
   import { getClient, ComponentExtensions } from '@hcengineering/presentation'
@@ -51,6 +52,7 @@
   export let iconProps: any | undefined = undefined
   export let label: IntlString
   export let createEvent: string | undefined = undefined
+  $: showCreate = !_class.startsWith('inventory:') || $departmentModuleLevel('inventory') === 'edit'
   export let createLabel: IntlString | undefined = undefined
   export let createComponent: AnyComponent | undefined = undefined
   export let createComponentProps: Record<string, any> = {}
@@ -178,7 +180,7 @@
         />
       {/each}
     {/if}
-    {#if createLabel && createComponent}
+    {#if showCreate && createLabel && createComponent}
       <Button
         icon={IconAdd}
         label={createLabel}
@@ -229,8 +231,8 @@
         viewlet,
         viewOptions,
         viewOptionsConfig: viewlet.viewOptions?.other,
-        createItemDialog: createComponent,
-        createItemLabel: createLabel,
+        createItemDialog: showCreate ? createComponent : undefined,
+        createItemLabel: showCreate ? createLabel : undefined,
         query: resultQuery,
         totalQuery: query,
         ...viewlet.props
@@ -249,8 +251,8 @@
         viewlet,
         viewOptions,
         viewOptionsConfig: viewlet.viewOptions?.other,
-        createItemDialog: createComponent,
-        createItemLabel: createLabel,
+        createItemDialog: showCreate ? createComponent : undefined,
+        createItemLabel: showCreate ? createLabel : undefined,
         query: resultQuery,
         totalQuery: query,
         ...viewlet.props

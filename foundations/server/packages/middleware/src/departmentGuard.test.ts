@@ -61,3 +61,25 @@ test('module guard rejects view writes and none queries, and reads refreshed gra
   extra = { inventory: 'edit' }
   await expect(guard.tx(ctx, [tx])).resolves.toBeDefined()
 })
+
+test('indirect queries remove blocked lookup and association targets before reading', async () => {
+  const inventory = 'inventory:class:Product' as Ref<Class<Doc>>
+  const contact = 'contact:class:Person' as Ref<Class<Doc>>
+  const ctx = { contextData: { account: { uuid: 'reader', role: AccountRole.User } } } as unknown as MeasureContext<SessionData>
+  const pipeline = {
+    hierarchy: { hasClass: () => true },
+    modelDb: { findObject: () => ({ classA: contact, classB: inventory }) }
+  } as unknown as PipelineContext
+  const row = { _id: 'contact', _class: contact, $lookup: { product: { _id: 'product', _class: inventory } } }
+  const findAll = jest.fn(async (_ctx, cls, _query, _options) => {
+    if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
+    if (cls === contact) return [row]
+    return []
+  })
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, { findAll } as unknown as Middleware)
+  const options = { lookup: { product: inventory }, associations: [['association', 1]] } as any
+  const result = await guard.findAll(ctx, contact, {}, options)
+  expect((result[0] as typeof row).$lookup).toEqual({})
+  expect(findAll).toHaveBeenLastCalledWith(ctx, contact, {}, { lookup: {}, associations: [] })
+  expect(await guard.findAll(ctx, contact, { '$lookup.product.name': 'secret' } as any, options)).toHaveLength(0)
+})

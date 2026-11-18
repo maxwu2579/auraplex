@@ -27,7 +27,8 @@ import core, {
   type WithLookup
 } from '@hcengineering/core'
 import { getResource } from '@hcengineering/platform'
-import { addRefreshListener, getClient } from '@hcengineering/presentation'
+import { get } from 'svelte/store'
+import { addRefreshListener, departmentModuleLevel, getClient } from '@hcengineering/presentation'
 import { getEventPositionElement, showPopup } from '@hcengineering/ui'
 import {
   type Action,
@@ -255,6 +256,9 @@ export function filterActions (
   actions: Array<WithLookup<Action>>,
   derived: Ref<Class<Doc>> = core.class.Doc
 ): Array<WithLookup<Action>> {
+  if (doc._class.startsWith('inventory:') && get(departmentModuleLevel)('inventory') !== 'edit') {
+    actions = actions.filter((action) => action._id === view.action.CopyLink)
+  }
   let result: Array<WithLookup<Action>> = []
   const hierarchy = client.getHierarchy()
   const me = getCurrentAccount()

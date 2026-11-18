@@ -14,6 +14,8 @@ import core, {
   type DocumentQuery,
   type FindOptions,
   type FindResult,
+  type WithLookup,
+  type AssociationQuery,
   type SearchQuery,
   type SearchOptions,
   type SearchResult,
@@ -189,11 +191,66 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     query: DocumentQuery<T>,
     options?: FindOptions<T>
   ): Promise<FindResult<T>> {
-    const alias = this.protectedModule(_class)
-    if (alias !== undefined && !isSystem(ctx.contextData.account, ctx)) {
-      if ((await this.moduleAccess(ctx))?.(alias) === 'none') return toFindResult([])
+    if (isSystem(ctx.contextData.account, ctx)) return await this.provideFindAll(ctx, _class, query, options)
+    const allowed = await this.moduleAccess(ctx)
+    if (allowed === undefined) return await this.provideFindAll(ctx, _class, query, options)
+    const canRead = (cls: Ref<Class<Doc>>): boolean => {
+      const alias = this.protectedModule(cls)
+      return alias === undefined || allowed(alias) !== 'none'
     }
-    return await this.provideFindAll(ctx, _class, query, options)
+    if (!canRead(_class)) return toFindResult([])
+    let deniedLookup = false
+    const filterLookup = (entry: unknown): unknown => {
+      if (typeof entry === 'string') {
+        if (canRead(entry as Ref<Class<Doc>>)) return entry
+        deniedLookup = true
+        return undefined
+      }
+      if (Array.isArray(entry)) {
+        const target = filterLookup(entry[0])
+        if (target === undefined) return undefined
+        return typeof entry[1] === 'string' ? [target, entry[1]] : [target, filterLookup(entry[1])]
+      }
+      if (entry == null || typeof entry !== 'object') return entry
+      return Object.fromEntries(Object.entries(entry).flatMap(([key, value]) => {
+        const safe = filterLookup(value)
+        return safe === undefined ? [] : [[key, safe]]
+      }))
+    }
+    const lookup = filterLookup(options?.lookup) as FindOptions<T>['lookup']
+    // A filter or sort on a removed join must not expose matching rows or counts.
+    if (deniedLookup && JSON.stringify([query, options?.sort]).includes('$lookup.')) return toFindResult([])
+    const filterAssociations = (entries: AssociationQuery[] | undefined): AssociationQuery[] | undefined =>
+      entries?.flatMap((entry): AssociationQuery[] => {
+        const [id, direction, nested] = entry
+        const association = this.context.modelDb.findObject(id)
+        if (association === undefined || !canRead(direction === -1 ? association.classA : association.classB)) return []
+        const safeNested = filterAssociations(nested)
+        return [safeNested === undefined ? [id, direction] : [id, direction, safeNested]]
+      })
+    const associations = filterAssociations(options?.associations)
+    const result = await this.provideFindAll(ctx, _class, query,
+      options === undefined ? undefined : { ...options, lookup, associations })
+    if (lookup === undefined && options?.associations === undefined) return result
+
+    const clean = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(clean).filter((item) => item !== undefined)
+      if (value == null || typeof value !== 'object') return value
+      const doc = value as WithLookup<Doc>
+      if (typeof doc._class === 'string') {
+        if (!canRead(doc._class)) return undefined
+        return {
+          ...doc,
+          ...(doc.$lookup === undefined ? {} : { $lookup: clean(doc.$lookup) }),
+          ...(doc.$associations === undefined ? {} : { $associations: clean(doc.$associations) })
+        }
+      }
+      return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
+        const safe = clean(item)
+        return safe === undefined ? [] : [[key, safe]]
+      }))
+    }
+    return toFindResult(result.map((doc) => clean(doc) as T).filter((doc) => doc !== undefined), result.total)
   }
 
   override async searchFulltext (
