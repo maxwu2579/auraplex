@@ -1,5 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import type { AccountUuid, Class, Doc, Mixin, Ref, Space } from '@hcengineering/core'
+import type { AccountUuid, Class, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
 import { plugin, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
@@ -20,6 +20,7 @@ export interface DepartmentAccess extends Department {
   archived: boolean
   contactVisibility?: 'company' | 'department' | 'admins'
   modules?: string[]
+  moduleAccess?: ModuleAccess
   /** Tracking access: supervisors (set by super admins) and staff (set by the department admin). */
   supervisorsSeeTracking?: boolean
   employeesSeeTracking?: boolean
@@ -130,7 +131,7 @@ export interface ModuleSettings extends Doc {
 }
 export interface ModuleGrant extends Doc {
   person: AccountUuid
-  extra: string[]
+  extra: ModuleExtra
   blocked: string[]
 }
 

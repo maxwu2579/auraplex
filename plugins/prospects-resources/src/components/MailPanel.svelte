@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import contact, { formatName, type Employee } from '@hcengineering/contact'
   import { SortingOrder, type AccountUuid } from '@hcengineering/core'
   import { getMetadata } from '@hcengineering/platform'
@@ -174,7 +176,7 @@
     <label>主题<input disabled={busy} maxlength="200" bind:value={subject} /></label>
     <label>正文<textarea disabled={busy} rows="5" maxlength="30000" bind:value={body} /></label>
     <div class="row">
-      <button disabled={busy || subject.trim() === '' || body.trim() === ''} on:click={send}
+      <button disabled={!moduleCanEdit || busy || subject.trim() === '' || body.trim() === ''} on:click={send}
         >{busy ? '处理中…' : `发送给 ${value.email}`}</button
       >
     </div>

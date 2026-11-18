@@ -62,6 +62,7 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Prop(TypeBoolean(), departments.string.Archived) archived!: boolean
   @Hidden() contactVisibility?: DepartmentAccess['contactVisibility']
   @Hidden() modules?: string[]
+  @Hidden() moduleAccess?: DepartmentAccess['moduleAccess']
   @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
 }
@@ -132,7 +133,7 @@ export class TModuleSettings extends TDoc implements ModuleSettings {
 @Model(departments.class.ModuleGrant, core.class.Doc, DOMAIN_MODULE_ACCESS)
 export class TModuleGrant extends TDoc implements ModuleGrant {
   @Hidden() person!: ModuleGrant['person']
-  @Hidden() extra!: string[]
+  @Hidden() extra!: ModuleGrant['extra']
   @Hidden() blocked!: string[]
 }
 

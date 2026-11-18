@@ -1,29 +1,35 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import { canChangeDepartmentModuleException, effectiveDepartmentModules } from '../departmentPolicy'
+import { canChangeDepartmentModuleException, effectiveDepartmentModules, type DepartmentModuleDefaults } from '../departmentPolicy'
 
-const team = { members: ['admin', 'member'], administrators: ['admin'], archived: false, modules: ['orders'] }
-const empty = { extra: [], blocked: [] }
+const team: DepartmentModuleDefaults = {
+  members: { admin: ['admin'], supervisor: [], employee: ['member'], reader: ['reader'] },
+  archived: false,
+  modules: ['orders']
+}
 
-test('module access combines live department defaults and exceptions and preserves essential apps', () => {
-  const canUse = effectiveDepartmentModules('member', false, true, [
-    team,
-    { ...team, modules: ['tracking'] },
-    { ...team, archived: true, modules: ['inventory'] }
-  ], { extra: ['prospects'], blocked: ['orders', 'inbox'] })
-  expect(['orders', 'tracking', 'prospects', 'inventory', 'inbox'].map((alias) => canUse?.(alias)))
-    .toEqual([false, true, true, false, true])
-  expect(effectiveDepartmentModules('member', false, true, [{ ...team, modules: undefined }])?.('anything')).toBe(true)
-  expect(effectiveDepartmentModules('member', true, true, [])).toBeUndefined()
-  expect(effectiveDepartmentModules('member', false, false, [])).toBeUndefined()
+test('takes the highest level, applies legacy and new grants, and blocks exceptions', () => {
+  const matrix: DepartmentModuleDefaults = {
+    ...team,
+    moduleAccess: { orders: { admin: 'edit', supervisor: 'none', employee: 'view', reader: 'none' } }
+  }
+  const level = effectiveDepartmentModules('member', false, true, [matrix, { ...team, archived: true }],
+    { extra: { tracking: 'view', orders: 'edit' }, blocked: ['orders', 'inbox'] })
+  expect(['orders', 'tracking', 'inbox', 'inventory'].map(level)).toEqual(['none', 'view', 'edit', 'none'])
+  expect(effectiveDepartmentModules('member', false, true, [matrix, team])('orders')).toBe('edit')
+  expect(effectiveDepartmentModules('reader', false, true, [team])('orders')).toBe('view')
+  expect(effectiveDepartmentModules('reader', false, true, [], { extra: ['orders'], blocked: [] })('orders')).toBe('edit')
+  expect(effectiveDepartmentModules('reader', false, false, [])('orders')).toBe('edit')
+  expect(effectiveDepartmentModules('reader', true, true, [])('orders')).toBe('edit')
 })
 
-test('department admins can only change exceptions within their scope and module ceiling', () => {
-  const allowed = (alias: string): boolean => alias === 'tracking'
+test('bounds both extra levels and blocked defaults to the administrator scope', () => {
+  const empty = { extra: {}, blocked: [] }
+  const allowed = () => 'view' as const
   expect(canChangeDepartmentModuleException('admin', 'member', [team], allowed, empty,
-    { extra: ['tracking'], blocked: ['orders'] })).toBe(true)
+    { extra: { tracking: 'view' }, blocked: ['orders'] })).toBe(true)
   expect(canChangeDepartmentModuleException('admin', 'member', [team], allowed, empty,
-    { extra: ['orders'], blocked: [] })).toBe(false)
+    { extra: { tracking: 'edit' }, blocked: [] })).toBe(false)
   expect(canChangeDepartmentModuleException('admin', 'member', [team], allowed, empty,
-    { extra: [], blocked: ['tracking'] })).toBe(false)
+    { extra: {}, blocked: ['tracking'] })).toBe(false)
   expect(canChangeDepartmentModuleException('admin', 'outsider', [team], allowed, empty, empty)).toBe(false)
 })

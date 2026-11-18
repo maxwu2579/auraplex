@@ -3,7 +3,7 @@
   import chunter from '@hcengineering/chunter'
   import { getResource, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, departmentModuleSettingsId, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import core, { AccountRole, departmentModuleSettingsId, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -11,7 +11,7 @@
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
-  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules'>
+  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules' | 'moduleAccess'>
   const client = getClient()
   const hierarchy = client.getHierarchy()
   interface ModuleApplication extends Doc {
@@ -74,7 +74,7 @@
   let moduleSettings: ModuleSettings | undefined
   let grantPerson: AccountUuid | undefined
   let grant: ModuleGrant | undefined
-  let extra: string[] = []
+  let extra: ModuleExtra = {}
   let blocked: string[] = []
   createQuery().query(departments.class.ModuleSettings, { _id: settingsId }, (items) => {
     moduleSettings = items[0]
@@ -108,7 +108,7 @@
     error = false
     try {
       grant = await client.findOne(departments.class.ModuleGrant, { _id: grantId(person) })
-      extra = [...(grant?.extra ?? [])]
+      extra = { ...normalizeModuleExtra(grant?.extra ?? {}) }
       blocked = [...(grant?.blocked ?? [])]
       grantPerson = person
     } catch {
@@ -178,6 +178,7 @@
       employeePermissions: [...access.employeePermissions],
       readerPermissions: [...access.readerPermissions],
       archived: access.archived,
+      ...(access.moduleAccess !== undefined ? { moduleAccess: access.moduleAccess } : {}),
       contactVisibility: access.contactVisibility ?? 'company',
       ...(access.modules !== undefined ? { modules: [...access.modules] } : {}),
       supervisorsSeeTracking: access.supervisorsSeeTracking === true,
@@ -267,10 +268,29 @@
       [role]: list.includes(permission) ? list.filter((item) => item !== permission) : [...list, permission]
     }
   }
-  function toggleModule (alias: string): void {
+  const ownModules = new Set(['orders', 'tracking', 'inventory', 'prospects'])
+  const roleLabels: Record<ModuleRole, string> = { admin: '管理员', supervisor: '主管', employee: '员工', reader: '只读' }
+
+  function initialMatrix (access?: DepartmentAccess): ModuleAccess {
+    return Object.fromEntries(applications.map(({ alias }) => [alias,
+      access?.moduleAccess?.[alias] ?? Object.fromEntries(moduleRoles.map((role) => [role,
+        access?.moduleAccess !== undefined ? 'none' :
+          access !== undefined ? defaultModuleLevel(alias, role, access.modules) :
+          alias === 'inventory' ? (role === 'reader' ? 'none' : 'view') :
+          alias === 'tracking' ? (role === 'admin' ? 'view' : 'none') : defaultModuleLevel(alias, role)
+      ]))
+    ])) as ModuleAccess
+  }
+
+  function changeModule (alias: string, role: ModuleRole, level: string): void {
     if (draft === undefined || !owner) return
-    const modules = draft.modules ?? [...moduleByAlias.keys()]
-    draft = { ...draft, modules: modules.includes(alias) ? modules.filter((it) => it !== alias) : [...modules, alias] }
+    const matrix = { ...initialMatrix(selected), ...draft.moduleAccess }
+    draft = { ...draft, moduleAccess: { ...matrix, [alias]: { ...matrix[alias], [role]: level as ModuleLevel } } }
+  }
+  function changeExtra (alias: string, level: string): void {
+    extra = { ...extra }
+    if (level === 'view' || level === 'edit') extra[alias] = level
+    else delete extra[alias]
   }
   async function create (): Promise<void> {
     if (!owner || busy || newName.trim() === '' || newAdmin === '') return
@@ -301,7 +321,8 @@
         supervisorPermissions: ['create', 'update', 'comment', 'invite'],
         employeePermissions: ['create', 'update', 'comment'],
         readerPermissions: ['comment'],
-        archived: false
+        archived: false,
+        moduleAccess: initialMatrix()
       })
       if (!(await ops.commit()).result) throw new Error('conflict')
       newName = ''
@@ -410,8 +431,14 @@
             <div class="member">
               <fieldset><legend>额外给</legend>
                 {#each applications as app (app._id)}
-                  <label><input type="checkbox" bind:group={extra} value={app.alias} disabled={busy} />
-                    <Label label={app.label} /></label>
+                  <label><Label label={app.label} />
+                    <select value={extra[app.alias] ?? ''} disabled={busy}
+                      on:change={(event) => changeExtra(app.alias, event.currentTarget.value)}>
+                      <option value="">无额外权限</option>
+                      {#if ownModules.has(app.alias)}<option value="view">只能看</option>{/if}
+                      <option value="edit">{ownModules.has(app.alias) ? '能编辑' : '能用'}</option>
+                    </select>
+                  </label>
                 {/each}
               </fieldset>
               <fieldset><legend>单独关掉</legend>
@@ -443,16 +470,29 @@
         {#if canEdit}
           <h4>设置</h4>
           {#if owner}
-            <fieldset>
-              <legend>能用的模块</legend>
-              {#each applications as app (app._id)}
-                <label>
-                  <input type="checkbox" checked={draft.modules?.includes(app.alias) ?? true} disabled={busy}
-                    on:change={() => toggleModule(app.alias)} />
-                  <Label label={app.label} />
-                </label>
-              {/each}
-            </fieldset>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>模块</th>{#each moduleRoles as role}<th>{roleLabels[role]}</th>{/each}</tr></thead>
+                <tbody>
+                  {#each applications as app (app._id)}
+                    <tr>
+                      <th><Label label={app.label} />{#if !ownModules.has(app.alias)} <small>由部门空间权限决定</small>{/if}</th>
+                      {#each moduleRoles as role}
+                        {@const value = draft.moduleAccess?.[app.alias]?.[role] ??
+                          (draft.moduleAccess === undefined ? defaultModuleLevel(app.alias, role, draft.modules) : 'none')}
+                        <td><select aria-label={app.alias + ' ' + roleLabels[role]} disabled={busy}
+                          value={ownModules.has(app.alias) || value === 'none' ? value : 'edit'}
+                          on:change={(event) => changeModule(app.alias, role, event.currentTarget.value)}>
+                          <option value="none">不能用</option>
+                          {#if ownModules.has(app.alias)}<option value="view">只能看</option>{/if}
+                          <option value="edit">{ownModules.has(app.alias) ? '能编辑' : '能用'}</option>
+                        </select></td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
           {/if}
           <label>成员联系方式给谁看
             <select bind:value={draft.contactVisibility} disabled={busy}>

@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import attachment, { type Photo } from '@hcengineering/attachment'
   import core, { generateId, getCurrentAccount } from '@hcengineering/core'
   import { getMetadata } from '@hcengineering/platform'
@@ -357,7 +359,7 @@
         on:click={() => dispatch('openDuplicate', duplicate)}
         >查看已有记录：{duplicate.name} · {duplicate.company}</button
       >{/if}
-    <footer><button disabled={busy} on:click={save}>{busy ? '处理中…' : '确认保存'}</button></footer>
+    <footer><button disabled={busy || !moduleCanEdit} on:click={save}>{busy ? '处理中…' : '确认保存'}</button></footer>
     {#if value !== undefined}<MailPanel {value} />{/if}
   </section>
   {#if preview}<div class="preview" role="presentation" on:click|self={() => (preview = undefined)}>

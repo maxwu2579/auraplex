@@ -1,6 +1,7 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import core, { type Doc, type Ref, type TxCUD } from '@hcengineering/core'
-import { departmentAccessMixin, isCounterUpdate, readDepartment } from './departmentGuard'
+import core, { AccountRole, type Class, type Doc, type MeasureContext, type Ref, type SessionData, type TxCUD } from '@hcengineering/core'
+import type { Middleware, PipelineContext } from '@hcengineering/server-core'
+import { DepartmentGuardMiddleware, departmentAccessMixin, isCounterUpdate, readDepartment } from './departmentGuard'
 
 const update = (operations: Record<string, unknown>): TxCUD<Doc> =>
   ({ _class: core.class.TxUpdateDoc, operations }) as unknown as TxCUD<Doc>
@@ -34,4 +35,29 @@ test('reads department access from the stored mixin and ignores garbage', () => 
   expect(record?.spaces).toEqual(['p1', 'p3'])
   expect(record?.archived).toBe(true)
   expect(readDepartment({ _id: 'x' } as unknown as Doc)).toBeUndefined()
+})
+
+test('module guard rejects view writes and none queries, and reads refreshed grants', async () => {
+  const doc = { _id: 'product' } as Doc
+  const inventory = 'inventory:class:Product' as Ref<Class<Doc>>
+  let extra: Record<string, string> = { inventory: 'view' }
+  const ctx = { contextData: { account: { uuid: 'reader', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => {
+      if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
+      if (cls === 'departments:class:ModuleGrant') return [{ extra, blocked: [] }]
+      return cls === inventory ? [doc] : []
+    }),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, next)
+  const tx = { ...update({ name: 'changed' }), objectClass: inventory, objectSpace: core.space.Workspace }
+  expect(await guard.findAll(ctx, inventory, {})).toEqual([doc])
+  await expect(guard.tx(ctx, [tx])).rejects.toThrow()
+  extra = {}
+  expect(await guard.findAll(ctx, inventory, {})).toHaveLength(0)
+  await expect(guard.tx(ctx, [tx])).rejects.toThrow()
+  extra = { inventory: 'edit' }
+  await expect(guard.tx(ctx, [tx])).resolves.toBeDefined()
 })

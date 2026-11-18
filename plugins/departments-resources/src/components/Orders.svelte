@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('orders') === 'edit'
   import chunter from '@hcengineering/chunter'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
   import core, { AccountRole, SortingOrder, generateId, getCurrentAccount, type AccountUuid, type Ref } from '@hcengineering/core'
@@ -249,12 +251,12 @@
     </div>
   </div>
 
-  <div class="create">
+  {#if moduleCanEdit}<div class="create">
     <input placeholder="订单名称，例如：贴标机 ×2" bind:value={title} maxlength="120" />
     <input placeholder="客户" bind:value={customer} maxlength="120" />
     <input placeholder="备注（可不填）" bind:value={note} maxlength="500" />
     <button disabled={busy || title.trim() === '' || customer.trim() === ''} on:click={createOrder}>新建订单</button>
-  </div>
+  </div>{/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
 
   <div class="body">

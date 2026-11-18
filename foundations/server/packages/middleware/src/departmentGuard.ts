@@ -7,10 +7,16 @@ import core, {
   departmentModuleSettingsId,
   effectiveDepartmentModules,
   toFindResult,
+  moduleRoles,
+  type ModuleAccess,
+  type ModuleExtra,
   type DepartmentModuleException,
   type DocumentQuery,
   type FindOptions,
   type FindResult,
+  type SearchQuery,
+  type SearchOptions,
+  type SearchResult,
   clone,
   type Class,
   type Doc,
@@ -71,6 +77,7 @@ export interface DepartmentRecord {
   archived: boolean
   contactVisibility?: unknown
   modules?: unknown
+  moduleAccess?: unknown
   supervisorsSeeTracking: boolean
   employeesSeeTracking: boolean
 }
@@ -99,6 +106,7 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     archived: access.archived === true,
     contactVisibility: access.contactVisibility,
     modules: access.modules,
+    moduleAccess: access.moduleAccess,
     supervisorsSeeTracking: access.supervisorsSeeTracking === true,
     employeesSeeTracking: access.employeesSeeTracking === true
   }
@@ -151,8 +159,8 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
 
   private moduleDefaults () {
     return this.departments.map((dept) => ({
-      members: departmentRoles.flatMap((role) => dept.members[role]),
-      administrators: dept.members.admin,
+      members: dept.members,
+      moduleAccess: dept.moduleAccess as ModuleAccess | undefined,
       archived: dept.archived,
       modules: Array.isArray(dept.modules) ? list(dept.modules) : undefined
     }))
@@ -183,9 +191,26 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   ): Promise<FindResult<T>> {
     const alias = this.protectedModule(_class)
     if (alias !== undefined && !isSystem(ctx.contextData.account, ctx)) {
-      if ((await this.moduleAccess(ctx))?.(alias) === false) return toFindResult([])
+      if ((await this.moduleAccess(ctx))?.(alias) === 'none') return toFindResult([])
     }
     return await this.provideFindAll(ctx, _class, query, options)
+  }
+
+  override async searchFulltext (
+    ctx: MeasureContext<SessionData>, query: SearchQuery, options: SearchOptions
+  ): Promise<SearchResult> {
+    const allowed = isSystem(ctx.contextData.account, ctx) ? undefined : await this.moduleAccess(ctx)
+    if (allowed === undefined) return await super.searchFulltext(ctx, query, options)
+    const canRead = (cls: Ref<Class<Doc>>): boolean => {
+      const alias = this.protectedModule(cls)
+      return alias === undefined || allowed(alias) !== 'none'
+    }
+    const classes = query.classes?.filter(canRead)
+    if (classes?.length === 0 && query.classes?.length !== 0) return { docs: [], total: 0 }
+    const result = await super.searchFulltext(ctx, { ...query, classes }, options)
+    const docs = result.docs.filter(({ doc }) => canRead(doc._class) &&
+      (doc.attachedToClass === undefined || canRead(doc.attachedToClass)))
+    return { docs, total: docs.length }
   }
 
   private async checkModuleConfiguration (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
@@ -208,10 +233,11 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       Object.keys(fields).some((key) => key !== 'extra' && key !== 'blocked' && !(creating && key === 'person'))) forbidden()
     const extra = fields.extra
     const blocked = fields.blocked
-    if (!Array.isArray(extra) || !Array.isArray(blocked) ||
-      [...extra, ...blocked].some((alias) => typeof alias !== 'string' || alias.trim() === '')) forbidden()
+    if (extra === null || typeof extra !== 'object' || Array.isArray(extra) ||
+      Object.entries(extra).some(([alias, level]) => alias.trim() === '' || (level !== 'view' && level !== 'edit')) ||
+      !Array.isArray(blocked) || blocked.some((alias) => typeof alias !== 'string' || alias.trim() === '')) forbidden()
     if (!owner && !canChangeDepartmentModuleException(account.uuid, person, this.moduleDefaults(),
-      await this.moduleAccess(ctx), before ?? { extra: [], blocked: [] }, { extra, blocked })) forbidden()
+      (await this.moduleAccess(ctx)) ?? (() => 'edit'), before ?? { extra: {}, blocked: [] }, { extra: extra as ModuleExtra, blocked })) forbidden()
   }
 
   private touchesDepartments (tx: Tx): boolean {
@@ -243,8 +269,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       await this.checkModuleConfiguration(ctx, cud)
       return
     }
-    const alias = this.protectedModule(cud.objectClass)
-    if (alias !== undefined && (await this.moduleAccess(ctx))?.(alias) === false) forbidden()
+    const alias = this.protectedModule(cud.objectClass) ??
+      (cud.attachedToClass === undefined ? undefined : this.protectedModule(cud.attachedToClass))
+    if (alias !== undefined) {
+      const level = (await this.moduleAccess(ctx))?.(alias) ?? 'edit'
+      if (level === 'none' || (level === 'view' && cud.objectClass !== orderActionClass)) forbidden()
+    }
     if (cud.objectClass === auditEventClass || cud.objectClass === trackingSettingsClass) {
       await this.checkAudit(ctx, cud)
       return
@@ -441,6 +471,15 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       forbidden()
     }
     if (!canChangeDepartmentOptions(owner, old.members.admin.includes(ctx.contextData.account.uuid), before ?? {}, next)) forbidden()
+    const matrix = next.moduleAccess
+    if (JSON.stringify(matrix) !== JSON.stringify(before?.moduleAccess)) {
+      if (!owner || matrix === null || typeof matrix !== 'object' || Array.isArray(matrix)) forbidden()
+      for (const [alias, row] of Object.entries(matrix)) {
+        if (alias.trim() === '' || row === null || typeof row !== 'object' ||
+          Object.keys(row).length !== moduleRoles.length ||
+          !moduleRoles.every((role) => ['none', 'view', 'edit'].includes(row[role]))) forbidden()
+      }
+    }
     const ok = canChangeDepartment(
       ctx.contextData.account.uuid,
       owner,

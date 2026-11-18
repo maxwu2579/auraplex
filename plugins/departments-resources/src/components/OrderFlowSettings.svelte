@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('orders') === 'edit'
   import contact, { formatName, type Employee } from '@hcengineering/contact'
   import OrderFlowChart from './OrderFlowChart.svelte'
   import core, { AccountRole, generateId, getCurrentAccount, type Ref, type AccountUuid } from '@hcengineering/core'
@@ -88,7 +90,7 @@
   }
 
   async function save (): Promise<void> {
-    if (busy) return
+    if (busy || !moduleCanEdit) return
     busy = true
     error = ''
     notice = ''
@@ -126,7 +128,7 @@
   <OrderFlowChart
     cards={stages.map((item) => ({ ...item, department: depts.find((dept) => dept._id === item.department)?.name ?? '未指定部门' }))}
     departments={depts.map((dept) => ({ id: dept._id, name: dept.name }))}
-    editable={owner && !busy}
+    editable={owner && !busy && moduleCanEdit}
     selected={openStage}
     on:select={(event) => { openStage = openStage === event.detail ? '' : event.detail }}
     on:dropDepartment={(event) => dropDepartment(event.detail.id, event.detail.position)}
@@ -137,7 +139,7 @@
     <div class="stage">
       <div class="row">
         <b>{i + 1}.</b>
-        {#if owner}
+        {#if owner && moduleCanEdit}
           <input bind:value={stage.name} maxlength="40" />
           <select bind:value={stage.department}>
             <option value={undefined}>（未指定部门）</option>
@@ -151,7 +153,7 @@
           <span class="hint">（{depts.find((d) => d._id === stage.department)?.name ?? '未指定部门'}）</span>
         {/if}
       </div>
-      {#if owner}
+      {#if owner && moduleCanEdit}
         <label>超时天数 <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
         <label>审批人
           <select value={stage.approval?.by === 'person' ? stage.approval.person : stage.approval ? 'admins' : ''}
@@ -168,18 +170,18 @@
         {#each stage.steps as _, j (j)}
           <div class="row">
             <span class="hint">小步骤</span>
-            <input bind:value={stage.steps[j]} maxlength="60" disabled={!adminOf(stage.department)} />
-            {#if adminOf(stage.department)}<button on:click={() => removeStep(i, j)}>×</button>{/if}
+            <input bind:value={stage.steps[j]} maxlength="60" disabled={!moduleCanEdit || !adminOf(stage.department)} />
+            {#if moduleCanEdit && adminOf(stage.department)}<button on:click={() => removeStep(i, j)}>×</button>{/if}
           </div>
         {/each}
-        {#if adminOf(stage.department)}<button class="small" on:click={() => addStep(i)}>+ 加小步骤</button>{/if}
+        {#if moduleCanEdit && adminOf(stage.department)}<button class="small" on:click={() => addStep(i)}>+ 加小步骤</button>{/if}
       </div>
     </div>
     {/if}
   {/each}
   <div class="row">
-    {#if owner}<button on:click={addStage}>+ 加阶段</button>{/if}
-    <button class="primary" disabled={busy} on:click={save}>{busy ? '正在保存…' : '保存'}</button>
+    {#if owner && moduleCanEdit}<button on:click={addStage}>+ 加阶段</button>{/if}
+    <button class="primary" disabled={busy || !moduleCanEdit} on:click={save}>{busy ? '正在保存…' : '保存'}</button>
   </div>
   {#if error}<p class="err" role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
 </section>

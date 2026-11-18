@@ -24,6 +24,7 @@
     departmentModuleSettingsId,
     effectiveDepartmentModules,
     type DepartmentModuleException,
+    type DepartmentModuleDefaults,
     Class,
     Doc,
     getCurrentAccount,
@@ -41,6 +42,7 @@
     ActionContext,
     ComponentExtensions,
     createQuery,
+    departmentModuleLevel,
     createNotificationsQuery,
     getClient,
     isAdminUser,
@@ -174,34 +176,53 @@
   const grantClass = departmentModuleGrantClass as Ref<Class<Doc & DepartmentModuleException>>
   const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
   const departmentMixin = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
-  let available: ((alias: string) => boolean) | undefined
   let blockedModule = false
-  $: apps = allApps.filter((app) => available?.(app.alias) ?? true)
+  let moduleSettings: (Doc & { enabled: boolean }) | undefined
+  let moduleGrant: (Doc & DepartmentModuleException) | undefined
+  let departmentDocs: Doc[] = []
+  let settingsLoaded = false
+  let defaultsLoaded = false
+  let grantLoaded = false
+  const moduleControl = account.role !== AccountRole.Owner && client.getHierarchy().hasClass(settingsClass)
+  if (moduleControl) {
+    createQuery().query(settingsClass, { _id: departmentModuleSettingsId as Ref<Doc> }, (items) => {
+      moduleSettings = items[0]
+      settingsLoaded = true
+    })
+    createQuery().query(grantClass, { _id: ('departments:module-grant:' + account.uuid) as Ref<Doc> }, (items) => {
+      moduleGrant = items[0]
+      grantLoaded = true
+    })
+    createQuery().query(departmentClass, {}, (items) => {
+      departmentDocs = items
+      defaultsLoaded = true
+    })
+  }
 
-  async function readModuleAccess (): Promise<void> {
-    const hierarchy = client.getHierarchy()
-    if (account.role === AccountRole.Owner || !hierarchy.hasClass(settingsClass)) return
-    const settings = await client.findOne(settingsClass, { _id: departmentModuleSettingsId as Ref<Doc> })
-    if (settings?.enabled !== true) {
-      available = undefined
-      return
-    }
-    const [docs, grant] = await Promise.all([
-      client.findAll(departmentClass, {}),
-      client.findOne(grantClass, { _id: ('departments:module-grant:' + account.uuid) as Ref<Doc> })
-    ])
-    const defaults = docs.flatMap((doc) => {
+  function moduleDefaults (docs: Doc[]): DepartmentModuleDefaults[] {
+    return docs.flatMap((doc) => {
       const department = (doc as unknown as Record<string, any>)[departmentMixin]
       if (department === undefined) return []
       return [{
-        members: [department.administrators, department.supervisors, department.employees, department.readers].flat(),
-        administrators: department.administrators,
+        members: {
+          admin: department.administrators, supervisor: department.supervisors,
+          employee: department.employees, reader: department.readers
+        },
         archived: department.archived === true,
-        modules: department.modules
+        modules: department.modules,
+        moduleAccess: department.moduleAccess
       }]
     })
-    available = effectiveDepartmentModules(account.uuid, false, true, defaults, grant)
   }
+
+  $: moduleReady = !moduleControl || (settingsLoaded && (moduleSettings?.enabled !== true || (defaultsLoaded && grantLoaded)))
+  $: available = effectiveDepartmentModules(account.uuid, !moduleControl, moduleSettings?.enabled === true,
+    moduleDefaults(departmentDocs), moduleGrant)
+  $: if (moduleReady) {
+    departmentModuleLevel.set(available)
+    void doSyncLoc($location)
+  }
+  $: apps = moduleReady ? allApps.filter((app) => available(app.alias) !== 'none') : []
 
   let panelInstance: PanelInstance
   let popupInstance: Popup
@@ -464,9 +485,9 @@
   async function syncLoc (loc: Location): Promise<void> {
     accessDeniedStore.set(false)
     blockedModule = false
-    await readModuleAccess()
+    if (!moduleReady) return
     const requestedApp = loc.path[2]
-    if (requestedApp !== undefined && available?.(requestedApp) === false) {
+    if (requestedApp !== undefined && available(requestedApp) === 'none') {
       clear(1)
       closePanel(false)
       blockedModule = true

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import { isOwnerOrMaintainer } from '@hcengineering/core'
   import prospects, { type Prospect, type ProspectStatus } from '@hcengineering/prospects'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -166,7 +168,7 @@
 <div class="page">
   <header>
     <h1>名片库</h1>
-    <button
+    {#if moduleCanEdit}<button
       on:click={() => {
         edit()
       }}>手动新增</button
@@ -180,9 +182,9 @@
           e.currentTarget.value = ''
         }}
       /></label
-    ><button on:click={exportList}>导出 Excel</button>
+    >{/if}<button on:click={exportList}>导出 Excel</button>
   </header>
-  {#if queue.length > 0}<section>
+  {#if moduleCanEdit && queue.length > 0}<section>
       <p>待处理照片 {queue.length} 张；选择正面和可选背面进行配对。</p>
       <label
         >正面 <select bind:value={frontIndex}
@@ -258,7 +260,7 @@
               ><button
                 on:click={() => {
                   edit(item)
-                }}>{item.name !== '' ? item.name : '未填写'}</button
+                }} disabled={!moduleCanEdit}>{item.name !== '' ? item.name : '未填写'}</button
               ></td
             ><td>{item.company}</td><td>{item.title}</td><td>{item.mobile}</td><td>{item.phone}</td><td>{item.email}</td
             ><td>{item.country}</td><td>{item.industry}</td><td>{item.source}</td><td
@@ -267,15 +269,15 @@
               ><button
                 on:click={() => {
                   edit(item)
-                }}>查看 / 编辑</button
-              >{#if isOwnerOrMaintainer()}<button on:click={() => remove(item)}>删除</button>{/if}</td
+                }} disabled={!moduleCanEdit}>查看 / 编辑</button
+              >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}>删除</button>{/if}</td
             ></tr
           >{:else}<tr><td colspan="11">没有符合条件的记录。</td></tr>{/each}</tbody
       >
     </table>
   </div>
 </div>
-{#if editing}{#key selected?._id ?? 'new'}<EditDialog
+{#if moduleCanEdit && editing}{#key selected?._id ?? 'new'}<EditDialog
       value={selected}
       initialFront={fromQueue ? queue[frontIndex] : undefined}
       initialBack={fromQueue && backIndex >= 0 ? queue[backIndex] : undefined}

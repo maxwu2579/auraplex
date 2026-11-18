@@ -81,3 +81,5 @@ export * from './link-preview'
 export * from './communication'
 export * from './pulse'
 export * from './workspaceIdentity'
+
+export { departmentModuleLevel } from './departmentModuleLevel'

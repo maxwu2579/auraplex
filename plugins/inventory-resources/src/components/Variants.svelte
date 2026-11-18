@@ -13,6 +13,8 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import { departmentModuleLevel } from '@hcengineering/presentation'
+  $: moduleCanEdit = $departmentModuleLevel('inventory') === 'edit'
   import type { Doc, Ref } from '@hcengineering/core'
   import { Button, eventToHTMLElement, Icon, IconAdd, Label, showPopup } from '@hcengineering/ui'
   import { Table } from '@hcengineering/view-resources'
@@ -33,7 +35,7 @@
     <span class="antiSection-header__title">
       <Label label={inventory.string.Variants} />
     </span>
-    <Button icon={IconAdd} kind={'ghost'} on:click={create} />
+    {#if moduleCanEdit}<Button icon={IconAdd} kind={'ghost'} on:click={create} />{/if}
   </div>
   {#if variants > 0}
     <Table
@@ -53,7 +55,7 @@
       </span>
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
-      <span class="text-sm content-color over-underline" on:click={create}>
+      <span class="text-sm content-color over-underline" on:click={() => { if (moduleCanEdit) create() }}>
         <Label label={inventory.string.CreateVariant} />
       </span>
     </div>
