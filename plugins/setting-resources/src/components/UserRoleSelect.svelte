@@ -28,12 +28,11 @@
   const allInviteRoleItems: DropdownIntlItem[] = [
     { id: AccountRole.Guest, label: settingRes.string.Guest },
     { id: AccountRole.User, label: settingRes.string.User },
-    { id: AccountRole.Maintainer, label: settingRes.string.Maintainer },
     { id: AccountRole.Owner, label: settingRes.string.Owner }
   ]
 
   $: inviteRoleItems = securityFilter
-    ? allInviteRoleItems.filter((item) => item.id !== AccountRole.Owner && item.id !== AccountRole.Maintainer)
+    ? allInviteRoleItems.filter((item) => item.id !== AccountRole.Owner)
     : allInviteRoleItems
 
   function handleSelected (e: CustomEvent<AccountRole>): void {
@@ -44,6 +43,7 @@
 <DropdownLabelsIntl
   kind={'regular'}
   size={'medium'}
+  label={selected === AccountRole.Maintainer ? settingRes.string.Maintainer : undefined}
   items={inviteRoleItems}
   {selected}
   {disabled}

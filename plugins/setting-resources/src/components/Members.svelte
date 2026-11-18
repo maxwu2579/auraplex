@@ -29,10 +29,8 @@
   const client = getClient()
 
   const items: DropdownIntlItem[] = [
-    { id: AccountRole.ReadOnlyGuest, label: setting.string.ReadonlyGuest },
     { id: AccountRole.Guest, label: setting.string.Guest },
     { id: AccountRole.User, label: setting.string.User },
-    { id: AccountRole.Maintainer, label: setting.string.Maintainer },
     { id: AccountRole.Owner, label: setting.string.Owner }
   ]
 
@@ -105,7 +103,7 @@
                 <EmployeePresenter value={employee} disabled={false} />
               </div>
               <DropdownLabelsIntl
-                label={setting.string.Role}
+                label={role === AccountRole.Maintainer ? setting.string.Maintainer : guestRoles.includes(role) ? setting.string.Guest : setting.string.Role}
                 disabled={!hasAccountRole(currentAccount, role) ||
                   (role === AccountRole.Owner && ownersCount === 1) ||
                   currentAccount.uuid === personUuid}

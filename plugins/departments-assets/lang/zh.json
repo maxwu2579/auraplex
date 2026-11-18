@@ -1,9 +1,9 @@
 {
   "string": {
-    "Administrators": "部门管理员",
+    "Administrators": "管理员",
     "Supervisors": "主管",
     "Employees": "员工",
-    "Readers": "只读成员",
+    "Readers": "访客",
     "AdminPermissions": "部门管理员权限",
     "SupervisorPermissions": "主管权限",
     "EmployeePermissions": "员工权限",

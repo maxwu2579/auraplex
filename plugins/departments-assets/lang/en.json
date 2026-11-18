@@ -1,9 +1,9 @@
 {
   "string": {
-    "Administrators": "Department administrators",
+    "Administrators": "Administrators",
     "Supervisors": "Supervisors",
     "Employees": "Employees",
-    "Readers": "Read-only members",
+    "Readers": "Guests",
     "AdminPermissions": "Administrator permissions",
     "SupervisorPermissions": "Supervisor permissions",
     "EmployeePermissions": "Employee permissions",

@@ -272,7 +272,7 @@
     }
   }
   const ownModules = new Set(['orders', 'tracking', 'materials', 'prospects'])
-  const roleLabels: Record<ModuleRole, string> = { admin: '管理员', supervisor: '主管', employee: '员工', reader: '只读' }
+  const roleLabels: Record<ModuleRole, string> = { admin: '管理员', supervisor: '主管', employee: '员工', reader: '访客' }
 
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
     return Object.fromEntries(applications.map(({ alias }) => [alias,
