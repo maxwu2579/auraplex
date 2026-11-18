@@ -18,6 +18,9 @@ export interface DepartmentAccess extends Department {
   documentSpace?: Ref<Space>
   driveSpace?: Ref<Space>
   archived: boolean
+  /** Tracking access: supervisors (set by super admins) and staff (set by the department admin). */
+  supervisorsSeeTracking?: boolean
+  employeesSeeTracking?: boolean
 }
 
 /** One stage of the order flow template, e.g. 设计 handled by the design department. */
@@ -79,20 +82,53 @@ export const defaultOrderStages: OrderFlowStage[] = [
   { id: 'training', name: '去客户工厂教', steps: [] }
 ]
 
+export type AuditKind = 'login' | 'view' | 'export' | 'search' | 'alert'
+
+/**
+ * Things Huly's change log does not keep: logins, pages opened, exports, and anomaly alerts.
+ * Repeated opens of the same page by the same person within 30 minutes are one record with a count.
+ */
+export interface AuditEvent extends Doc {
+  kind: AuditKind
+  actor: AccountUuid
+  label: string
+  objectId?: string
+  objectClass?: string
+  objectSpace?: string
+  count: number
+  firstOn: number
+  lastOn: number
+}
+
+/** Super admin settings for tracking. */
+export interface TrackingSettings extends Doc {
+  viewRetentionDays: number
+  alertCount: number
+  alertMinutes: number
+  lastCleanup?: number
+}
+
+export const defaultTrackingSettings = { viewRetentionDays: 365, alertCount: 100, alertMinutes: 60 }
+
 export const departmentsId = 'departments' as Plugin
 export default plugin(departmentsId, {
   mixin: { DepartmentAccess: '' as Ref<Mixin<DepartmentAccess>> },
   class: {
     Order: '' as Ref<Class<Order>>,
     OrderFlow: '' as Ref<Class<OrderFlow>>,
-    OrderAction: '' as Ref<Class<OrderAction>>
+    OrderAction: '' as Ref<Class<OrderAction>>,
+    AuditEvent: '' as Ref<Class<AuditEvent>>,
+    TrackingSettings: '' as Ref<Class<TrackingSettings>>
   },
-  ids: { OrderFlow: '' as Ref<OrderFlow> },
-  app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc> },
+  ids: { OrderFlow: '' as Ref<OrderFlow>, TrackingSettings: '' as Ref<TrackingSettings> },
+  app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc>, Tracking: '' as Ref<Doc> },
   component: {
     Directory: '' as AnyComponent,
     Orders: '' as AnyComponent,
-    OrderFlowSettings: '' as AnyComponent
+    OrderFlowSettings: '' as AnyComponent,
+    ActivityLog: '' as AnyComponent,
+    Workload: '' as AnyComponent,
+    TrackingSettingsPage: '' as AnyComponent
   },
   string: {
     Departments: '' as IntlString,
@@ -142,6 +178,14 @@ export default plugin(departmentsId, {
     OrderEscalated: '' as IntlString,
     OrderReturned: '' as IntlString,
     OrderAssigned: '' as IntlString,
-    OrderFinished: '' as IntlString
+    OrderFinished: '' as IntlString,
+    Tracking: '' as IntlString,
+    ActivityLog: '' as IntlString,
+    Workload: '' as IntlString,
+    TrackingSettings: '' as IntlString,
+    AuditEvent: '' as IntlString,
+    TooManyViews: '' as IntlString,
+    SupervisorsSeeTracking: '' as IntlString,
+    EmployeesSeeTracking: '' as IntlString
   }
 })

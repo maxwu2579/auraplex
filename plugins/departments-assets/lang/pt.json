@@ -47,6 +47,14 @@
     "OrderEscalated": "Order escalated",
     "OrderReturned": "Order returned",
     "OrderAssigned": "You are in charge of an order stage",
-    "OrderFinished": "Order finished"
+    "OrderFinished": "Order finished",
+    "Tracking": "Tracking",
+    "ActivityLog": "Activity log",
+    "Workload": "Workload",
+    "TrackingSettings": "Tracking settings",
+    "AuditEvent": "Activity record",
+    "TooManyViews": "Someone opened many pages in a short time",
+    "SupervisorsSeeTracking": "Supervisors see tracking",
+    "EmployeesSeeTracking": "Staff see tracking"
   }
 }

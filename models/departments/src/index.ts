@@ -20,13 +20,18 @@ import workbench from '@hcengineering/model-workbench'
 import departments, {
   departmentsId,
   type DepartmentAccess,
+  type AuditEvent,
+  type AuditKind,
   type Order,
   type OrderAction,
+  type TrackingSettings,
   type OrderActionKind,
   type OrderFlow
 } from '@hcengineering/departments'
 
 export const DOMAIN_ORDERS = 'orders' as Domain
+/** Tracking records live in their own table so their volume never slows the rest down. */
+export const DOMAIN_AUDIT = 'audit' as Domain
 
 export { departmentsId }
 export default departments
@@ -53,6 +58,8 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Prop(TypeRef(core.class.Space), departments.string.DocumentSpace) documentSpace?: DepartmentAccess['documentSpace']
   @Prop(TypeRef(core.class.Space), departments.string.DriveSpace) driveSpace?: DepartmentAccess['driveSpace']
   @Prop(TypeBoolean(), departments.string.Archived) archived!: boolean
+  @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
+  @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
 }
 
 @Model(departments.class.OrderFlow, core.class.Doc, DOMAIN_ORDERS)
@@ -85,8 +92,44 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Prop(TypeString(), departments.string.Note) reason?: string
 }
 
+@Model(departments.class.AuditEvent, core.class.Doc, DOMAIN_AUDIT)
+@UX(departments.string.AuditEvent, hr.icon.Department, undefined, 'label')
+export class TAuditEvent extends TDoc implements AuditEvent {
+  @Prop(TypeString(), departments.string.OrderActionLabel) kind!: AuditKind
+  @Prop(TypeAccountUuid(), departments.string.Member) actor!: AuditEvent['actor']
+  @Prop(TypeString(), departments.string.Note) label!: string
+  @Hidden() objectId?: string
+  @Hidden() objectClass?: string
+  @Hidden() objectSpace?: string
+  @Hidden() count!: number
+  @Hidden() firstOn!: number
+  @Hidden() lastOn!: number
+}
+
+@Model(departments.class.TrackingSettings, core.class.Doc, DOMAIN_AUDIT)
+export class TTrackingSettings extends TDoc implements TrackingSettings {
+  @Hidden() viewRetentionDays!: number
+  @Hidden() alertCount!: number
+  @Hidden() alertMinutes!: number
+  @Hidden() lastCleanup?: number
+}
+
 export function createModel (builder: Builder): void {
-  builder.createModel(TDepartmentAccess, TOrderFlow, TOrder, TOrderAction)
+  builder.createModel(TDepartmentAccess, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings)
+  builder.createDoc(workbench.class.Application, core.space.Model, {
+    label: departments.string.Tracking,
+    icon: hr.icon.Department,
+    alias: 'tracking',
+    hidden: false,
+    navigatorModel: {
+      specials: [
+        { id: 'log', label: departments.string.ActivityLog, icon: hr.icon.Department, component: departments.component.ActivityLog },
+        { id: 'workload', label: departments.string.Workload, icon: hr.icon.Department, component: departments.component.Workload },
+        { id: 'settings', label: departments.string.TrackingSettings, icon: hr.icon.Department, component: departments.component.TrackingSettingsPage }
+      ],
+      spaces: []
+    }
+  }, departments.app.Tracking)
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Orders,
     icon: hr.icon.Department,

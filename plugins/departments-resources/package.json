@@ -29,6 +29,9 @@
     "@hcengineering/presentation": "workspace:^0.7.0",
     "@hcengineering/ui": "workspace:^0.7.0",
     "svelte": "^4.2.20",
-    "@hcengineering/chunter": "workspace:^0.7.0"
+    "@hcengineering/chunter": "workspace:^0.7.0",
+    "fflate": "0.8.3",
+    "@hcengineering/tracker": "workspace:^0.7.0",
+    "@hcengineering/task": "workspace:^0.7.0"
   }
 }

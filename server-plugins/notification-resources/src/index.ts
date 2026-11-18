@@ -17,7 +17,15 @@
 import activity, { ActivityMessage, DocUpdateMessage } from '@hcengineering/activity'
 import { getClient as getAccountClient } from '@hcengineering/account-client'
 import materials, { shouldAlertLowStock, type StockMovement } from '@hcengineering/materials'
-import departments, { defaultOrderStages, type Order, type OrderAction, type OrderStage } from '@hcengineering/departments'
+import departments, {
+  defaultOrderStages,
+  defaultTrackingSettings,
+  type AuditEvent,
+  type Order,
+  type OrderAction,
+  type OrderStage,
+  type TrackingSettings
+} from '@hcengineering/departments'
 import hr from '@hcengineering/hr'
 import { generateToken } from '@hcengineering/server-token'
 import { Analytics } from '@hcengineering/analytics'
@@ -45,6 +53,8 @@ import core, {
   Ref,
   RefTo,
   SortingOrder,
+  generateId,
+  type UserStatus,
   systemAccountUuid,
   Space,
   Timestamp,
@@ -1914,6 +1924,162 @@ export async function OnOrder (txes: Tx[], control: TriggerControl): Promise<Tx[
   return results
 }
 
+// Auraplex tracking: logins are not kept by Huly (online status is temporary), so record them here;
+// raise an alert to the super admins when someone opens many pages in a short time; drop old
+// page-open records after the retention period set by the super admins.
+
+const LOGIN_MERGE_MS = 30 * 60 * 1000
+
+async function trackingSettings (control: TriggerControl): Promise<TrackingSettings & { exists: boolean }> {
+  const found = (
+    await control.findAll(control.ctx, departments.class.TrackingSettings, { _id: departments.ids.TrackingSettings }, { limit: 1 })
+  )[0]
+  return found !== undefined
+    ? ({ ...found, exists: true } as unknown as TrackingSettings & { exists: boolean })
+    : ({ ...defaultTrackingSettings, exists: false } as unknown as TrackingSettings & { exists: boolean })
+}
+
+async function workspaceOwners (control: TriggerControl): Promise<AccountUuid[]> {
+  const token = generateToken(systemAccountUuid, control.workspace.uuid, { service: 'transactor' })
+  const members = await getAccountClient(process.env.ACCOUNTS_URL, token).getWorkspaceMembers()
+  return members.filter((m) => m.role === AccountRole.Owner).map((m) => m.person)
+}
+
+export async function OnAuditLogin (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const results: Tx[] = []
+  for (const tx of txes as Array<TxCUD<UserStatus>>) {
+    let user: AccountUuid | undefined
+    if (tx._class === core.class.TxCreateDoc && (tx as TxCreateDoc<UserStatus>).attributes.online) {
+      user = (tx as TxCreateDoc<UserStatus>).attributes.user
+    } else if (tx._class === core.class.TxUpdateDoc && (tx as TxUpdateDoc<UserStatus>).operations.online === true) {
+      user = (await control.findAll(control.ctx, core.class.UserStatus, { _id: tx.objectId }, { limit: 1 }))[0]?.user
+    }
+    if (user === undefined || user === systemAccountUuid) continue
+    const now = tx.modifiedOn
+    // Page reloads reconnect often; one record per 30 minutes is enough to see when someone worked.
+    const last = (
+      await control.findAll(
+        control.ctx,
+        departments.class.AuditEvent,
+        { kind: 'login', actor: user, lastOn: { $gte: now - LOGIN_MERGE_MS } },
+        { limit: 1, sort: { lastOn: SortingOrder.Descending } }
+      )
+    )[0]
+    if (last !== undefined) {
+      results.push(control.txFactory.createTxUpdateDoc(last._class, last.space, last._id, { count: last.count + 1, lastOn: now }))
+    } else {
+      results.push(
+        control.txFactory.createTxCreateDoc(departments.class.AuditEvent, core.space.Workspace, {
+          kind: 'login',
+          actor: user,
+          label: '登录',
+          count: 1,
+          firstOn: now,
+          lastOn: now
+        })
+      )
+    }
+  }
+  return results
+}
+
+export async function OnAuditView (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const results: Tx[] = []
+  const settings = await trackingSettings(control)
+  const now = Date.now()
+  const actors = new Set<AccountUuid>()
+  for (const tx of txes as Array<TxCUD<AuditEvent>>) {
+    if (tx._class === core.class.TxCreateDoc) {
+      const attrs = (tx as TxCreateDoc<AuditEvent>).attributes
+      if (attrs.kind === 'view') actors.add(attrs.actor)
+    } else if (tx._class === core.class.TxUpdateDoc) {
+      const event = (await control.findAll(control.ctx, departments.class.AuditEvent, { _id: tx.objectId }, { limit: 1 }))[0]
+      if (event?.kind === 'view') actors.add(event.actor)
+    }
+  }
+  const windowMs = Math.max(1, settings.alertMinutes) * 60 * 1000
+  for (const actor of actors) {
+    const recent = await control.findAll(control.ctx, departments.class.AuditEvent, {
+      kind: 'view',
+      actor,
+      lastOn: { $gte: now - windowMs }
+    })
+    const opened = recent.reduce((sum, it) => sum + it.count, 0)
+    if (opened <= settings.alertCount) continue
+    const alreadyAlerted = await control.findAll(
+      control.ctx,
+      departments.class.AuditEvent,
+      { kind: 'alert', actor, lastOn: { $gte: now - windowMs } },
+      { limit: 1 }
+    )
+    if (alreadyAlerted.length > 0) continue
+    const alertId = generateId<AuditEvent>()
+    const alertTx = control.txFactory.createTxCreateDoc(
+      departments.class.AuditEvent,
+      core.space.Workspace,
+      {
+        kind: 'alert',
+        actor,
+        label: `${settings.alertMinutes} 分钟内打开了 ${opened} 个页面`,
+        count: opened,
+        firstOn: now,
+        lastOn: now
+      },
+      alertId
+    )
+    results.push(alertTx)
+    const alertDoc = TxProcessor.createDoc2Doc(alertTx)
+    const receivers = await getReceiversInfo(control.ctx, await workspaceOwners(control), control)
+    const messageHtml = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: alertDoc.label }] }]
+    }) as any
+    const content: Partial<Data<CommonInboxNotification>> = { header: departments.string.TooManyViews, messageHtml }
+    for (const receiver of receivers) {
+      await pushInboxNotifications(
+        control.ctx,
+        control,
+        results,
+        receiver,
+        { socialId: core.account.System },
+        alertDoc._id,
+        alertDoc._class,
+        alertDoc.space,
+        [],
+        content,
+        notification.class.CommonInboxNotification,
+        now,
+        [],
+        true,
+        alertTx
+      )
+    }
+  }
+  // Once a day, drop page-open records older than the retention period.
+  if (settings.lastCleanup === undefined || now - settings.lastCleanup > 24 * 60 * 60 * 1000) {
+    const cutoff = now - Math.max(1, settings.viewRetentionDays) * 24 * 60 * 60 * 1000
+    const old = await control.findAll(control.ctx, departments.class.AuditEvent, { kind: 'view', lastOn: { $lt: cutoff } }, { limit: 1000 })
+    for (const it of old) results.push(control.txFactory.createTxRemoveDoc(it._class, it.space, it._id))
+    const { exists, ...values } = settings
+    if (exists) {
+      results.push(
+        control.txFactory.createTxUpdateDoc(departments.class.TrackingSettings, settings.space, settings._id, { lastCleanup: now })
+      )
+    } else {
+      results.push(
+        control.txFactory.createTxCreateDoc(
+          departments.class.TrackingSettings,
+          core.space.Workspace,
+          { ...defaultTrackingSettings, lastCleanup: now },
+          departments.ids.TrackingSettings
+        )
+      )
+    }
+    void values
+  }
+  return results
+}
+
 export * from './push'
 export * from './types'
 export * from './utils'
@@ -1927,6 +2093,8 @@ export default async () => ({
     OnEmployeeDeactivate,
     OnMaterialStockMovement,
     OnOrder,
+    OnAuditLogin,
+    OnAuditView,
     PushNotificationsHandler
   },
   function: {

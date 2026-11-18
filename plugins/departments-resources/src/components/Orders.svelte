@@ -13,6 +13,7 @@
   import hr, { type Department } from '@hcengineering/hr'
   import { getResource } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
+  import { recordAudit } from '../audit'
 
   /** Orders: one per customer order, moving 销售 → 设计 → 生产 → 工程 → 培训. The server checks every button. */
   const client = getClient()
@@ -108,6 +109,11 @@
     complete: '本段完成',
     escalate: '上报主管',
     return: '退回'
+  }
+
+  function open (it: Order): void {
+    selectedId = it._id
+    void recordAudit('view', `${it.number} ${it.title}`, it)
   }
 
   async function createOrder (): Promise<void> {
@@ -227,7 +233,7 @@
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
-          <tr class:sel={it._id === selectedId} on:click={() => (selectedId = it._id)}>
+          <tr class:sel={it._id === selectedId} on:click={() => open(it)}>
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>

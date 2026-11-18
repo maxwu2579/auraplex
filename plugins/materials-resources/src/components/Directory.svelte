@@ -34,6 +34,7 @@
   import StockDialog from './StockDialog.svelte'
   import LowStockSettingsDialog from './LowStockSettingsDialog.svelte'
   import { createWorkbook, datedFilename, downloadWorkbook, formatDateTime } from '../xlsx'
+  import { recordExport } from '../audit'
 
   type Draft = Pick<
   Material,
@@ -208,6 +209,7 @@
       ]),
       datedFilename('物料库存', '', new Date())
     )
+    void recordExport(`导出物料库存 Excel（${rows.length} 条）`)
   }
 
   function edit (material?: Material): void {

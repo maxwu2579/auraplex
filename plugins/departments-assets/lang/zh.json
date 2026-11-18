@@ -47,6 +47,14 @@
     "OrderEscalated": "订单上报主管",
     "OrderReturned": "订单被退回",
     "OrderAssigned": "你被指定为订单负责人",
-    "OrderFinished": "订单已全部完成"
+    "OrderFinished": "订单已全部完成",
+    "Tracking": "追踪",
+    "ActivityLog": "操作记录",
+    "Workload": "工作量",
+    "TrackingSettings": "追踪设置",
+    "AuditEvent": "操作记录",
+    "TooManyViews": "有人短时间内打开了很多页面",
+    "SupervisorsSeeTracking": "主管能看追踪",
+    "EmployeesSeeTracking": "员工能看追踪"
   }
 }

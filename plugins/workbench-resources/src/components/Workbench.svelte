@@ -13,6 +13,7 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import { recordView } from '../auraplexAudit'
   import { Analytics } from '@hcengineering/analytics'
   import contact from '@hcengineering/contact'
   import { myEmployeeStore } from '@hcengineering/contact-resources'
@@ -557,6 +558,7 @@
       panelDoc = { _class, _id }
 
       if (doc !== undefined) {
+        void recordView(doc) // Auraplex tracking: who opened which page
         const provider = ListSelectionProvider.Find(doc._id)
         updateFocus({
           provider,

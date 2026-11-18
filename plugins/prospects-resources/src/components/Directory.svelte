@@ -3,6 +3,7 @@
   import prospects, { type Prospect, type ProspectStatus } from '@hcengineering/prospects'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { createWorkbook, datedFilename, downloadWorkbook } from '../xlsx'
+  import { recordExport } from '../audit'
   import { prospectFilter } from '../filter'
   import EditDialog from './EditDialog.svelte'
   const query = createQuery()
@@ -158,6 +159,7 @@
       ]),
       datedFilename('潜在客户', '', new Date())
     )
+    void recordExport(`导出名片 Excel（${visible.length} 条）`)
   }
 </script>
 

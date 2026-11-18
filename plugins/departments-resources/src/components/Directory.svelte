@@ -9,7 +9,7 @@
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
-  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived'>
+  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking'>
   const client = getClient()
   const hierarchy = client.getHierarchy()
   const me = getCurrentAccount()
@@ -91,7 +91,9 @@
       supervisorPermissions: [...access.supervisorPermissions],
       employeePermissions: [...access.employeePermissions],
       readerPermissions: [...access.readerPermissions],
-      archived: access.archived
+      archived: access.archived,
+      supervisorsSeeTracking: access.supervisorsSeeTracking === true,
+      employeesSeeTracking: access.employeesSeeTracking === true
     }
   }
   function choose (value: DepartmentAccess): void {
@@ -258,6 +260,18 @@
               label={departments.string.Archived}
             /></label
           >{/if}
+        <label
+          ><input type="checkbox" bind:checked={draft.supervisorsSeeTracking} disabled={busy || !owner} /><Label
+            label={departments.string.SupervisorsSeeTracking}
+          /></label
+        >
+        <label
+          ><input
+            type="checkbox"
+            bind:checked={draft.employeesSeeTracking}
+            disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
+          /><Label label={departments.string.EmployeesSeeTracking} /></label
+        >
         <p><Label label={departments.string.InviteHelp} /></p>
         <div class="table-wrap">
           <table>

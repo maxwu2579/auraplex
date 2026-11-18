@@ -40,6 +40,9 @@ export const departmentAccessMixin = 'departments:mixin:DepartmentAccess' as Ref
 export const orderClass = 'departments:class:Order' as Ref<Class<Doc>>
 export const orderActionClass = 'departments:class:OrderAction' as Ref<Class<Doc>>
 export const orderFlowClass = 'departments:class:OrderFlow' as Ref<Class<Doc>>
+export const auditEventClass = 'departments:class:AuditEvent' as Ref<Class<Doc>>
+export const trackingSettingsClass = 'departments:class:TrackingSettings' as Ref<Class<Doc>>
+const auditKinds = ['login', 'view', 'export', 'search']
 const spaceFields = ['projectSpace', 'documentSpace', 'driveSpace'] as const
 const memberFields = { admin: 'administrators', supervisor: 'supervisors', employee: 'employees', reader: 'readers' }
 const policyFields = {
@@ -55,6 +58,8 @@ export interface DepartmentRecord {
   policy: DepartmentPolicy
   spaces: Array<Ref<Space>>
   archived: boolean
+  supervisorsSeeTracking: boolean
+  employeesSeeTracking: boolean
 }
 
 const list = (value: unknown): string[] =>
@@ -73,7 +78,15 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     policy[role] = list(access[policyFields[role]]) as DepartmentPermission[]
   }
   const spaces = spaceFields.map((field) => access[field]).filter((it): it is Ref<Space> => typeof it === 'string')
-  return { _id: doc._id, members, policy, spaces, archived: access.archived === true }
+  return {
+    _id: doc._id,
+    members,
+    policy,
+    spaces,
+    archived: access.archived === true,
+    supervisorsSeeTracking: access.supervisorsSeeTracking === true,
+    employeesSeeTracking: access.employeesSeeTracking === true
+  }
 }
 
 /**
@@ -141,6 +154,10 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
     const cud = tx as TxCUD<Doc>
+    if (cud.objectClass === auditEventClass || cud.objectClass === trackingSettingsClass) {
+      await this.checkAudit(ctx, cud)
+      return
+    }
     if (cud.objectClass === orderClass || cud.objectClass === orderActionClass || cud.objectClass === orderFlowClass) {
       await this.checkOrders(ctx, cud)
       return
@@ -226,6 +243,33 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     return departmentRoles.find((role) => record.members[role].includes(person))
   }
 
+  /**
+   * Tracking records: people only add their own (and bump the count of their own repeated
+   * page opens); nobody edits or deletes them except the system. Settings are for super admins.
+   */
+  private async checkAudit (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    const owner = isOwner(ctx.contextData.account, ctx)
+    const actor = ctx.contextData.account.uuid
+    if (tx.objectClass === trackingSettingsClass) {
+      if (!owner || tx._class === core.class.TxRemoveDoc) forbidden()
+      return
+    }
+    if (tx._class === core.class.TxCreateDoc) {
+      const attributes = (tx as TxCreateDoc<Doc>).attributes as unknown as Record<string, unknown>
+      if (attributes.actor !== actor || !auditKinds.includes(attributes.kind as string)) forbidden()
+      if (attributes.count !== 1) forbidden()
+      return
+    }
+    if (tx._class !== core.class.TxUpdateDoc) forbidden()
+    const ops = (tx as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+    if (Object.keys(ops).some((key) => key !== 'count' && key !== 'lastOn')) forbidden()
+    const event = (await this.findOne(ctx, auditEventClass, tx.objectId)) as unknown as
+      | { actor: string, count: number }
+      | undefined
+    if (event === undefined || event.actor !== actor) forbidden()
+    if (ops.count !== undefined && ops.count !== event.count + 1) forbidden()
+  }
+
   /** Orders move only through checked OrderAction records; the system applies them. */
   private async checkOrders (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
     const owner = isOwner(ctx.contextData.account, ctx)
@@ -295,6 +339,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const empty = { admin: [], supervisor: [], employee: [], reader: [] }
     const old = before ?? { members: empty, policy: empty, archived: false }
     if (!owner && next.archived !== old.archived) forbidden()
+    // Whether supervisors see tracking is decided by super admins; staff by the department admin.
+    const before2 = before ?? { supervisorsSeeTracking: false, employeesSeeTracking: false }
+    if (!owner && next.supervisorsSeeTracking !== before2.supervisorsSeeTracking) forbidden()
+    if (!owner && next.employeesSeeTracking !== before2.employeesSeeTracking && !(old.members.admin as string[]).includes(ctx.contextData.account.uuid)) {
+      forbidden()
+    }
     const ok = canChangeDepartment(
       ctx.contextData.account.uuid,
       owner,
