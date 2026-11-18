@@ -60,7 +60,7 @@ export interface Order extends Doc {
   state: 'active' | 'done'
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {
@@ -72,6 +72,9 @@ export interface OrderAction extends Doc {
   step?: number
   target?: string
   reason?: string
+  /** insert: name and department of the stage added right after the current one. */
+  name?: string
+  department?: Ref<Department>
 }
 
 export const defaultOrderStages: OrderFlowStage[] = [

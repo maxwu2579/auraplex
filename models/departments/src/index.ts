@@ -89,6 +89,8 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Hidden() assignee?: OrderAction['assignee']
   @Hidden() step?: number
   @Hidden() target?: string
+  @Hidden() name?: string
+  @Hidden() department?: OrderAction['department']
   @Prop(TypeString(), departments.string.Note) reason?: string
 }
 

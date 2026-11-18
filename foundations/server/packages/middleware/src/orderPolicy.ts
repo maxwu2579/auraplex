@@ -23,6 +23,8 @@ export interface OrderActionLike {
   step?: number
   target?: string
   reason?: string
+  name?: string
+  department?: string
 }
 export interface FlowStageLike {
   id: string
@@ -43,6 +45,7 @@ const hasText = (value: string | undefined): boolean => typeof value === 'string
  * - step, complete: the person in charge of the current stage, or its supervisors
  * - escalate ("上报主管"): anyone working on the current stage, with a reason
  * - return ("退回"): supervisors of the current stage, to an earlier stage, with a reason
+ * - insert ("插入一段"): department admins, right after the current stage of this one order
  * Super admins may do everything; a finished order cannot change.
  */
 export function canOrderAction (
@@ -50,7 +53,8 @@ export function canOrderAction (
   action: OrderActionLike,
   actor: string,
   owner: boolean,
-  roleOf: RoleOf
+  roleOf: RoleOf,
+  extra: { adminSomewhere?: boolean, departments?: string[] } = {}
 ): boolean {
   if (order.state !== 'active') return false
   const index = order.stages.findIndex((it) => it.id === action.stage)
@@ -80,6 +84,11 @@ export function canOrderAction (
       const target = order.stages.findIndex((it) => it.id === action.target)
       if (!lead || target < 0 || target >= index || !hasText(action.reason)) return false
       return action.assignee === undefined || owner || canWork(roleOf(order.stages[target].department, action.assignee))
+    }
+    case 'insert': {
+      if (!owner && extra.adminSomewhere !== true) return false
+      if (!hasText(action.name) || (action.name as string).trim().length > 50) return false
+      return action.department === undefined || (extra.departments ?? []).includes(action.department)
     }
     default:
       return false

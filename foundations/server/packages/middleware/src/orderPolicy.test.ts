@@ -74,3 +74,16 @@ test('department admins only change the sub-steps of their own stage', () => {
   expect(canChangeFlow(before, [before[1], before[0]], 'boss', true, roleOf)).toBe(true)
   expect(canChangeFlow(before, [before[0], before[0]], 'boss', true, roleOf)).toBe(false)
 })
+
+test('insert: department admins and super admins add a stage after the current one', () => {
+  const insert = { kind: 'insert', stage: 'p', name: '销售补单', department: 'sales' }
+  const extra = { adminSomewhere: true, departments: ['sales', 'production'] }
+  expect(canOrderAction(order(), insert, 'ming', false, roleOf, extra)).toBe(true)
+  expect(canOrderAction(order(), insert, 'boss', true, roleOf, { departments: ['sales'] })).toBe(true)
+  expect(canOrderAction(order(), insert, 'qiang', false, roleOf, { departments: ['sales'] })).toBe(false)
+  expect(canOrderAction(order(), insert, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { ...insert, name: ' ' }, 'ming', false, roleOf, extra)).toBe(false)
+  expect(canOrderAction(order(), { ...insert, department: 'ghost' }, 'ming', false, roleOf, extra)).toBe(false)
+  expect(canOrderAction(order(), { ...insert, stage: 'e' }, 'ming', false, roleOf, extra)).toBe(false)
+  expect(canOrderAction({ ...order(), state: 'done' }, insert, 'ming', false, roleOf, extra)).toBe(false)
+})

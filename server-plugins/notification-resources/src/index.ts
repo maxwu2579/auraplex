@@ -1903,6 +1903,16 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       await notifyOrder(control, results, tx, order, people, departments.string.OrderReturned, `${title}\n${stage.name} 退回到 ${back.name}${reason}`)
       break
     }
+    case 'insert': {
+      // Only this order changes; the default flow stays as it is.
+      const name = (action.name ?? '').trim()
+      if (name === '') return []
+      const added: OrderStage = { id: `extra-${tx.objectId}`, name, department: action.department, status: 'waiting', steps: [] }
+      stages.splice(index + 1, 0, added)
+      const leads = await departmentLeads(control, added.department)
+      await notifyOrder(control, results, tx, order, [order.salesOwner, ...leads], departments.string.OrderHandedOver, `${title}\n${stage.name} 之后插入了一段：${name}${reason}`)
+      break
+    }
   }
   results.unshift(
     control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, current, state })

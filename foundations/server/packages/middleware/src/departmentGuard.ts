@@ -281,7 +281,11 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       if (!create || attributes.actor !== actor) forbidden()
       const order = await this.findOne(ctx, orderClass, attributes.order as Ref<Doc>)
       if (order === undefined) forbidden()
-      const ok = canOrderAction(order as unknown as OrderLike, attributes as any, actor, owner, this.roleOf)
+      const live = this.departments.filter((d) => !d.archived)
+      const ok = canOrderAction(order as unknown as OrderLike, attributes as any, actor, owner, this.roleOf, {
+        adminSomewhere: live.some((d) => d.members.admin.includes(actor)),
+        departments: live.map((d) => d._id as string)
+      })
       if (!ok) forbidden()
       return
     }

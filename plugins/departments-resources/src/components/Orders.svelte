@@ -35,6 +35,8 @@
   let reason = ''
   let returnTarget = ''
   let returnPerson = ''
+  let insertDept = ''
+  let insertName = ''
   let busy = false
   let error = ''
   let notice = ''
@@ -93,6 +95,9 @@
   $: inCharge = stage?.assignee === me.uuid
   $: canWork = lead || inCharge || (role !== undefined && role !== 'reader')
   $: active = selected?.state === 'active'
+  // Department admins and super admins may add a stage to one order mid-way.
+  $: canInsert = owner || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
+  $: liveDepts = depts.filter((d) => !d.archived)
   $: shown = orders.filter(
     (it) =>
       filter === 'all' ||
@@ -108,7 +113,8 @@
     step: '勾选步骤',
     complete: '本段完成',
     escalate: '上报主管',
-    return: '退回'
+    return: '退回',
+    insert: '插入一段'
   }
 
   function open (it: Order): void {
@@ -165,6 +171,8 @@
       reason = ''
       returnTarget = ''
       returnPerson = ''
+      insertDept = ''
+      insertName = ''
     } catch {
       error = '没有权限做这个操作，或者订单已经变化，请刷新后再看。'
     } finally {
@@ -180,6 +188,16 @@
       target: returnTarget,
       reason,
       ...(returnPerson !== '' ? { assignee: returnPerson as AccountUuid } : {})
+    })
+  }
+
+  async function sendInsert (): Promise<void> {
+    const label = insertName.trim() !== '' ? insertName.trim() : insertDept !== '' ? deptName(insertDept as Ref<Department>) : ''
+    if (label === '') return
+    await act('insert', {
+      name: label,
+      ...(insertDept !== '' ? { department: insertDept as Ref<Department> } : {}),
+      ...(reason.trim() !== '' ? { reason } : {})
     })
   }
 
@@ -316,6 +334,18 @@
                 >
               </div>
             {/if}
+            {#if canInsert}
+              <div class="row">
+                <select bind:value={insertDept}>
+                  <option value="">插入一段：选部门…</option>
+                  {#each liveDepts as d (d._id)}<option value={d._id}>{d.name}</option>{/each}
+                </select>
+                <input placeholder="这一段叫什么（不填就用部门名）" bind:value={insertName} maxlength="50" />
+                <button disabled={busy || (insertDept === '' && insertName.trim() === '')} on:click={sendInsert}
+                  >插入到「{stage.name}」后面</button
+                >
+              </div>
+            {/if}
           </div>
         {:else if selected.state === 'done'}
           <p class="ok">这个订单已经全部完成。</p>
@@ -340,7 +370,7 @@
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
               {name(a.actor)}：{kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
                 ? ` → ${selected.stages.find((s) => s.id === a.target)?.name ?? ''}`
-                : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}）{a.reason ? `：${a.reason}` : ''}
+                : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>
           {/each}
           {#if actions.length === 0}<li class="hint">还没有记录。</li>{/if}
