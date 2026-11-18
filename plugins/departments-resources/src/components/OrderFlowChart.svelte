@@ -46,7 +46,7 @@
       <strong>{card.name}</strong>
       <span>{card.department}</span>
       {#if card.assignee !== undefined}<span>负责人 {card.assignee}</span>{/if}
-      {#if card.status}<span>{statuses[card.status]}</span>{/if}
+      {#if card.status}<span class="stage-status">{statuses[card.status]}</span>{/if}
       {#if card.status === 'active' && card.startedOn !== undefined}
         <span>已用 {Math.max(0, Math.floor((Date.now() - card.startedOn) / 86400000))} 天</span>
       {/if}
@@ -62,12 +62,25 @@
 
 <style>
   .chart, .palette { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-  .palette { margin-bottom: 0.5rem; }
-  .card { display: grid; gap: 0.25rem; text-align: start; padding: 0.6rem; min-width: 8rem; border: 2px solid var(--theme-divider-color); border-radius: 0.5rem; }
+  .palette { margin-bottom: 0.75rem; }
+  .palette button, .card {
+    color: var(--theme-content-color);
+    background: var(--theme-panel-color);
+    border: 2px solid var(--theme-button-border);
+    border-radius: 0.5rem;
+  }
+  .palette button { padding: 0.5rem 0.75rem; color: var(--theme-caption-color); }
+  .card {
+    box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start;
+    gap: 0.2rem; text-align: start; padding: 0.6rem; width: 10rem; max-width: 100%;
+    height: 10.5rem; line-height: 1.2; overflow: auto;
+  }
+  .card strong, .stage-status { color: var(--theme-caption-color); }
+  .stage-status { font-weight: 600; }
   .selected { outline: 2px solid var(--theme-content-color); }
-  .done { border-color: #468c56; }
-  .active { border-color: #4386d1; }
-  .approval { border-color: #d68b35; }
-  .waiting { opacity: 0.78; }
-  .gap { padding: 0.65rem 0.2rem; }
+  .done { border-color: var(--theme-won-color); }
+  .active { border-color: var(--theme-link-color); }
+  .approval { border-color: var(--theme-warning-color); }
+  .waiting { border-style: dashed; }
+  .gap { padding: 0.65rem 0.2rem; color: var(--theme-caption-color); }
 </style>
