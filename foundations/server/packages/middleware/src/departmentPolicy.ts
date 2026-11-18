@@ -53,6 +53,19 @@ export function effectivePermissions (
   return permissions
 }
 
+export function canChangeDepartmentOptions (
+  owner: boolean,
+  admin: boolean,
+  before: { contactVisibility?: unknown, modules?: unknown },
+  after: { contactVisibility?: unknown, modules?: unknown }
+): boolean {
+  const visibility = after.contactVisibility
+  if (visibility !== undefined && visibility !== 'company' && visibility !== 'department' && visibility !== 'admins') return false
+  if (after.modules !== undefined && (!Array.isArray(after.modules) || after.modules.some((item) => typeof item !== 'string' || item.trim() === ''))) return false
+  return (owner || admin || (before.contactVisibility ?? 'company') === (visibility ?? 'company')) &&
+    (owner || JSON.stringify(before.modules) === JSON.stringify(after.modules))
+}
+
 /** Compare complete old and new snapshots, not the client-supplied patch alone. */
 export function canChangeDepartment (
   actor: string,
@@ -72,6 +85,7 @@ export function canChangeDepartment (
   if (privileged) return true
   const allowed = effectivePermissions(before, oldPolicy, actor)
   const same = (a: string[], b: string[]): boolean => a.length === b.length && a.every((item) => b.includes(item))
+  if (before.admin.includes(actor) && departmentRoles.every((role) => same(before[role], after[role]) && same(oldPolicy[role], nextPolicy[role]))) return true
   if (allowed.has('manageMembers')) {
     if (!same(oldPolicy.admin, nextPolicy.admin)) return false
     if (!same(before.admin, after.admin)) return false

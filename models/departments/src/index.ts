@@ -58,6 +58,8 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Prop(TypeRef(core.class.Space), departments.string.DocumentSpace) documentSpace?: DepartmentAccess['documentSpace']
   @Prop(TypeRef(core.class.Space), departments.string.DriveSpace) driveSpace?: DepartmentAccess['driveSpace']
   @Prop(TypeBoolean(), departments.string.Archived) archived!: boolean
+  @Hidden() contactVisibility?: DepartmentAccess['contactVisibility']
+  @Hidden() modules?: string[]
   @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
 }

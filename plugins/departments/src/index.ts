@@ -18,6 +18,8 @@ export interface DepartmentAccess extends Department {
   documentSpace?: Ref<Space>
   driveSpace?: Ref<Space>
   archived: boolean
+  contactVisibility?: 'company' | 'department' | 'admins'
+  modules?: string[]
   /** Tracking access: supervisors (set by super admins) and staff (set by the department admin). */
   supervisorsSeeTracking?: boolean
   employeesSeeTracking?: boolean

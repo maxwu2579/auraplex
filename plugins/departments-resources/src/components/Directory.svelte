@@ -1,7 +1,9 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
-  import contact, { formatName, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, generateId, getCurrentAccount, type AccountUuid } from '@hcengineering/core'
+  import chunter from '@hcengineering/chunter'
+  import { getResource, type IntlString } from '@hcengineering/platform'
+  import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
+  import core, { AccountRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -9,13 +11,26 @@
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
-  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking'>
+  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules'>
   const client = getClient()
   const hierarchy = client.getHierarchy()
+  interface ModuleApplication extends Doc {
+    alias: string
+    label: IntlString
+    hidden: boolean
+  }
+  const applications = client.getModel().findAllSync(
+    'workbench:class:Application' as Ref<Class<ModuleApplication>>, { hidden: false }
+  ).filter((app) => app.alias !== '')
+  const moduleByAlias = new Map(applications.map((app) => [app.alias, app]))
   const me = getCurrentAccount()
   const owner = me.role === AccountRole.Owner
   const rosterQuery = createQuery()
   const departmentQuery = createQuery()
+  let channels: Channel[] = []
+  createQuery().query(contact.class.Channel, {
+    provider: { $in: [contact.channelProvider.Phone, contact.channelProvider.Email, contact.channelProvider.Whatsapp] }
+  }, (items) => { channels = items })
   let staff: Employee[] = []
   let rows: DepartmentAccess[] = []
   let selected: DepartmentAccess | undefined
@@ -51,7 +66,7 @@
     rows = items.flatMap((item) => {
       const access = hierarchy.asIf(item, departments.mixin.DepartmentAccess)
       if (access === undefined) return []
-      return owner || roles.some((role) => access[role.field].includes(me.uuid)) ? [access] : []
+      return [access]
     })
     if (owner) void joinAsOwner(rows)
   })
@@ -92,10 +107,42 @@
       employeePermissions: [...access.employeePermissions],
       readerPermissions: [...access.readerPermissions],
       archived: access.archived,
+      contactVisibility: access.contactVisibility ?? 'company',
+      ...(access.modules !== undefined ? { modules: [...access.modules] } : {}),
       supervisorsSeeTracking: access.supervisorsSeeTracking === true,
       employeesSeeTracking: access.employeesSeeTracking === true
     }
   }
+  $: orderedRows = [...rows].sort((a, b) => Number(a.archived) - Number(b.archived) || a.name.localeCompare(b.name))
+  $: live = rows.find((row) => row._id === selected?._id)
+  $: canEdit = owner || live?.administrators.includes(me.uuid) === true
+  $: canSeeContacts = canEdit || live?.contactVisibility === undefined || live.contactVisibility === 'company' ||
+    (live.contactVisibility === 'department' && roles.some((role) => live?.[role.field].includes(me.uuid)))
+  $: names = (ids: AccountUuid[]): string => staff.filter((person) => ids.includes(person.personUuid as AccountUuid))
+    .map((person) => formatName(person.name)).join('、')
+  $: members = (ids: AccountUuid[]): Employee[] => staff.filter((person) => ids.includes(person.personUuid as AccountUuid))
+  $: details = (person: Employee): string => channels.filter((channel) => channel.attachedTo === person._id)
+    .map((channel) => channel.value).join(' · ')
+
+  async function chat (id: AccountUuid | undefined): Promise<void> {
+    if (id === undefined || id === me.uuid) return
+    try {
+      const dms = await client.findAll(chunter.class.DirectMessage, {})
+      let dmId = dms.find((it) => it.members.length === 2 && it.members.includes(me.uuid) && it.members.includes(id))?._id
+      if (dmId === undefined) {
+        const ops = client.apply('department-direct-message')
+        dmId = await ops.createDoc(chunter.class.DirectMessage, core.space.Space, {
+          name: '', description: '', private: true, archived: false, members: [me.uuid, id]
+        })
+        if (!(await ops.commit()).result) throw new Error('Could not create direct message')
+      }
+      const open = await getResource(chunter.function.OpenChannelInSidebar)
+      await open(dmId, chunter.class.DirectMessage)
+    } catch {
+      error = true
+    }
+  }
+
   function choose (value: DepartmentAccess): void {
     selected = value
     draft = clone(value)
@@ -148,6 +195,11 @@
       [role]: list.includes(permission) ? list.filter((item) => item !== permission) : [...list, permission]
     }
   }
+  function toggleModule (alias: string): void {
+    if (draft === undefined || !owner) return
+    const modules = draft.modules ?? [...moduleByAlias.keys()]
+    draft = { ...draft, modules: modules.includes(alias) ? modules.filter((it) => it !== alias) : [...modules, alias] }
+  }
   async function create (): Promise<void> {
     if (!owner || busy || newName.trim() === '' || newAdmin === '') return
     busy = true
@@ -189,7 +241,7 @@
     }
   }
   async function save (): Promise<void> {
-    if (selected === undefined || draft === undefined || busy) return
+    if (selected === undefined || draft === undefined || busy || !canEdit) return
     busy = true
     error = false
     saved = false
@@ -218,7 +270,7 @@
 
 <section class="departments">
   <h2><Label label={departments.string.Departments} /></h2>
-  {#if owner}
+  {#if owner && selected === undefined}
     <div class="create">
       <input bind:value={newName} aria-label="Department name" />
       <label
@@ -240,15 +292,72 @@
   {#if error}<p class="error"><Label label={departments.string.SaveError} /></p>{/if}
   {#if saved}<p><Label label={departments.string.Saved} /></p>{/if}
   <div class="layout">
-    <nav>
-      {#each rows as row (row._id)}<button
-          on:click={() => {
-            choose(row)
-          }}>{row.name}</button
-        >{/each}
-    </nav>
-    {#if selected !== undefined && draft !== undefined}
+    {#if selected === undefined}
+      <nav aria-label="部门">
+        {#each orderedRows as row (row._id)}
+          <button class="department-card" class:archived={row.archived} on:click={() => choose(row)}>
+            <strong>{row.name}</strong>
+            <span>管理员 {names(row.administrators) || '—'}</span>
+            <span>{new Set(roles.flatMap((role) => row[role.field])).size} 人{row.archived ? ' · 已归档' : ''}</span>
+          </button>
+        {/each}
+      </nav>
+    {:else if live !== undefined && draft !== undefined}
       <div class="editor">
+        <div><button on:click={() => { selected = undefined; draft = undefined }}>返回</button></div>
+        <h3>{live.name}</h3>
+        {#each roles as role (role.field)}
+          <section>
+            <h4><Label label={role.label} /></h4>
+            {#each members(live[role.field]) as person (person._id)}
+              <div class="member">
+                <strong>{formatName(person.name)}</strong>
+                <span>{role.field === 'administrators' || canSeeContacts ? details(person) || '—' : '（不公开）'}</span>
+                {#if role.field === 'administrators' && person.personUuid !== me.uuid}
+                  <button on:click={() => chat(person.personUuid)}>私信</button>
+                {/if}
+              </div>
+            {/each}
+          </section>
+        {/each}
+        <section>
+          <h4>这个部门能用的模块</h4>
+          {#if live.modules === undefined}
+            <p>全部模块</p>
+          {:else if live.modules.length === 0}
+            <p>没有配置默认模块</p>
+          {:else}
+            <ul>
+              {#each live.modules as alias (alias)}
+                {@const application = moduleByAlias.get(alias)}
+                <li>{#if application}<Label label={application.label} />{:else}{alias}{/if}</li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
+        {#if canEdit}
+          <h4>设置</h4>
+          {#if owner}
+            <fieldset>
+              <legend>能用的模块</legend>
+              {#each applications as app (app._id)}
+                <label>
+                  <input type="checkbox" checked={draft.modules?.includes(app.alias) ?? true} disabled={busy}
+                    on:change={() => toggleModule(app.alias)} />
+                  <Label label={app.label} />
+                </label>
+              {/each}
+            </fieldset>
+          {/if}
+          <label>成员联系方式给谁看
+            <select bind:value={draft.contactVisibility} disabled={busy}>
+              <option value="company">全公司</option>
+              <option value="department">只给本部门</option>
+              <option value="admins">只给管理员</option>
+            </select>
+            <small>只控制部门页里显示与否</small>
+          </label>
+
         <label
           ><Label label={departments.string.DepartmentName} /><input
             bind:value={name}
@@ -325,10 +434,10 @@
         <button
           on:click={save}
           disabled={busy ||
-            (owner && name.trim() === '') ||
-            (!owner && !actorPermissions().has('manageMembers') && !actorPermissions().has('invite'))}
+            (owner && name.trim() === '')}
           ><Label label={busy ? departments.string.Processing : departments.string.Save} /></button
         >
+        {/if}
       </div>
     {/if}
   </div>
@@ -347,9 +456,25 @@
   }
   nav {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: flex-start;
     gap: 0.5rem;
     min-width: 12rem;
+  }
+  .department-card {
+    display: grid;
+    text-align: start;
+    gap: 0.5rem;
+    padding: 1rem;
+    min-width: 12rem;
+  }
+  .archived { opacity: 0.55; }
+  .member {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
   }
   .editor {
     flex: 1;

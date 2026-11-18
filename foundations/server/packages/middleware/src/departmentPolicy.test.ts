@@ -8,6 +8,7 @@ import {
   type DepartmentMembers,
   type DepartmentPolicy
 } from './departmentPolicy'
+import { canChangeDepartmentOptions } from './departmentPolicy'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -133,4 +134,12 @@ test('manageMembers is sufficient regardless of assigned role and respects the a
   const elevated = structuredClone(policy)
   elevated.employee.push('delete')
   expect(canChangeDepartment('supervisor', false, members, after, policy, elevated)).toBe(false)
+})
+
+test('only department administrators change contact visibility and only owners change module defaults', () => {
+  expect(canChangeDepartmentOptions(false, false, {}, { contactVisibility: 'admins' })).toBe(false)
+  expect(canChangeDepartmentOptions(false, true, {}, { contactVisibility: 'admins' })).toBe(true)
+  expect(canChangeDepartmentOptions(false, true, {}, { modules: [] })).toBe(false)
+  expect(canChangeDepartmentOptions(true, false, {}, { modules: ['orders'] })).toBe(true)
+  expect(canChangeDepartmentOptions(true, false, {}, { contactVisibility: 'invalid' })).toBe(false)
 })

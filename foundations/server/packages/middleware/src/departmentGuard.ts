@@ -25,6 +25,7 @@ import {
 import { classifyDepartmentAction } from './departmentAction'
 import {
   canChangeDepartment,
+  canChangeDepartmentOptions,
   departmentRoles,
   effectivePermissions,
   type DepartmentMembers,
@@ -58,6 +59,8 @@ export interface DepartmentRecord {
   policy: DepartmentPolicy
   spaces: Array<Ref<Space>>
   archived: boolean
+  contactVisibility?: unknown
+  modules?: unknown
   supervisorsSeeTracking: boolean
   employeesSeeTracking: boolean
 }
@@ -84,6 +87,8 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     policy,
     spaces,
     archived: access.archived === true,
+    contactVisibility: access.contactVisibility,
+    modules: access.modules,
     supervisorsSeeTracking: access.supervisorsSeeTracking === true,
     employeesSeeTracking: access.employeesSeeTracking === true
   }
@@ -349,6 +354,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (!owner && next.employeesSeeTracking !== before2.employeesSeeTracking && !(old.members.admin as string[]).includes(ctx.contextData.account.uuid)) {
       forbidden()
     }
+    if (!canChangeDepartmentOptions(owner, old.members.admin.includes(ctx.contextData.account.uuid), before ?? {}, next)) forbidden()
     const ok = canChangeDepartment(
       ctx.contextData.account.uuid,
       owner,
