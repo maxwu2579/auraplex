@@ -7,7 +7,7 @@
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Label } from '@hcengineering/ui'
+  import { Breadcrumb, Header, Label } from '@hcengineering/ui'
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
@@ -37,6 +37,8 @@
   let draft: Draft | undefined
   let name = ''
   let newName = ''
+  let showCreate = false
+  let tab: 'members' | 'modules' | 'settings' = 'members'
   let newAdmin = ''
   let busy = false
   let error = false
@@ -217,6 +219,7 @@
 
   function choose (value: DepartmentAccess): void {
     grantPerson = undefined
+    tab = 'members'
     selected = value
     draft = clone(value)
     name = value.name
@@ -362,7 +365,9 @@
 </script>
 
 <section class="departments">
-  <h2><Label label={departments.string.Departments} /></h2>
+  <Header adaptive="disabled">
+    <Breadcrumb label={departments.string.Departments} size="large" isCurrent />
+    <svelte:fragment slot="extra">
   {#if owner && selected === undefined}
     <label>
       <input type="checkbox" checked={moduleSettings?.enabled === true} disabled={busy}
@@ -372,7 +377,13 @@
           void toggleModuleSettings(enabled)
         }} />
       按部门控制模块
+      <small>启用后按部门角色和个人例外分配模块。</small>
     </label>
+    <button on:click={() => { showCreate = !showCreate }}><Label label={departments.string.CreateDepartment} /></button>
+  {/if}
+    </svelte:fragment>
+  </Header>
+  {#if owner && selected === undefined && showCreate}
     <div class="create">
       <input bind:value={newName} aria-label="Department name" />
       <label
@@ -408,6 +419,12 @@
       <div class="editor">
         <div><button on:click={() => { selected = undefined; draft = undefined }}>返回</button></div>
         <h3>{live.name}</h3>
+        <div class="tabs">
+          <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}>成员</button>
+          <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}>模块权限</button>
+          {#if canEdit}<button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}>设置</button>{/if}
+        </div>
+        {#if tab === 'members'}
         {#each roles as role (role.field)}
           <section>
             <h4><Label label={role.label} /></h4>
@@ -452,6 +469,8 @@
             <button disabled={busy} on:click={() => { grantPerson = undefined }}>取消</button>
           </fieldset>
         {/if}
+        {/if}
+        {#if tab === 'modules'}
         <section>
           <h4>这个部门能用的模块</h4>
           {#if live.modules === undefined}
@@ -467,8 +486,6 @@
             </ul>
           {/if}
         </section>
-        {#if canEdit}
-          <h4>设置</h4>
           {#if owner}
             <div class="table-wrap">
               <table>
@@ -494,6 +511,8 @@
               </table>
             </div>
           {/if}
+        {/if}
+        {#if canEdit && tab === 'settings'}
           <label>成员联系方式给谁看
             <select bind:value={draft.contactVisibility} disabled={busy}>
               <option value="company">全公司</option>
@@ -526,6 +545,8 @@
             disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
           /><Label label={departments.string.EmployeesSeeTracking} /></label
         >
+        {/if}
+        {#if canEdit && tab === 'members'}
         <p><Label label={departments.string.InviteHelp} /></p>
         <div class="table-wrap">
           <table>
@@ -575,6 +596,8 @@
             >
           </table>
         </div>
+        {/if}
+        {#if canEdit}
         {#if !owner}<p><Label label={departments.string.NoPermission} /></p>{/if}
         <button
           on:click={save}
@@ -600,19 +623,22 @@
     margin: 1rem 0;
   }
   nav {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 0.5rem;
-    min-width: 12rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: 1.5rem;
+    width: 100%;
   }
   .department-card {
     display: grid;
     text-align: start;
     gap: 0.5rem;
     padding: 1rem;
-    min-width: 12rem;
+    border: 1px solid var(--theme-button-border);
+    border-radius: 0.75rem;
+    background: var(--theme-bg-color);
   }
+  .tabs { display: flex; gap: 0.5rem; }
+  .tabs button[aria-pressed='true'] { font-weight: 600; }
   .archived { opacity: 0.55; }
   .member {
     display: flex;

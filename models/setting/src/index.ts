@@ -315,6 +315,14 @@ export function createModel (builder: Builder): void {
     },
     setting.ids.Members
   )
+  builder.createDoc(setting.class.WorkspaceSettingCategory, core.space.Model, {
+    name: 'departments',
+    label: 'departments:string:Departments' as typeof setting.string.Members,
+    icon: setting.icon.Members,
+    component: 'departments:component:Directory' as typeof setting.component.Members,
+    order: 1001,
+    role: AccountRole.Guest
+  })
   builder.createDoc(
     setting.class.WorkspaceSettingCategory,
     core.space.Model,
