@@ -35,7 +35,11 @@ it('rolls back the public record when storing a secret fails', async () => {
     store.connect('ws' as WorkspaceUuid, 'person' as PersonId, { phoneNumberId: '123', wabaId: '456' }, 'local-test')
   ).rejects.toThrow()
   expect(account.deleteIntegration).toHaveBeenCalledTimes(1)
-  expect(account.createIntegration.mock.calls[0][0].data).toMatchObject({ phoneNumberId: '123', wabaId: '456', connectedOn: expect.any(Number) })
+  expect(account.createIntegration.mock.calls[0][0].data).toMatchObject({
+    phoneNumberId: '123',
+    wabaId: '456',
+    connectedOn: expect.any(Number)
+  })
 })
 
 it('serializes competing connections and rejects duplicate numbers', async () => {
@@ -64,7 +68,9 @@ it('allows different numbers in a workspace and only disconnects the caller', as
   const entries: Integration[] = []
   const account = {
     listIntegrations: jest.fn(async () => [...entries]),
-    createIntegration: jest.fn(async (value: Integration) => { entries.push(value) }),
+    createIntegration: jest.fn(async (value: Integration) => {
+      entries.push(value)
+    }),
     addIntegrationSecret: jest.fn(),
     deleteIntegration: jest.fn()
   }

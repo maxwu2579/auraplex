@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 
+import { recordWhatsappExchange } from './audit'
 import { createHash } from 'crypto'
 import type { AccountClient, Integration } from '@hcengineering/account-client'
 import contact, { AvatarType, type Channel, type Contact, type PersonSpace } from '@hcengineering/contact'
@@ -79,10 +80,11 @@ export class WorkspaceReceiver {
   async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<void> {
     const id = stableId<WhatsappMessage>('message', message.phoneNumberId, message.wamid)
     if ((await client.findOne(whatsapp.class.Message, { _id: id })) !== undefined) return
-    const owner = await this.account.findPersonBySocialId(integration.socialId, true) as AccountUuid | undefined
+    const owner = (await this.account.findPersonBySocialId(integration.socialId, true)) as AccountUuid | undefined
     if (owner === undefined) throw new Error('Missing integration owner')
     const employee = await client.findOne(contact.mixin.Employee, { personUuid: owner, active: true })
-    const personalSpace = employee === undefined ? undefined : await client.findOne(contact.class.PersonSpace, { person: employee._id })
+    const personalSpace =
+      employee === undefined ? undefined : await client.findOne(contact.class.PersonSpace, { person: employee._id })
     if (personalSpace === undefined || !personalSpace.private || !personalSpace.members.includes(owner)) {
       throw new Error('Missing private integration space')
     }
@@ -174,6 +176,7 @@ export class WorkspaceReceiver {
       id
     )
     await this.addNotifications(client, ops, owner, customer, channel, message, id)
+    await recordWhatsappExchange(client, ops, owner, message.phone, message.timestamp)
     const result = await ops.commit()
     if (!result.result && (await client.findOne(whatsapp.class.Message, { _id: id })) === undefined) {
       throw new Error('Message transaction was not committed')

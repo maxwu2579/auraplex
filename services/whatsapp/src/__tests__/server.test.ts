@@ -30,7 +30,13 @@ let server: Server
 let base: string
 const getLogin = jest.fn()
 const inbox = { enqueue: jest.fn().mockResolvedValue(undefined) }
-const store = { list: jest.fn(), get: jest.fn(), connect: jest.fn(), disconnect: jest.fn().mockResolvedValue(undefined), accessToken: jest.fn() }
+const store = {
+  list: jest.fn(),
+  get: jest.fn(),
+  connect: jest.fn(),
+  disconnect: jest.fn().mockResolvedValue(undefined),
+  accessToken: jest.fn()
+}
 const graphRequest = jest.fn()
 const config: Config = {
   port: 0,
@@ -245,12 +251,18 @@ it('reports template errors with fixed text and refuses when not connected', asy
 
 it('returns only safe connection summaries to the workspace owner', async () => {
   store.list.mockResolvedValue([
-    { workspaceUuid: 'ws', socialId: 'person-a', data: { phoneNumberId: '123', connectedOn: 42, token: 'hidden', content: 'private' } },
+    {
+      workspaceUuid: 'ws',
+      socialId: 'person-a',
+      data: { phoneNumberId: '123', connectedOn: 42, token: 'hidden', content: 'private' }
+    },
     { workspaceUuid: 'other', socialId: 'person-b', data: { phoneNumberId: '456' } }
   ])
   store.accessToken.mockResolvedValue('never-return')
   graphRequest.mockResolvedValue({ ok: true, json: async () => ({ display_phone_number: '+123' }) })
   const res = await fetch(base + '/api/connections', { headers: { Authorization: 'Bearer local-test' } })
   expect(res.status).toBe(200)
-  expect(await res.json()).toEqual([{ person: 'person-a', phoneNumberId: '123', connectedOn: 42, status: 'valid', displayPhone: '+123' }])
+  expect(await res.json()).toEqual([
+    { person: 'person-a', phoneNumberId: '123', connectedOn: 42, status: 'valid', displayPhone: '+123' }
+  ])
 })

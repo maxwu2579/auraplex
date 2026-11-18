@@ -816,3 +816,22 @@ describe('GuestPermissionsMiddleware', () => {
     })
   })
 })
+
+it('only allows a member to create pending WhatsApp messages in their own personal space', async () => {
+  const account = makeAccount(AccountRole.User)
+  const person = 'employee-person'
+  const middleware = makeMiddleware(async (_ctx, cls) => {
+    if (cls === contact.mixin.Employee) return [{ _id: person }] as unknown as Doc[]
+    if (cls === contact.class.PersonSpace) return [{ person, private: true, members: [account.uuid] }] as unknown as Doc[]
+    return []
+  })
+  const messageClass = 'whatsapp:class:Message' as Ref<Class<Doc>>
+  const create = new TxFactory(account.primarySocialId).createTxCreateDoc(
+    messageClass, ALLOWED_SPACE, { owner: account.uuid, direction: 'outgoing', status: 'pending' } as any
+  )
+  await expect(middleware.tx(makeCtx(account), [create])).resolves.toBeDefined()
+  const mismatchedOwner = { ...create, attributes: { ...create.attributes, owner: 'other' } }
+  await expect(middleware.tx(makeCtx(account), [mismatchedOwner])).rejects.toThrow()
+  const update = new TxFactory(account.primarySocialId).createTxUpdateDoc(messageClass, ALLOWED_SPACE, create.objectId, {})
+  await expect(middleware.tx(makeCtx(account), [update])).rejects.toThrow()
+})

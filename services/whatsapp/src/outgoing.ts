@@ -13,6 +13,7 @@
 // limitations under the License.
 //
 
+import { recordWhatsappExchange } from './audit'
 import contact, { type Channel, type PersonSpace } from '@hcengineering/contact'
 import core, { type Ref, type Tx, type TxCUD, type TxOperations, type WorkspaceUuid } from '@hcengineering/core'
 import whatsapp, { isValidTemplateParameter, type WhatsappMessage } from '@hcengineering/whatsapp'
@@ -104,16 +105,27 @@ export class OutgoingService {
     let wamid: string | undefined
     let failure: SendError | undefined
     try {
-      const employee = message.owner === undefined ? undefined : await client.findOne(contact.mixin.Employee, { personUuid: message.owner, active: true })
+      const employee =
+        message.owner === undefined
+          ? undefined
+          : await client.findOne(contact.mixin.Employee, { personUuid: message.owner, active: true })
       const space = await client.findOne(contact.class.PersonSpace, { _id: message.space as Ref<PersonSpace> })
-      if (employee === undefined || space?.person !== employee._id || !space.private || message.owner === undefined || !space.members.includes(message.owner)) {
+      if (
+        employee === undefined ||
+        space?.person !== employee._id ||
+        !space.private ||
+        message.owner === undefined ||
+        !space.members.includes(message.owner)
+      ) {
         throw new SendError('INVALID_MESSAGE', '消息不属于发件人的私人空间。')
       }
       const identities = await client.findAll(contact.class.SocialIdentity, { attachedTo: employee._id })
       if (!identities.some((identity) => identity._id === message.createdBy)) {
         throw new SendError('INVALID_MESSAGE', '无法确认发件人身份。')
       }
-      const integration = (await Promise.all(identities.map(async (identity) => await this.store.get(workspace, identity._id)))).find((entry) => entry?.data?.phoneNumberId === message.phoneNumberId)
+      const integration = (
+        await Promise.all(identities.map(async (identity) => await this.store.get(workspace, identity._id)))
+      ).find((entry) => entry?.data?.phoneNumberId === message.phoneNumberId)
       if (integration === undefined) throw new SendError('NOT_CONNECTED', 'WhatsApp 尚未连接，请管理员在设置中连接。')
       const phoneNumberId = integration.data?.phoneNumberId
       const channel = await client.findOne(contact.class.Channel, { _id: message.attachedTo as Ref<Channel> })
@@ -162,6 +174,9 @@ export class OutgoingService {
         ? { status: 'sent', wamid }
         : { status: 'failed', errorCode: failure.code, errorMessage: failure.message }
     )
+    if (failure === undefined && message.owner !== undefined) {
+      await recordWhatsappExchange(client, finish, message.owner, message.phone, Date.now())
+    }
     if (!(await finish.commit()).result) throw new Error('Send result could not be saved')
   }
 

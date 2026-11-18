@@ -36,7 +36,13 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
     },
     ...['owner', 'follower', 'unrelated'].flatMap((user) => [
       { _id: user + '-person', _class: contact.class.Person, personUuid: user, active: true, employee: true },
-      { _id: user + '-space', _class: contact.class.PersonSpace, person: user + '-person', private: true, members: [user] }
+      {
+        _id: user + '-space',
+        _class: contact.class.PersonSpace,
+        person: user + '-person',
+        private: true,
+        members: [user]
+      }
     ]),
     { _id: 'watch-1', _class: core.class.Collaborator, attachedTo: 'customer', collaborator: 'owner' },
     { _id: 'watch-2', _class: core.class.Collaborator, attachedTo: 'customer', collaborator: 'follower' }
@@ -48,6 +54,7 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
       (cls === contact.mixin.Employee && doc.employee === true)) &&
     Object.entries(query).every(([key, value]) => doc[key] === value)
   const client: any = {
+    getHierarchy: () => ({ findClass: () => ({}) }),
     findOne: async (cls: string, query: object) => records.find((doc) => matches(doc, cls, query)),
     findAll: async (cls: string, query: object) => records.filter((doc) => matches(doc, cls, query)),
     apply: () => {
@@ -113,11 +120,10 @@ function fixture (): { client: TxOperations, receiver: WorkspaceReceiver, record
       return ops
     }
   }
-  const account = { findPersonBySocialId: async (id: string) => id === 'social-two' ? 'follower' : 'owner' }
+  const account = { findPersonBySocialId: async (id: string) => (id === 'social-two' ? 'follower' : 'owner') }
   const store = {
-    findByPhoneNumberId: async (number: string) => number === '100002'
-      ? { ...integration, socialId: 'social-two' as PersonId }
-      : integration
+    findByPhoneNumberId: async (number: string) =>
+      number === '100002' ? { ...integration, socialId: 'social-two' as PersonId } : integration
   }
   const receiver = new WorkspaceReceiver(account as unknown as AccountClient, store as unknown as ConnectionStore)
   return {
@@ -148,6 +154,9 @@ it('matches old formatted numbers without changing them and notifies only the ow
   await f.receiver.receive(f.client, integration, incoming)
   const messages = f.records().filter((doc) => doc._class === whatsapp.class.Message)
   expect(messages).toHaveLength(1)
+  const audit = f.records().find((doc) => doc.kind === 'whatsapp')
+  expect(audit).toMatchObject({ actor: 'owner', label: incoming.phone, lastOn: incoming.timestamp })
+  expect(JSON.stringify(audit)).not.toContain(incoming.content)
   expect(messages[0]).toMatchObject({ attachedTo: 'old-channel', content: incoming.content, status: 'received' })
   expect(f.records().find((doc) => doc._id === 'old-channel').value).toBe('+65 (8888) 0001')
   expect(f.records().find((doc) => doc._id === 'customer').name).toBe('Existing name')

@@ -159,16 +159,25 @@ export function createApp (
       res.status(403).json({ code: 'Forbidden' })
       return
     }
-    void store.list().then(async (entries) => {
-      const summaries = await Promise.all(entries.filter((entry) => entry.workspaceUuid === res.locals.workspace).map(async (entry) => ({
-        person: entry.socialId,
-        phoneNumberId: entry.data?.phoneNumberId,
-        connectedOn: entry.data?.connectedOn,
-        displayPhone: entry.data?.displayPhone,
-        ...await getPhoneStatus(config, await store.accessToken(entry), entry.data?.phoneNumberId, request)
-      })))
-      res.json(summaries)
-    }).catch(() => { res.status(503).json({ code: 'Unavailable' }) })
+    void store
+      .list()
+      .then(async (entries) => {
+        const summaries = await Promise.all(
+          entries
+            .filter((entry) => entry.workspaceUuid === res.locals.workspace)
+            .map(async (entry) => ({
+              person: entry.socialId,
+              phoneNumberId: entry.data?.phoneNumberId,
+              connectedOn: entry.data?.connectedOn,
+              displayPhone: entry.data?.displayPhone,
+              ...(await getPhoneStatus(config, await store.accessToken(entry), entry.data?.phoneNumberId, request))
+            }))
+        )
+        res.json(summaries)
+      })
+      .catch(() => {
+        res.status(503).json({ code: 'Unavailable' })
+      })
   })
   app.get('/api/templates', (_req, res) => {
     void (async () => {

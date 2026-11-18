@@ -58,12 +58,21 @@ function fixture (): {
     provider: contact.channelProvider.Whatsapp,
     space: 'contacts'
   }
-  const records = [message, channel,
+  const records = [
+    message,
+    channel,
     { _id: 'owner-person', _class: contact.mixin.Employee, personUuid: 'owner', active: true },
-    { _id: 'owner-space', _class: contact.class.PersonSpace, person: 'owner-person', private: true, members: ['owner'] },
+    {
+      _id: 'owner-space',
+      _class: contact.class.PersonSpace,
+      person: 'owner-person',
+      private: true,
+      members: ['owner']
+    },
     { _id: 'owner-social', _class: contact.class.SocialIdentity, attachedTo: 'owner-person' }
   ]
   const client: any = {
+    getHierarchy: () => ({ findClass: () => undefined }),
     findAll: async (cls: string, query: object) =>
       records.filter(
         (doc) =>
@@ -93,7 +102,9 @@ function fixture (): {
     }
   }
   const store: any = {
-    get: jest.fn(async (_workspace: string, person: string) => person === 'owner-social' ? { data: { phoneNumberId: '100001' } } : undefined),
+    get: jest.fn(async (_workspace: string, person: string) =>
+      person === 'owner-social' ? { data: { phoneNumberId: '100001' } } : undefined
+    ),
     accessToken: async () => 'test-secret',
     list: async () => [{ workspaceUuid: 'workspace' }]
   }

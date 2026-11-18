@@ -460,6 +460,13 @@ export class SpaceSecurityMiddleware extends BaseMiddleware implements Middlewar
       const cud = tx as TxCUD<Doc>
       if (cud.objectClass === undefined) return undefined
 
+      // WhatsApp messages refer to a shared contact. The contact's collaborators
+      // must never inherit access to the message's private space.
+      if (cud.objectClass === 'whatsapp:class:Message') {
+        const space = this.spacesMap.get(tx.objectSpace)
+        return { target: space?.private === true ? this.getTargets(space.members) : [systemAccountUuid] }
+      }
+
       // For system and main spaces broadcast to all users except guests that are not collaborators for objects with collab security enabled
       if (this.systemSpaces.has(tx.objectSpace) || this.mainSpaces.has(tx.objectSpace)) {
         const collabSec = getClassCollaborators(this.context.modelDb, this.context.hierarchy, cud.objectClass)
@@ -625,6 +632,10 @@ export class SpaceSecurityMiddleware extends BaseMiddleware implements Middlewar
     const newQuery = clone(query)
     const account = ctx.contextData.account
     const isSpace = this.context.hierarchy.isDerived(_class, core.class.Space)
+    const personalWhatsapp = String(_class) === 'whatsapp:class:Message' && !isSystem(account, ctx)
+    if (personalWhatsapp) {
+      Object.assign(newQuery, { owner: account.uuid })
+    }
     const field = this.getKey(domain)
     const showArchived: boolean = shouldShowArchived(newQuery, options)
 
@@ -679,7 +690,7 @@ export class SpaceSecurityMiddleware extends BaseMiddleware implements Middlewar
       }
     }
 
-    let findResult = await this.provideFindAll(ctx, _class, !this.skipFindCheck ? newQuery : query, options)
+    let findResult = await this.provideFindAll(ctx, _class, !this.skipFindCheck || personalWhatsapp ? newQuery : query, options)
     if (clientFilterSpaces !== undefined) {
       const cfs = clientFilterSpaces
       findResult = toFindResult(

@@ -82,7 +82,7 @@ export const defaultOrderStages: OrderFlowStage[] = [
   { id: 'training', name: '去客户工厂教', steps: [] }
 ]
 
-export type AuditKind = 'login' | 'view' | 'export' | 'search' | 'alert'
+export type AuditKind = 'login' | 'view' | 'export' | 'search' | 'alert' | 'whatsapp'
 
 /**
  * Things Huly's change log does not keep: logins, pages opened, exports, and anomaly alerts.

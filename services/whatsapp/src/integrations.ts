@@ -77,9 +77,7 @@ export class ConnectionStore {
       const entries = await this.account.listIntegrations({ kind: whatsappIntegrationKind })
       const existing = entries.find((entry) => entry.workspaceUuid === workspaceUuid && entry.socialId === socialId)
       if (
-        entries.some(
-          (entry) => entry !== existing && entry.data?.phoneNumberId === ids.phoneNumberId
-        ) ||
+        entries.some((entry) => entry !== existing && entry.data?.phoneNumberId === ids.phoneNumberId) ||
         (existing !== undefined &&
           (existing.socialId !== socialId ||
             existing.data?.phoneNumberId !== ids.phoneNumberId ||
@@ -94,7 +92,12 @@ export class ConnectionStore {
         return existing
       }
       if (token === undefined) throw new Error('TOKEN_REQUIRED')
-      const integration: Integration = { socialId, kind: whatsappIntegrationKind, workspaceUuid, data: { ...ids, connectedOn: Date.now(), ...(displayPhone !== undefined ? { displayPhone } : {}) } }
+      const integration: Integration = {
+        socialId,
+        kind: whatsappIntegrationKind,
+        workspaceUuid,
+        data: { ...ids, connectedOn: Date.now(), ...(displayPhone !== undefined ? { displayPhone } : {}) }
+      }
       await this.account.createIntegration(integration)
       try {
         await this.account.addIntegrationSecret({ ...this.key(integration), key: 'access-token', secret: token })
