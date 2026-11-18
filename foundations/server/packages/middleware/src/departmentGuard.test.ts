@@ -46,7 +46,7 @@ test('module guard rejects view writes and none queries, and reads refreshed gra
   const next = {
     findAll: jest.fn(async (_ctx, cls) => {
       if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
-      if (cls === 'departments:class:ModuleGrant') return [{ extra, blocked: [] }]
+      if (cls === 'departments:class:ModuleGrant') return [{ person: 'reader', extra, blocked: [] }]
       return cls === inventory ? [doc] : []
     }),
     tx: jest.fn(async () => [])
@@ -55,10 +55,20 @@ test('module guard rejects view writes and none queries, and reads refreshed gra
   const tx = { ...update({ name: 'changed' }), objectClass: inventory, objectSpace: core.space.Workspace }
   expect(await guard.findAll(ctx, inventory, {})).toEqual([doc])
   await expect(guard.tx(ctx, [tx])).rejects.toThrow()
+  const ownerCtx = { contextData: { account: { uuid: 'owner', role: AccountRole.Owner }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const grantWrite = (value: Record<string, string>) => ({
+    ...update({ extra: value, blocked: [] }),
+    objectClass: 'departments:class:ModuleGrant' as Ref<Class<Doc>>,
+    objectId: 'departments:module-grant:reader' as Ref<Doc>,
+    objectSpace: core.space.Workspace
+  })
   extra = {}
+  expect(await guard.findAll(ctx, inventory, {})).toEqual([doc])
+  await guard.tx(ownerCtx, [grantWrite(extra)])
   expect(await guard.findAll(ctx, inventory, {})).toHaveLength(0)
   await expect(guard.tx(ctx, [tx])).rejects.toThrow()
   extra = { inventory: 'edit' }
+  await guard.tx(ownerCtx, [grantWrite(extra)])
   await expect(guard.tx(ctx, [tx])).resolves.toBeDefined()
 })
 
@@ -82,4 +92,47 @@ test('indirect queries remove blocked lookup and association targets before read
   expect((result[0] as typeof row).$lookup).toEqual({})
   expect(findAll).toHaveBeenLastCalledWith(ctx, contact, {}, { lookup: {}, associations: [] })
   expect(await guard.findAll(ctx, contact, { '$lookup.product.name': 'secret' } as any, options)).toHaveLength(0)
+})
+
+test('tracking access is required for reads but not for writing your own audit events', async () => {
+  const audit = 'departments:class:AuditEvent' as Ref<Class<Doc>>
+  const ctx = { contextData: { account: { uuid: 'worker', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => cls === 'departments:class:ModuleSettings' ? [{ enabled: true }] : []),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, next)
+  const create = (actor: string, kind: string) => ({
+    _class: core.class.TxCreateDoc, objectClass: audit, objectSpace: core.space.Workspace,
+    attributes: { actor, kind, count: 1 }
+  }) as unknown as TxCUD<Doc>
+  await expect(guard.tx(ctx, [create('worker', 'view'), create('worker', 'export')])).resolves.toBeDefined()
+  await expect(guard.tx(ctx, [create('somebody-else', 'view')])).rejects.toThrow()
+  expect(await guard.findAll(ctx, audit, {})).toHaveLength(0)
+})
+
+test('module grants keep the department administrator ceiling while module control is disabled', async () => {
+  const ctx = { contextData: { account: { uuid: 'admin', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => {
+      if (cls === 'departments:class:ModuleSettings') return [{ enabled: false }]
+      if (cls === 'hr:class:Department') return [{ _id: 'sales', [departmentAccessMixin]: {
+        administrators: ['admin'], employees: ['worker'],
+        moduleAccess: { inventory: { admin: 'view', supervisor: 'none', employee: 'none', reader: 'none' } }
+      } }]
+      return []
+    }),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, next)
+  const create = (level: string) => ({
+    _class: core.class.TxCreateDoc, objectClass: 'departments:class:ModuleGrant',
+    objectId: 'departments:module-grant:worker', objectSpace: core.space.Workspace,
+    attributes: { person: 'worker', extra: { inventory: level }, blocked: [] }
+  }) as unknown as TxCUD<Doc>
+  expect(await guard.findAll(ctx, 'inventory:class:Product' as Ref<Class<Doc>>, {})).toHaveLength(0)
+  await expect(guard.tx(ctx, [create('edit')])).rejects.toThrow()
+  await expect(guard.tx(ctx, [create('view')])).resolves.toBeDefined()
 })

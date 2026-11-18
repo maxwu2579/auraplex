@@ -141,6 +141,8 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   private departments: DepartmentRecord[] = []
   private bySpace = new Map<Ref<Space>, DepartmentRecord>()
   private dirty = true
+  private moduleEnabled?: Promise<boolean>
+  private readonly grants = new Map<string, Promise<DepartmentModuleException | undefined>>()
 
   static async create (
     _ctx: MeasureContext,
@@ -168,13 +170,38 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }))
   }
 
-  private async moduleAccess (ctx: MeasureContext<SessionData>) {
+  private readModuleEnabled (ctx: MeasureContext<SessionData>): Promise<boolean> {
+    if (this.moduleEnabled === undefined) {
+      const pending = this.findOne(ctx, moduleSettings, settingsId)
+        .then((settings) => (settings as { enabled?: boolean } | undefined)?.enabled === true)
+        .catch((err) => {
+          if (this.moduleEnabled === pending) this.moduleEnabled = undefined
+          throw err
+        })
+      this.moduleEnabled = pending
+    }
+    return this.moduleEnabled
+  }
+
+  private readGrant (ctx: MeasureContext<SessionData>, person: string): Promise<DepartmentModuleException | undefined> {
+    const existing = this.grants.get(person)
+    if (existing !== undefined) return existing
+    const pending = this.findOne(ctx, moduleGrant, grantId(person))
+      .then((grant) => grant as (Doc & DepartmentModuleException) | undefined)
+      .catch((err) => {
+        if (this.grants.get(person) === pending) this.grants.delete(person)
+        throw err
+      })
+    this.grants.set(person, pending)
+    return pending
+  }
+
+  private async moduleAccess (ctx: MeasureContext<SessionData>, enforceCeiling = false) {
     const account = ctx.contextData.account
     if (isOwner(account, ctx) || !this.context.hierarchy.hasClass(moduleSettings)) return undefined
-    const settings = await this.findOne(ctx, moduleSettings, settingsId) as { enabled?: boolean } | undefined
-    if (settings?.enabled !== true) return undefined
+    if (!enforceCeiling && !(await this.readModuleEnabled(ctx))) return undefined
     await this.load(ctx)
-    const grant = await this.findOne(ctx, moduleGrant, grantId(account.uuid)) as (Doc & DepartmentModuleException) | undefined
+    const grant = await this.readGrant(ctx, account.uuid)
     return effectiveDepartmentModules(account.uuid, false, true, this.moduleDefaults(), grant)
   }
 
@@ -294,12 +321,23 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       Object.entries(extra).some(([alias, level]) => alias.trim() === '' || (level !== 'view' && level !== 'edit')) ||
       !Array.isArray(blocked) || blocked.some((alias) => typeof alias !== 'string' || alias.trim() === '')) forbidden()
     if (!owner && !canChangeDepartmentModuleException(account.uuid, person, this.moduleDefaults(),
-      (await this.moduleAccess(ctx)) ?? (() => 'edit'), before ?? { extra: {}, blocked: [] }, { extra: extra as ModuleExtra, blocked })) forbidden()
+      (await this.moduleAccess(ctx, true)) ?? (() => 'none'), before ?? { extra: {}, blocked: [] }, { extra: extra as ModuleExtra, blocked })) forbidden()
   }
 
   private touchesDepartments (tx: Tx): boolean {
     if (tx._class === core.class.TxApplyIf) return (tx as TxApplyIf).txes.some((it) => this.touchesDepartments(it))
     return TxProcessor.isExtendsCUD(tx._class) && (tx as TxCUD<Doc>).objectClass === departmentClass
+  }
+
+  private invalidateModules (tx: Tx): void {
+    if (tx._class === core.class.TxApplyIf) {
+      for (const child of (tx as TxApplyIf).txes) this.invalidateModules(child)
+      return
+    }
+    if (!TxProcessor.isExtendsCUD(tx._class)) return
+    const cud = tx as TxCUD<Doc>
+    if (cud.objectClass === moduleSettings) this.moduleEnabled = undefined
+    if (cud.objectClass === moduleGrant) this.grants.clear()
   }
 
   async tx (ctx: MeasureContext<SessionData>, txes: Tx[]): Promise<TxMiddlewareResult> {
@@ -312,6 +350,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const result = await this.provideTx(ctx, txes)
     // Space ids are written back by the sync trigger as derived transactions.
     if (ctx.contextData.broadcast.txes.some((tx) => this.touchesDepartments(tx))) this.dirty = true
+    for (const tx of [...txes, ...ctx.contextData.broadcast.txes]) this.invalidateModules(tx)
     return result
   }
 
@@ -326,13 +365,18 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       await this.checkModuleConfiguration(ctx, cud)
       return
     }
+    // People can record their own audit events without permission to read tracking.
+    if (cud.objectClass === auditEventClass) {
+      await this.checkAudit(ctx, cud)
+      return
+    }
     const alias = this.protectedModule(cud.objectClass) ??
       (cud.attachedToClass === undefined ? undefined : this.protectedModule(cud.attachedToClass))
     if (alias !== undefined) {
       const level = (await this.moduleAccess(ctx))?.(alias) ?? 'edit'
       if (level === 'none' || (level === 'view' && cud.objectClass !== orderActionClass)) forbidden()
     }
-    if (cud.objectClass === auditEventClass || cud.objectClass === trackingSettingsClass) {
+    if (cud.objectClass === trackingSettingsClass) {
       await this.checkAudit(ctx, cud)
       return
     }
