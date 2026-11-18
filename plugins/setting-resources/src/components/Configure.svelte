@@ -23,16 +23,41 @@
     PluginConfigurationCard
   } from '@hcengineering/presentation'
   import ratingPlugin, { getRaiting, type PersonRating } from '@hcengineering/rating'
-  import { Breadcrumb, Header, Label, Scroller } from '@hcengineering/ui'
+  import { getEmbeddedLabel } from '@hcengineering/platform'
+  import { Breadcrumb, Button, Header, Label, Scroller } from '@hcengineering/ui'
   import setting from '../plugin'
 
   const client = getClient()
 
-  async function change (config: PluginConfiguration, value: boolean): Promise<void> {
-    await client.update(config, {
-      enabled: value
-    })
+  // Auraplex: changing a module reloads the site, so collect changes and save them in one go.
+  let pending = new Map<string, boolean>()
+  let filter: 'all' | 'on' | 'off' = 'all'
+  let saving = false
+  const isOn = (config: PluginConfiguration, changes: Map<string, boolean>): boolean =>
+    changes.get(config._id) ?? config.enabled ?? true
+  function change (config: PluginConfiguration, value: boolean): void {
+    if (value === (config.enabled ?? true)) pending.delete(config._id)
+    else pending.set(config._id, value)
+    pending = pending
   }
+  async function save (): Promise<void> {
+    if (saving || pending.size === 0) return
+    saving = true
+    try {
+      for (const config of $pluginConfigurationStore.list) {
+        const value = pending.get(config._id)
+        if (value !== undefined) await client.update(config, { enabled: value })
+      }
+      pending = new Map()
+    } finally {
+      saving = false
+    }
+  }
+  const filters: Array<{ id: 'all' | 'on' | 'off', label: string }> = [
+    { id: 'all', label: '全部' },
+    { id: 'on', label: '已开启' },
+    { id: 'off', label: '已关闭' }
+  ]
 
   const sysQuery = createQuery()
   let sysRating: PersonRating | undefined
@@ -56,17 +81,33 @@
     <div class="flex-row-center flex-wrap m-4 px-4">
       <Label label={setting.string.BetaWarning} />
     </div>
-    <Scroller align={'center'} padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
+    <div class="toolbar px-4">
+      {#each filters as it}
+        <Button
+          label={getEmbeddedLabel(it.label)}
+          kind={filter === it.id ? 'primary' : 'regular'}
+          on:click={() => { filter = it.id }}
+        />
+      {/each}
+      <div class="flex-grow" />
+      {#if pending.size > 0}
+        <span class="hint">有 {pending.size} 项改动，保存后网站会刷新一次</span>
+        <Button label={getEmbeddedLabel('取消')} kind={'regular'} disabled={saving} on:click={() => { pending = new Map() }} />
+      {/if}
+      <Button label={getEmbeddedLabel('保存')} kind={'primary'} disabled={saving || pending.size === 0} on:click={save} />
+    </div>
+    <Scroller padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
       <div class="modules-grid">
         {#each $pluginConfigurationStore.list as config}
-          {#if config.hidden !== true && config.system !== true && !isDisabled(config.pluginId)}
+          {#if config.hidden !== true && config.system !== true && !isDisabled(config.pluginId) &&
+            (filter === 'all' || (filter === 'on') === isOn(config, pending))}
             {@const pluginRating = getRaiting(totalVisible, sysRating, [config])}
             {@const ratingSuffix = hasResource(ratingPlugin.component.RatingRing) ? `${pluginRating}%` : undefined}
             <PluginConfigurationCard
               label={config.label}
               description={config.description}
               icon={config.icon}
-              enabled={config.enabled ?? true}
+              enabled={isOn(config, pending)}
               beta={config.beta}
               suffix={ratingSuffix}
               on:toggle={(e) => change(config, e.detail.enabled)}
@@ -82,10 +123,15 @@
   .modules-grid {
     display: grid;
     gap: 0.75rem;
-    grid-template-columns: 1fr;
-
-    @media (min-width: 40rem) {
-      grid-template-columns: 1fr 1fr;
-    }
+    grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .hint {
+    color: var(--theme-dark-color);
   }
 </style>
