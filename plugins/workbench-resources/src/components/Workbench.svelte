@@ -205,8 +205,8 @@
       if (department === undefined) return []
       return [{
         members: {
-          admin: department.administrators, supervisor: department.supervisors,
-          employee: department.employees, reader: department.readers
+          admin: department.administrators ?? [], supervisor: department.supervisors ?? [],
+          employee: department.employees ?? [], reader: department.readers ?? []
         },
         archived: department.archived === true,
         modules: department.modules,
@@ -218,9 +218,13 @@
   $: moduleReady = !moduleControl || (settingsLoaded && (moduleSettings?.enabled !== true || (defaultsLoaded && grantLoaded)))
   $: available = effectiveDepartmentModules(account.uuid, !moduleControl, moduleSettings?.enabled === true,
     moduleDefaults(departmentDocs), moduleGrant)
-  $: if (moduleReady) {
-    departmentModuleLevel.set(available)
-    void doSyncLoc($location)
+  $: if (moduleReady) departmentModuleLevel.set(available)
+  // A permission refresh must not restart navigation while the current application remains available.
+  $: currentModuleAllowed = $location.path[2] === undefined || available($location.path[2]) !== 'none'
+  $: if (moduleReady) refreshModuleRoute(currentModuleAllowed)
+
+  function refreshModuleRoute (allowed: boolean): void {
+    if (blockedModule === allowed || currentApplication === undefined) void doSyncLoc(getCurrentLocation())
   }
   $: apps = moduleReady ? allApps.filter((app) => available(app.alias) !== 'none') : []
 

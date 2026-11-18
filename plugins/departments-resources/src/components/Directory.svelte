@@ -462,9 +462,14 @@
         draft
       )
       if (!(await ops.commit()).result) throw new Error('conflict')
+      const current = await client.findOne(hr.class.Department, { _id: selected._id })
+      const access = current === undefined ? undefined : hierarchy.asIf(current, departments.mixin.DepartmentAccess)
+      if (access !== undefined) {
+        selected = access
+        draft = clone(access)
+        name = access.name
+      }
       saved = true
-      selected = undefined
-      draft = undefined
     } catch {
       error = true
     } finally {
