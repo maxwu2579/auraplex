@@ -87,3 +87,15 @@ test('insert: department admins and super admins add a stage after the current o
   expect(canOrderAction(order(), { ...insert, stage: 'e' }, 'ming', false, roleOf, extra)).toBe(false)
   expect(canOrderAction({ ...order(), state: 'done' }, insert, 'ming', false, roleOf, extra)).toBe(false)
 })
+
+test('reorder accepts exactly the waiting suffix and insert checks its position', () => {
+  const value = order()
+  value.stages.push({ id: 'later', department: 'p', status: 'waiting', steps: [] })
+  const stage = value.stages[value.current].id
+  const waiting = value.stages.slice(value.current + 1).map((item) => item.id).reverse()
+  const scope = { adminSomewhere: true, departments: ['p'] }
+  expect(canOrderAction(value, { kind: 'reorder', stage, stageOrder: waiting }, 'admin', false, roleOf, scope)).toBe(true)
+  expect(canOrderAction(value, { kind: 'reorder', stage, stageOrder: [stage, ...waiting] }, 'admin', false, roleOf, scope)).toBe(false)
+  expect(canOrderAction(value, { kind: 'insert', stage, name: '返工', department: 'p', position: value.current }, 'admin', false, roleOf, scope)).toBe(false)
+  expect(canOrderAction(value, { kind: 'insert', stage, name: '返工', department: 'p', position: value.stages.length }, 'admin', false, roleOf, scope)).toBe(true)
+})

@@ -25,11 +25,15 @@ export interface DepartmentAccess extends Department {
   employeesSeeTracking?: boolean
 }
 
+export type OrderApproval = { by: 'deptAdmins' } | { by: 'person', person: AccountUuid }
+
 /** One stage of the order flow template, e.g. 设计 handled by the design department. */
 export interface OrderFlowStage {
   id: string
   name: string
   department?: Ref<Department>
+  limitDays?: number
+  approval?: OrderApproval
   steps: string[]
 }
 
@@ -38,7 +42,7 @@ export interface OrderFlow extends Doc {
   stages: OrderFlowStage[]
 }
 
-export type OrderStageStatus = 'waiting' | 'active' | 'done'
+export type OrderStageStatus = 'waiting' | 'active' | 'done' | 'approval'
 export interface OrderStage {
   id: string
   name: string
@@ -46,6 +50,8 @@ export interface OrderStage {
   status: OrderStageStatus
   assignee?: AccountUuid
   steps: Array<{ name: string, done: boolean }>
+  limitDays?: number
+  approval?: OrderApproval
   startedOn?: number
   doneOn?: number
 }
@@ -62,7 +68,7 @@ export interface Order extends Doc {
   state: 'active' | 'done'
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {
@@ -74,6 +80,8 @@ export interface OrderAction extends Doc {
   step?: number
   target?: string
   reason?: string
+  position?: number
+  stageOrder?: string[]
   /** insert: name and department of the stage added right after the current one. */
   name?: string
   department?: Ref<Department>

@@ -25,11 +25,15 @@ export interface OrderActionLike {
   reason?: string
   name?: string
   department?: string
+  position?: number
+  stageOrder?: string[]
 }
 export interface FlowStageLike {
   id: string
   name: string
   department?: string
+  limitDays?: number
+  approval?: { by: string, person?: string }
   steps: string[]
 }
 /** Role of a person in the department handling a stage; undefined when not a member. */
@@ -66,7 +70,15 @@ export function canOrderAction (
     if (index < order.current || stage.status === 'done' || action.assignee === undefined) return false
     return lead && (owner || canWork(roleOf(stage.department, action.assignee)))
   }
-  if (index !== order.current || stage.status !== 'active') return false
+  if (index !== order.current) return false
+  if (action.kind === 'reorder') {
+    if (!owner && extra.adminSomewhere !== true) return false
+    const waiting = order.stages.slice(index + 1)
+    const ids = action.stageOrder
+    return Array.isArray(ids) && ids.length === waiting.length && new Set(ids).size === ids.length &&
+      waiting.every((item) => item.status === 'waiting' && ids.includes(item.id))
+  }
+  if (stage.status !== 'active') return false
   const inCharge = stage.assignee === actor
   switch (action.kind) {
     case 'step':
@@ -87,6 +99,8 @@ export function canOrderAction (
     }
     case 'insert': {
       if (!owner && extra.adminSomewhere !== true) return false
+      if (action.position !== undefined && (!Number.isInteger(action.position) ||
+        action.position <= index || action.position > order.stages.length)) return false
       if (!hasText(action.name) || (action.name as string).trim().length > 50) return false
       return action.department === undefined || (extra.departments ?? []).includes(action.department)
     }
@@ -127,12 +141,19 @@ export function canChangeFlow (
   roleOf: RoleOf
 ): boolean {
   const valid = after.every((it) => hasText(it.id) && hasText(it.name) && Array.isArray(it.steps))
-  if (!valid || new Set(after.map((it) => it.id)).size !== after.length) return false
+  const validRules = after.every(({ limitDays, approval }) =>
+    (limitDays === undefined || (Number.isSafeInteger(limitDays) && limitDays > 0)) &&
+    (approval === undefined || (approval !== null &&
+      (approval.by === 'deptAdmins' || (approval.by === 'person' && hasText(approval.person)))))
+  )
+  if (!validRules || !valid || new Set(after.map((it) => it.id)).size !== after.length) return false
   if (owner) return true
   if (before.length !== after.length) return false
   return after.every((stage, i) => {
     const old = before[i]
     if (stage.id !== old.id || stage.name !== old.name || stage.department !== old.department) return false
+    if (stage.limitDays !== old.limitDays || stage.approval?.by !== old.approval?.by ||
+      stage.approval?.person !== old.approval?.person) return false
     const same = stage.steps.length === old.steps.length && stage.steps.every((it, j) => it === old.steps[j])
     return same || roleOf(stage.department, actor) === 'admin'
   })

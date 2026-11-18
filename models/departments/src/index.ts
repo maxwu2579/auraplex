@@ -90,6 +90,8 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Prop(TypeString(), departments.string.OrderActionLabel) kind!: OrderActionKind
   @Hidden() stage!: string
   @Prop(TypeAccountUuid(), departments.string.Member) actor!: OrderAction['actor']
+  @Hidden() position?: number
+  @Hidden() stageOrder?: string[]
   @Hidden() assignee?: OrderAction['assignee']
   @Hidden() step?: number
   @Hidden() target?: string

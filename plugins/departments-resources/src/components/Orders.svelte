@@ -13,6 +13,7 @@
   import hr, { type Department } from '@hcengineering/hr'
   import { getResource } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
+  import OrderFlowChart from './OrderFlowChart.svelte'
   import { recordAudit } from '../audit'
 
   /** Orders: one per customer order, moving 销售 → 设计 → 生产 → 工程 → 培训. The server checks every button. */
@@ -35,8 +36,7 @@
   let reason = ''
   let returnTarget = ''
   let returnPerson = ''
-  let insertDept = ''
-  let insertName = ''
+  let openStage = ''
   let busy = false
   let error = ''
   let notice = ''
@@ -114,7 +114,8 @@
     complete: '本段完成',
     escalate: '上报主管',
     return: '退回',
-    insert: '插入一段'
+    insert: '插入一段',
+    reorder: '调整顺序'
   }
 
   function open (it: Order): void {
@@ -171,8 +172,6 @@
       reason = ''
       returnTarget = ''
       returnPerson = ''
-      insertDept = ''
-      insertName = ''
     } catch {
       error = '没有权限做这个操作，或者订单已经变化，请刷新后再看。'
     } finally {
@@ -180,8 +179,8 @@
     }
   }
 
-  async function assignTo (value: string): Promise<void> {
-    if (value !== '') await act('assign', { assignee: value as AccountUuid })
+  async function assignTo (value: string, stageId?: string): Promise<void> {
+    if (value !== '') await act('assign', { assignee: value as AccountUuid, ...(stageId === undefined ? {} : { stage: stageId }) })
   }
   async function sendReturn (): Promise<void> {
     await act('return', {
@@ -191,15 +190,24 @@
     })
   }
 
-  async function sendInsert (): Promise<void> {
-    const label = insertName.trim() !== '' ? insertName.trim() : insertDept !== '' ? deptName(insertDept as Ref<Department>) : ''
-    if (label === '') return
-    await act('insert', {
-      name: label,
-      ...(insertDept !== '' ? { department: insertDept as Ref<Department> } : {}),
-      ...(reason.trim() !== '' ? { reason } : {})
-    })
+  async function insertDepartment (id: string, position: number): Promise<void> {
+    const dept = liveDepts.find((item) => item._id === id)
+    if (dept === undefined || !canInsert || selected === undefined || position <= selected.current) return
+    await act('insert', { name: dept.name.slice(0, 50), department: dept._id, position })
   }
+
+  async function reorder (id: string, position: number): Promise<void> {
+    if (selected === undefined || !canInsert || position <= selected.current) return
+    const from = selected.stages.findIndex((item) => item.id === id)
+    if (from <= selected.current || selected.stages[from].status !== 'waiting') return
+    const waiting = selected.stages.slice(selected.current + 1).map((item) => item.id)
+    waiting.splice(from - selected.current - 1, 1)
+    waiting.splice(position - selected.current - 1 - Number(from < position), 0, id)
+    await act('reorder', { stageOrder: waiting })
+  }
+
+  $: inspected = selected?.stages.find((item) => item.id === openStage)
+  $: inspectedRole = inspected === undefined ? undefined : roleOf(inspected.department, me.uuid)
 
   async function chat (id: AccountUuid | undefined): Promise<void> {
     if (id === undefined || id === me.uuid) return
@@ -269,30 +277,30 @@
       <div class="detail">
         <h3>{selected.number} {selected.title}</h3>
         <p class="hint">客户：{selected.customer}　接单销售：{name(selected.salesOwner)}{selected.note ? `　备注：${selected.note}` : ''}</p>
-        <div class="progress">
-          {#each selected.stages as s, i (s.id)}
-            <span class="chip {s.status}" class:current={i === selected.current && active}
-              >{s.status === 'done' ? '✅' : i === selected.current && active ? '🔵' : '⚪'} {s.name}</span
-            >{#if i < selected.stages.length - 1}<span class="sep">→</span>{/if}
-          {/each}
-        </div>
+        <OrderFlowChart
+          cards={selected.stages.map((item) => ({ ...item, department: deptName(item.department), assignee: name(item.assignee) }))}
+          departments={liveDepts.map((dept) => ({ id: dept._id, name: dept.name }))}
+          editable={active && canInsert && !busy}
+          firstEditable={selected.current + 1}
+          selected={openStage}
+          on:select={(event) => { openStage = openStage === event.detail ? '' : event.detail }}
+          on:dropDepartment={(event) => insertDepartment(event.detail.id, event.detail.position)}
+          on:dropStage={(event) => reorder(event.detail.id, event.detail.position)}
+        />
 
-        {#if active && stage !== undefined}
+        {#if active && inspected !== undefined}
           <div class="card">
-            <div><b>当前：{stage.name}</b>（{deptName(stage.department)}）　已用 {days(stage.startedOn)}</div>
-            <label
-              >负责人
-              {#if lead}
-                <select
-                  value={stage.assignee ?? ''}
-                  disabled={busy}
-                  on:change={(e) => assignTo(e.currentTarget.value)}
-                >
+            <div><b>{inspected.name}</b>（{deptName(inspected.department)}）　已用 {days(inspected.startedOn)}</div>
+            <label>负责人
+              {#if (owner || inspectedRole === 'admin' || inspectedRole === 'supervisor') && inspected.status !== 'done'}
+                <select value={inspected.assignee ?? ''} disabled={busy}
+                  on:change={(event) => assignTo(event.currentTarget.value, inspected?.id)}>
                   <option value="">（未指定）</option>
-                  {#each workers(stage.department) as w (w._id)}<option value={w.personUuid}>{formatName(w.name)}</option>{/each}
+                  {#each workers(inspected.department) as w (w._id)}<option value={w.personUuid}>{formatName(w.name)}</option>{/each}
                 </select>
-              {:else}<span>{name(stage.assignee)}</span>{/if}
+              {:else}<span>{name(inspected.assignee)}</span>{/if}
             </label>
+            {#if stage !== undefined && inspected.id === stage.id}
             {#if stage.steps.length > 0}
               <div class="steps">
                 {#each stage.steps as step, i (i)}
@@ -334,17 +342,6 @@
                 >
               </div>
             {/if}
-            {#if canInsert}
-              <div class="row">
-                <select bind:value={insertDept}>
-                  <option value="">插入一段：选部门…</option>
-                  {#each liveDepts as d (d._id)}<option value={d._id}>{d.name}</option>{/each}
-                </select>
-                <input placeholder="这一段叫什么（不填就用部门名）" bind:value={insertName} maxlength="50" />
-                <button disabled={busy || (insertDept === '' && insertName.trim() === '')} on:click={sendInsert}
-                  >插入到「{stage.name}」后面</button
-                >
-              </div>
             {/if}
           </div>
         {:else if selected.state === 'done'}

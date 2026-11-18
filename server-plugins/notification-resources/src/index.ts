@@ -1818,6 +1818,8 @@ async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Pro
     id: stage.id,
     name: stage.name,
     department: stage.department,
+    limitDays: stage.limitDays,
+    approval: stage.approval,
     status: i === 0 ? 'active' : 'waiting',
     // The salesperson who takes the order runs the first stage.
     assignee: i === 0 ? tx.attributes.salesOwner : undefined,
@@ -1903,12 +1905,22 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       await notifyOrder(control, results, tx, order, people, departments.string.OrderReturned, `${title}\n${stage.name} 退回到 ${back.name}${reason}`)
       break
     }
+    case 'reorder': {
+      const waiting = new Map(stages.slice(index + 1).map((item) => [item.id, item]))
+      const reordered = (action.stageOrder ?? []).map((id) => waiting.get(id))
+      if (reordered.length !== waiting.size || new Set(reordered).size !== waiting.size ||
+        reordered.some((item) => item?.status !== 'waiting')) return []
+      stages.splice(index + 1, waiting.size, ...(reordered as OrderStage[]))
+      break
+    }
     case 'insert': {
       // Only this order changes; the default flow stays as it is.
       const name = (action.name ?? '').trim()
       if (name === '') return []
       const added: OrderStage = { id: `extra-${tx.objectId}`, name, department: action.department, status: 'waiting', steps: [] }
-      stages.splice(index + 1, 0, added)
+      const position = action.position ?? index + 1
+      if (position <= index || position > stages.length) return []
+      stages.splice(position, 0, added)
       const leads = await departmentLeads(control, added.department)
       await notifyOrder(control, results, tx, order, [order.salesOwner, ...leads], departments.string.OrderHandedOver, `${title}\n${stage.name} 之后插入了一段：${name}${reason}`)
       break
