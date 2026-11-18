@@ -52,7 +52,7 @@
   export let iconProps: any | undefined = undefined
   export let label: IntlString
   export let createEvent: string | undefined = undefined
-  $: showCreate = !_class.startsWith('inventory:') || $departmentModuleLevel('inventory') === 'edit'
+  $: showCreate = !_class.startsWith('materials:') || $departmentModuleLevel('materials') === 'edit'
   export let createLabel: IntlString | undefined = undefined
   export let createComponent: AnyComponent | undefined = undefined
   export let createComponentProps: Record<string, any> = {}

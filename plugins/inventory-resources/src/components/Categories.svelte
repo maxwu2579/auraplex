@@ -14,8 +14,6 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { departmentModuleLevel } from '@hcengineering/presentation'
-  $: moduleCanEdit = $departmentModuleLevel('inventory') === 'edit'
   import core, { DocumentQuery } from '@hcengineering/core'
   import { Button, Breadcrumb, Scroller, SearchInput, showPopup, IconAdd, Header } from '@hcengineering/ui'
   import type { Category } from '@hcengineering/inventory'
@@ -51,7 +49,7 @@
     />
   </svelte:fragment>
   <svelte:fragment slot="actions">
-    {#if moduleCanEdit}<Button icon={IconAdd} label={inventory.string.CategoryCreateLabel} kind={'primary'} on:click={showCreateDialog} />{/if}
+    <Button icon={IconAdd} label={inventory.string.CategoryCreateLabel} kind={'primary'} on:click={showCreateDialog} />
   </svelte:fragment>
 </Header>
 

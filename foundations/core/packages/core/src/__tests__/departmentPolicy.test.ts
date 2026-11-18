@@ -14,7 +14,7 @@ test('takes the highest level, applies legacy and new grants, and blocks excepti
   }
   const level = effectiveDepartmentModules('member', false, true, [matrix, { ...team, archived: true }],
     { extra: { tracking: 'view', orders: 'edit' }, blocked: ['orders', 'inbox'] })
-  expect(['orders', 'tracking', 'inbox', 'inventory'].map(level)).toEqual(['none', 'view', 'edit', 'none'])
+  expect(['orders', 'tracking', 'inbox', 'materials'].map(level)).toEqual(['none', 'view', 'edit', 'none'])
   expect(effectiveDepartmentModules('member', false, true, [matrix, team])('orders')).toBe('edit')
   expect(effectiveDepartmentModules('reader', false, true, [team])('orders')).toBe('view')
   expect(effectiveDepartmentModules('reader', false, true, [], { extra: ['orders'], blocked: [] })('orders')).toBe('edit')

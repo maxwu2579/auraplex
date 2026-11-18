@@ -256,7 +256,7 @@ export function filterActions (
   actions: Array<WithLookup<Action>>,
   derived: Ref<Class<Doc>> = core.class.Doc
 ): Array<WithLookup<Action>> {
-  if (doc._class.startsWith('inventory:') && get(departmentModuleLevel)('inventory') !== 'edit') {
+  if (doc._class.startsWith('materials:') && get(departmentModuleLevel)('materials') !== 'edit') {
     actions = actions.filter((action) => action._id === view.action.CopyLink)
   }
   let result: Array<WithLookup<Action>> = []

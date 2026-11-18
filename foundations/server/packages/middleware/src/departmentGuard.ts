@@ -209,7 +209,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if ([orderClass, orderActionClass, orderFlowClass].includes(_class)) return 'orders'
     if ([auditEventClass, trackingSettingsClass].includes(_class)) return 'tracking'
     const alias = _class.split(':')[0]
-    if (alias === 'inventory' || alias === 'prospects') return alias
+    if (alias === 'materials' || alias === 'prospects') return alias
   }
 
   override async findAll<T extends Doc> (

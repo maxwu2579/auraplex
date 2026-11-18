@@ -268,7 +268,7 @@
       [role]: list.includes(permission) ? list.filter((item) => item !== permission) : [...list, permission]
     }
   }
-  const ownModules = new Set(['orders', 'tracking', 'inventory', 'prospects'])
+  const ownModules = new Set(['orders', 'tracking', 'materials', 'prospects'])
   const roleLabels: Record<ModuleRole, string> = { admin: '管理员', supervisor: '主管', employee: '员工', reader: '只读' }
 
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
@@ -276,7 +276,7 @@
       access?.moduleAccess?.[alias] ?? Object.fromEntries(moduleRoles.map((role) => [role,
         access?.moduleAccess !== undefined ? 'none' :
           access !== undefined ? defaultModuleLevel(alias, role, access.modules) :
-          alias === 'inventory' ? (role === 'reader' ? 'none' : 'view') :
+          alias === 'materials' ? (role === 'reader' ? 'none' : 'view') :
           alias === 'tracking' ? (role === 'admin' ? 'view' : 'none') : defaultModuleLevel(alias, role)
       ]))
     ])) as ModuleAccess

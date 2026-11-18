@@ -42,7 +42,7 @@
   export let _class: Ref<Class<Doc>>
   export let embedded: boolean = false
   export let readonly: boolean = false
-  $: effectiveReadonly = readonly || (_class.startsWith('inventory:') && $departmentModuleLevel('inventory') !== 'edit')
+  $: effectiveReadonly = readonly || (_class.startsWith('materials:') && $departmentModuleLevel('materials') !== 'edit')
   export let selectedAside: boolean | undefined = undefined
 
   let realObjectClass: Ref<Class<Doc>> = _class
