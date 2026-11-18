@@ -211,6 +211,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   private protectedModule (_class: Ref<Class<Doc>>): string | undefined {
     if ([orderClass, orderActionClass, orderFlowClass].includes(_class)) return 'orders'
     if ([auditEventClass, trackingSettingsClass].includes(_class)) return 'tracking'
+    if (_class === 'whatsapp:class:Message') return 'whatsapp'
     const alias = _class.split(':')[0]
     if (alias === 'materials' || alias === 'prospects') return alias
   }

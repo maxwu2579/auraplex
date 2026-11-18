@@ -9,7 +9,7 @@
   import { employeeByIdStore, employeeRefByAccountUuidStore } from '../utils'
   import { Analytics } from '@hcengineering/analytics'
 
-  export let value: Space
+  export let value: Pick<Space, 'name' | 'members'>
   const dispatch = createEventDispatcher()
   const client = getClient()
 

@@ -36,6 +36,7 @@ export function normalizeModuleExtra (extra: DepartmentModuleException['extra'])
 }
 
 export function defaultModuleLevel (alias: string, role: ModuleRole, modules?: readonly string[]): ModuleLevel {
+  if (alias === 'whatsapp') return 'edit'
   return modules !== undefined && !modules.includes(alias) ? 'none' : role === 'reader' ? 'view' : 'edit'
 }
 
@@ -55,12 +56,13 @@ export function effectiveDepartmentModules (
     if (alwaysAvailable.includes(alias)) return 'edit'
     if (blocked.has(alias)) return 'none'
     let level: ModuleLevel = Object.prototype.hasOwnProperty.call(extra, alias) ? extra[alias] : 'none'
+    if (alias === 'whatsapp' && membership.length === 0 && level === 'none') return 'edit'
     for (const { dept, role } of membership) {
       const candidate = dept.moduleAccess === undefined ? defaultModuleLevel(alias, role, dept.modules) :
-        dept.moduleAccess[alias]?.[role] ?? 'none'
+        dept.moduleAccess[alias]?.[role] ?? (alias === 'whatsapp' ? 'edit' : 'none')
       if (moduleLevelRank[candidate] > moduleLevelRank[level]) level = candidate
     }
-    return level
+    return alias === 'whatsapp' && level !== 'none' ? 'edit' : level
   }
 }
 
@@ -79,7 +81,8 @@ export function canChangeDepartmentModuleException (
   const next = normalizeModuleExtra(after.extra)
   for (const alias of new Set([...Object.keys(previous), ...Object.keys(next)])) {
     if (previous[alias] === next[alias]) continue
-    if (Math.max(moduleLevelRank[previous[alias] ?? 'none'], moduleLevelRank[next[alias] ?? 'none']) >
+    const rank = (level: ModuleLevel): number => moduleLevelRank[alias === 'whatsapp' && level !== 'none' ? 'edit' : level]
+    if (Math.max(rank(previous[alias] ?? 'none'), rank(next[alias] ?? 'none')) >
       moduleLevelRank[allowed(alias)]) return false
   }
   return [...before.blocked, ...after.blocked].every((alias) =>

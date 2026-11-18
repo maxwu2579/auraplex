@@ -20,7 +20,7 @@
     type Space
   } from '@hcengineering/core'
   import { getClient } from '@hcengineering/presentation'
-  import { DropdownLabels, type DropdownTextItem } from '@hcengineering/ui'
+  import { AvailableSpacesInput as SpacePicker, type DropdownTextItem } from '@hcengineering/ui'
   import settingsRes from '../plugin'
 
   export let group: ModulePermissionGroup
@@ -127,17 +127,11 @@
   }
 </script>
 
-<DropdownLabels
-  multiselect
-  autoSelect={false}
+<SpacePicker
   items={dropdownItems}
-  selected={[...(selectedKeys ?? [])]}
+  selected={[...selectedKeys]}
   label={settingsRes.string.GuestSelectSpaces}
-  showDropdownIcon
-  kind={'no-border'}
-  size={'large'}
-  width={'min(18rem, 100%)'}
-  disabled={disabled || loading || saving || dropdownItems.length === 0}
+  disabled={disabled || loading}
   loading={saving}
   on:selected={handleSelected}
 />

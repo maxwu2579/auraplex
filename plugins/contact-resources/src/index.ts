@@ -112,6 +112,7 @@ import PersonRefPresenter from './components/PersonRefPresenter.svelte'
 import SelectAvatars from './components/SelectAvatars.svelte'
 import SelectUsersPopup from './components/SelectUsersPopup.svelte'
 import SocialEditor from './components/SocialEditor.svelte'
+import AddMembersPopup from './components/AddMembersPopup.svelte'
 import SpaceMembers from './components/SpaceMembers.svelte'
 import WorkspaceMemberStatusEditor from './components/WorkspaceMemberStatusEditor.svelte'
 import SpaceMembersEditor from './components/SpaceMembersEditor.svelte'
@@ -407,6 +408,7 @@ export default async (): Promise<Resources> => ({
     ChannelPanel,
     ActivityChannelPresenter,
     SpaceMembers,
+    AddMembersPopup,
     SelectAvatars,
     UserBoxItems,
     EmployeeFilter,

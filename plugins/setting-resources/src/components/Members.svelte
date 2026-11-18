@@ -15,9 +15,9 @@
 <script lang="ts">
   import contact, { Employee, formatName } from '@hcengineering/contact'
   import { EmployeePresenter } from '@hcengineering/contact-resources'
-  import { Account, AccountRole, type Class, type Doc, type Ref, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
+  import { Account, AccountRole, type AccountUuid, type Class, type Doc, type Mixin, type Ref, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Breadcrumb, DropdownIntlItem, DropdownLabelsIntl, Header, Label, Scroller, SearchInput, getCurrentResolvedLocation, navigate } from '@hcengineering/ui'
+  import { Breadcrumb, Button, DropdownIntlItem, DropdownLabelsIntl, Header, Label, Scroller, SearchInput, getCurrentResolvedLocation, navigate } from '@hcengineering/ui'
   import { onMount } from 'svelte'
 
   import setting from '../plugin'
@@ -30,16 +30,77 @@
 
   type Membership = { id: string, name: string, roles: string[] }
   const roleFields = ['administrators', 'supervisors', 'employees', 'readers'] as const
+  type RoleField = typeof roleFields[number]
+  type DepartmentAccess = Doc & Record<RoleField, AccountUuid[]> & {
+    adminPermissions: string[], supervisorPermissions: string[], employeePermissions: string[], readerPermissions: string[]
+  }
+  const accessMixin = 'departments:mixin:DepartmentAccess' as Ref<Mixin<DepartmentAccess>>
+  const permissionFields = ['adminPermissions', 'supervisorPermissions', 'employeePermissions', 'readerPermissions'] as const
   const roleLabels = ['Administrators', 'Supervisors', 'Employees', 'Readers'] as const
+  let departmentRows: Array<{ doc: Doc, name: string, access: DepartmentAccess }> = []
+  let editingPerson: AccountUuid | undefined
+  let selectedDepartment = ''
+  let selection: RoleField | '' = ''
+  let departmentBusy = false
+  let departmentError = ''
+  $: editableDepartments = departmentRows.filter(({ access }) =>
+    currentAccount.role === AccountRole.Owner || access.administrators.includes(currentAccount.uuid))
+  $: selectedRow = editableDepartments.find(({ doc }) => doc._id === selectedDepartment)
+
+  function chooseDepartment (id: string, person: AccountUuid): void {
+    selectedDepartment = id
+    const row = editableDepartments.find(({ doc }) => doc._id === id)
+    selection = row === undefined ? '' : roleFields.find((field) => row.access[field].includes(person)) ?? ''
+    departmentError = ''
+  }
+
+  async function saveDepartment (person: AccountUuid): Promise<void> {
+    if (selectedRow === undefined || departmentBusy) return
+    const { doc, access } = selectedRow
+    const owner = currentAccount.role === AccountRole.Owner
+    const actor = currentAccount.uuid
+    if (!owner && !access.administrators.includes(actor)) return
+    const changes = Object.fromEntries(roleFields.map((field) => [field,
+      field === selection ? [...new Set([...access[field], person])] : access[field].filter((id) => id !== person)
+    ])) as Record<RoleField, AccountUuid[]>
+    departmentBusy = true
+    departmentError = ''
+    try {
+      const ops = client.apply('edit-department-membership')
+      ops.match(departmentClass, { _id: doc._id, modifiedOn: doc.modifiedOn })
+      await ops.updateMixin(doc._id, departmentClass, doc.space, accessMixin, changes)
+      if (!(await ops.commit()).result) throw new Error('Department membership was not saved')
+      editingPerson = undefined
+    } catch {
+      departmentError = '未能保存。请确认你有权调整该部门的成员和角色，或刷新后再试。'
+    } finally {
+      departmentBusy = false
+    }
+  }
+
+  function roleSelectable (field: RoleField): boolean {
+    if (currentAccount.role === AccountRole.Owner) return true
+    if (selectedRow === undefined || field === 'administrators') return false
+    const { access } = selectedRow
+    const permissions = new Set([...access.adminPermissions, ...access.supervisorPermissions])
+    for (const [i, role] of roleFields.entries()) {
+      if (access[role].includes(currentAccount.uuid)) for (const permission of access[permissionFields[i]]) permissions.add(permission)
+    }
+    return (permissions.has('manageMembers') || (field === 'readers' && permissions.has('invite'))) &&
+      access[permissionFields[roleFields.indexOf(field)]].every((permission) => permissions.has(permission))
+  }
+
   let memberships = new Map<string, Membership[]>()
   const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
   if (client.getHierarchy().hasClass(departmentClass)) {
     createQuery().query(departmentClass, {}, (docs) => {
       const next = new Map<string, Membership[]>()
+      const rows: typeof departmentRows = []
       for (const doc of docs) {
-        const row = doc as unknown as { name: string, 'departments:mixin:DepartmentAccess'?: Record<typeof roleFields[number], string[]> }
+        const row = doc as unknown as { name: string, 'departments:mixin:DepartmentAccess'?: DepartmentAccess }
         const access = row['departments:mixin:DepartmentAccess']
         if (access === undefined) continue
+        rows.push({ doc, name: row.name, access })
         const people = new Set(roleFields.flatMap((field) => access[field] ?? []))
         for (const person of people) {
           const roles = roleFields.flatMap((field, i) => access[field]?.includes(person) ? [roleLabels[i]] : [])
@@ -48,6 +109,7 @@
           next.set(person, departments)
         }
       }
+      departmentRows = rows.sort((a, b) => a.name.localeCompare(b.name))
       memberships = next
     })
   }
@@ -140,9 +202,10 @@
               <div class="p-1 min-w-80">
                 <EmployeePresenter value={employee} disabled={false} />
               </div>
+              <div class="workspace-role">
               <DropdownLabelsIntl
                 label={role === AccountRole.Maintainer ? setting.string.Maintainer : guestRoles.includes(role) ? setting.string.Guest : setting.string.Role}
-                disabled={!hasAccountRole(currentAccount, role) ||
+                disabled={!hasAccountRole(currentAccount, AccountRole.Maintainer) || !hasAccountRole(currentAccount, role) ||
                   (role === AccountRole.Owner && ownersCount === 1) ||
                   currentAccount.uuid === personUuid}
                 kind={'primary'}
@@ -153,6 +216,8 @@
                   void change(personUuid, e.detail)
                 }}
               />
+                <small>这里是公司级角色；管理员、主管在「部门」列里设。</small>
+              </div>
               <div class="department-links">
                 {#each memberships.get(personUuid) ?? [] as department (department.id)}
                   <button class="department-link" on:click={() => openDepartment(department.id)}>
@@ -161,6 +226,40 @@
                 {:else}
                   —
                 {/each}
+                {#if editableDepartments.length > 0}
+                  <Button kind="regular" size="small" on:click={() => {
+                    editingPerson = editingPerson === personUuid ? undefined : personUuid
+                    chooseDepartment('', personUuid)
+                  }}><span slot="content">编辑部门</span></Button>
+                {/if}
+                {#if editingPerson === personUuid}
+                  <div class="department-editor">
+                    <label>部门
+                      <select value={selectedDepartment} disabled={departmentBusy}
+                        on:change={(event) => chooseDepartment(event.currentTarget.value, personUuid)}>
+                        <option value="">选择部门</option>
+                        {#each editableDepartments as row (row.doc._id)}
+                          <option value={row.doc._id}>{row.name}</option>
+                        {/each}
+                      </select>
+                    </label>
+                    {#if selectedRow}
+                      <label>角色
+                        <select bind:value={selection} disabled={departmentBusy}>
+                          <option value="">不在此部门</option>
+                          {#each roleFields as field, i}
+                            <option value={field} disabled={!roleSelectable(field) && field !== selection}>
+                              <Label label={departmentRoleLabel(roleLabels[i])} />
+                            </option>
+                          {/each}
+                        </select>
+                      </label>
+                      <Button kind="regular" size="small" disabled={departmentBusy}
+                        on:click={() => saveDepartment(personUuid)}><span slot="content">保存</span></Button>
+                    {/if}
+                    {#if departmentError}<span role="alert">{departmentError}</span>{/if}
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}
@@ -172,6 +271,17 @@
 
 <style>
   .member-columns { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(9rem, auto) minmax(12rem, 2fr); align-items: center; gap: 1rem; }
+  .workspace-role { display: grid; gap: 0.25rem; color: var(--theme-content-color); }
+  .department-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; flex-basis: 100%; }
+  .department-editor select {
+    background: var(--theme-bg-color); color: var(--theme-caption-color); border: 1px solid var(--theme-button-border);
+  }
   .department-links { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
-  .department-link { text-decoration: underline; cursor: pointer; text-align: start; }
+  .department-link {
+    background: transparent;
+    color: var(--theme-caption-color);
+    text-decoration: underline;
+    cursor: pointer;
+    text-align: start;
+  }
 </style>

@@ -1,13 +1,13 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import chunter from '@hcengineering/chunter'
-  import { getResource, type IntlString } from '@hcengineering/platform'
+  import { getResource, type Asset, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
   import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Breadcrumb, Header, Label, location, Toggle } from '@hcengineering/ui'
+  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, getCurrentLocation, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
@@ -17,12 +17,18 @@
   interface ModuleApplication extends Doc {
     alias: string
     label: IntlString
+    icon: Asset
     hidden: boolean
   }
   const applications = client.getModel().findAllSync(
     'workbench:class:Application' as Ref<Class<ModuleApplication>>, { hidden: false }
   ).filter((app) => app.alias !== '')
-  const moduleByAlias = new Map(applications.map((app) => [app.alias, app]))
+  applications.push({
+    alias: 'whatsapp',
+    label: 'whatsapp:string:Whatsapp' as IntlString,
+    icon: contact.icon.Whatsapp
+  } as ModuleApplication)
+  const selectSpacesLabel = 'setting:string:GuestSelectSpaces' as IntlString
   const me = getCurrentAccount()
   const owner = me.role === AccountRole.Owner
   const rosterQuery = createQuery()
@@ -38,6 +44,8 @@
   let name = ''
   let newName = ''
   let showCreate = false
+  let memberSearch = ''
+  let expandedModules = new Set<string>()
   let tab: 'members' | 'modules' | 'settings' = 'members'
   let newAdmin = ''
   let busy = false
@@ -233,6 +241,8 @@
   function choose (value: DepartmentAccess): void {
     grantPerson = undefined
     tab = 'members'
+    memberSearch = ''
+    expandedModules = new Set()
     selected = value
     draft = clone(value)
     name = value.name
@@ -252,24 +262,50 @@
     }
     return result
   }
-  function canToggleRole (role: (typeof roles)[number], person: AccountUuid): boolean {
-    if (draft === undefined || busy) return false
+  function canAssignRole (field: RoleField): boolean {
+    if (draft === undefined || busy || !canEdit) return false
     if (owner) return true
     const own = actorPermissions()
-    if (role.field === 'administrators') return false
-    if (own.has('manageMembers')) return draft[role.permissions].every((permission) => own.has(permission))
-    return (
-      role.field === 'readers' &&
-      own.has('invite') &&
-      !draft.readers.includes(person) &&
-      draft.readerPermissions.every((permission) => own.has(permission))
-    )
+    const role = roles.find((item) => item.field === field)
+    return field !== 'administrators' && own.has('manageMembers') &&
+      role !== undefined && draft[role.permissions].every((permission) => own.has(permission))
   }
-  function toggleRole (role: RoleField, person: AccountUuid): void {
-    if (draft === undefined) return
-    const list = draft[role]
-    draft = { ...draft, [role]: list.includes(person) ? list.filter((id) => id !== person) : [...list, person] }
+
+  function canMoveMember (current: Draft, person: AccountUuid): boolean {
+    return canEdit && !busy && roles.filter(({ field }) => current[field].includes(person))
+      .every(({ field }) => canAssignRole(field))
   }
+
+  function setMemberRole (person: AccountUuid, field?: RoleField): void {
+    if (draft === undefined || !canMoveMember(draft, person) || (field !== undefined && !canAssignRole(field))) return
+    const next = { ...draft }
+    for (const role of roles) next[role.field] = draft[role.field].filter((id) => id !== person)
+    if (field !== undefined) next[field].push(person)
+    draft = next
+    if (field === undefined && grantPerson === person) grantPerson = undefined
+  }
+
+  function openAddMembers (): void {
+    if (selected === undefined || draft === undefined || !canAssignRole('employees')) return
+    const id = selected._id
+    const current = [...new Set(roles.flatMap(({ field }) => draft?.[field] ?? []))]
+    showPopup(contact.component.AddMembersPopup, { value: { name: selected.name, members: current } }, undefined,
+      (people: AccountUuid[] | undefined) => {
+        if (!Array.isArray(people) || selected?._id !== id || draft === undefined || !canAssignRole('employees')) return
+        const existing = new Set(roles.flatMap(({ field }) => draft?.[field] ?? []))
+        const added = [...new Set(people)].filter((person) => !existing.has(person))
+        draft = { ...draft, employees: [...draft.employees, ...added] }
+      })
+  }
+
+  function memberRole (current: Draft, person: AccountUuid): RoleField | undefined {
+    return roles.find(({ field }) => current[field].includes(person))?.field
+  }
+
+  function matchesMember (name: string, search: string): boolean {
+    return name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())
+  }
+
   function canTogglePermission (role: (typeof roles)[number], permission: DepartmentPermission): boolean {
     if (busy) return false
     if (owner) return true
@@ -290,7 +326,8 @@
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
     return Object.fromEntries(applications.map(({ alias }) => [alias,
       access?.moduleAccess?.[alias] ?? Object.fromEntries(moduleRoles.map((role) => [role,
-        access?.moduleAccess !== undefined ? 'none' :
+        alias === 'whatsapp' ? 'edit' :
+          access?.moduleAccess !== undefined ? 'none' :
           access !== undefined ? defaultModuleLevel(alias, role, access.modules) :
           alias === 'materials' ? (role === 'reader' ? 'none' : 'view') :
           alias === 'tracking' ? (role === 'admin' ? 'view' : 'none') : defaultModuleLevel(alias, role)
@@ -309,10 +346,43 @@
   $: spaceOptions = (alias: string): Space[] => (joinableSpaces[alias] ?? [])
     .filter((space) => owner || space.owners?.includes(me.uuid) || draft?.autoJoin?.[alias]?.includes(space._id))
 
-  function setAutoJoin (alias: string, select: HTMLSelectElement): void {
+  function spaceItems (spaces: Space[], selected: Ref<Space>[]) {
+    return [
+      ...spaces.map((space) => ({ id: space._id, label: space.name })).sort((a, b) => a.label.localeCompare(b.label)),
+      ...selected.filter((id) => !spaces.some((space) => space._id === id)).map((id) => ({ id, label: '已配置的空间' }))
+    ]
+  }
+
+  function setAutoJoin (alias: string, ids: string[]): void {
     if (!canEdit || draft === undefined) return
-    const ids = Array.from(select.selectedOptions, (option) => option.value as Ref<Space>)
-    draft = { ...draft, autoJoin: { ...draft.autoJoin, [alias]: ids } }
+    draft = { ...draft, autoJoin: { ...draft.autoJoin, [alias]: ids as Ref<Space>[] } }
+  }
+
+  function returnToList (): void {
+    selected = undefined
+    draft = undefined
+    grantPerson = undefined
+    const loc = getCurrentLocation()
+    if (loc.query?.department !== undefined) {
+      const { department, ...query } = loc.query
+      navigate({ ...loc, query })
+    }
+  }
+
+  function toggleModuleDetails (alias: string): void {
+    const next = new Set(expandedModules)
+    if (next.has(alias)) next.delete(alias)
+    else next.add(alias)
+    expandedModules = next
+  }
+
+  function moduleSummary (alias: string, row: ModuleAccess[string] | undefined): string {
+    if (row === undefined) return '不能用'
+    return moduleRoles.map((role) => {
+      const level = row[role]
+      const text = level === 'none' ? '不能用' : !ownModules.has(alias) ? '能用' : level === 'edit' ? '编辑' : '只能看'
+      return roleLabels[role] + ' ' + text
+    }).join(' · ')
   }
 
   function toggleCard (alias: string, enabled: boolean): void {
@@ -405,7 +475,11 @@
 
 <section class="departments">
   <Header adaptive="disabled">
-    <Breadcrumb label={departments.string.Departments} size="large" isCurrent />
+    <Breadcrumb label={departments.string.Departments} size="large" isCurrent={live === undefined} on:click={returnToList} />
+    {#if live}
+      <span class="breadcrumb-separator" aria-hidden="true">›</span>
+      <Breadcrumb title={live.name} size="large" isCurrent />
+    {/if}
     <svelte:fragment slot="extra">
   {#if owner && selected === undefined}
     <label>
@@ -418,7 +492,7 @@
       按部门控制模块
       <small>启用后按部门角色和个人例外分配模块。</small>
     </label>
-    <button on:click={() => { showCreate = !showCreate }}><Label label={departments.string.CreateDepartment} /></button>
+    <Button kind="regular" label={departments.string.CreateDepartment} on:click={() => { showCreate = !showCreate }} />
   {/if}
     </svelte:fragment>
   </Header>
@@ -436,9 +510,8 @@
               >{/if}{/each}
         </select></label
       >
-      <button on:click={create} disabled={busy || newName.trim() === '' || newAdmin === ''}
-        ><Label label={departments.string.CreateDepartment} /></button
-      >
+      <Button kind="regular" label={departments.string.CreateDepartment} on:click={create}
+        disabled={busy || newName.trim() === '' || newAdmin === ''} />
     </div>
   {/if}
   {#if error}<p class="error"><Label label={departments.string.SaveError} /></p>{/if}
@@ -448,45 +521,74 @@
       <nav aria-label="部门">
         {#each orderedRows as row (row._id)}
           <button class="department-card" class:archived={row.archived} on:click={() => choose(row)}>
-            <strong>{row.name}</strong>
-            <span>管理员 {names(row.administrators) || '—'}</span>
-            <span>{new Set(roles.flatMap((role) => row[role.field])).size} 人{row.archived ? ' · 已归档' : ''}</span>
+            <span class="department-icon" aria-hidden="true"><Icon icon={hr.icon.Department} size="medium" /></span>
+            <span class="department-summary">
+              <strong>{row.name}</strong>
+              <span>管理员 {names(row.administrators) || '—'}</span>
+              <span>{new Set(roles.flatMap((role) => row[role.field])).size} 人{row.archived ? ' · 已归档' : ''}</span>
+            </span>
           </button>
         {/each}
       </nav>
     {:else if live !== undefined && draft !== undefined}
       <div class="editor">
-        <div><button on:click={() => { selected = undefined; draft = undefined }}>返回</button></div>
-        <h3>{live.name}</h3>
         <div class="tabs">
           <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}>成员</button>
           <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}>模块权限</button>
           {#if canEdit}<button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}>设置</button>{/if}
         </div>
         {#if tab === 'members'}
-        {#each roles as role (role.field)}
-          <section>
-            <h4><Label label={role.label} /></h4>
-            {#each members(live[role.field]) as person (person._id)}
-              <div class="member">
-                <strong>{formatName(person.name)}</strong>
-                <span>{role.field === 'administrators' || canSeeContacts ? details(person) || '—' : '（不公开）'}</span>
-                {#if canEdit && person.personUuid !== undefined}
-                  <button disabled={busy} on:click={() => editGrant(person.personUuid)}>模块例外</button>
-                {/if}
-                {#if role.field === 'administrators' && person.personUuid !== me.uuid}
-                  <button on:click={() => chat(person.personUuid)}>私信</button>
-                {/if}
-              </div>
-            {/each}
-          </section>
-        {/each}
+          <div class="member-toolbar">
+            <SearchInput bind:value={memberSearch} />
+            {#if canEdit}
+              <Button kind="regular" disabled={!canAssignRole('employees')} on:click={openAddMembers}>
+                <span slot="content">添加成员</span>
+              </Button>
+            {/if}
+          </div>
+          {#each roles as role (role.field)}
+            {@const people = members(draft[role.field]).filter((person) => person.personUuid != null &&
+              memberRole(draft, person.personUuid) === role.field && matchesMember(formatName(person.name), memberSearch))}
+            {#if people.length > 0}
+              <section>
+                <h4><Label label={role.label} /></h4>
+                {#each people as person (person._id)}
+                  {@const account = person.personUuid}
+                  {#if account != null}
+                    <div class="member">
+                      <strong>{formatName(person.name)}</strong>
+                      <span>{live.administrators.includes(account) || canSeeContacts ? details(person) || '—' : '（不公开）'}</span>
+                      <select aria-label="部门角色" value={role.field} disabled={!canMoveMember(draft, account)}
+                        on:change={(event) => {
+                          const field = roles.find((item) => item.field === event.currentTarget.value)?.field
+                          if (field !== undefined) setMemberRole(account, field)
+                        }}>
+                        {#each roles as option (option.field)}
+                          <option value={option.field} disabled={option.field !== role.field && !canAssignRole(option.field)}>
+                            <Label label={option.label} />
+                          </option>
+                        {/each}
+                      </select>
+                      {#if canEdit}
+                        <button disabled={busy || !roles.some(({ field }) => live?.[field].includes(account))}
+                          on:click={() => editGrant(account)}>模块例外</button>
+                      {/if}
+                      {#if account !== me.uuid}<button on:click={() => chat(account)}>私信</button>{/if}
+                      {#if canEdit}
+                        <button disabled={!canMoveMember(draft, account)} on:click={() => setMemberRole(account)}>移出</button>
+                      {/if}
+                    </div>
+                  {/if}
+                {/each}
+              </section>
+            {/if}
+          {/each}
         {#if canEdit && grantPerson !== undefined}
           <fieldset>
             <legend>{names([grantPerson])} 的模块例外</legend>
             <div class="member">
               <fieldset><legend>额外给</legend>
-                {#each applications as app (app._id)}
+                {#each applications as app (app.alias)}
                   <label><Label label={app.label} />
                     <select value={extra[app.alias] ?? ''} disabled={busy}
                       on:change={(event) => changeExtra(app.alias, event.currentTarget.value)}>
@@ -498,7 +600,7 @@
                 {/each}
               </fieldset>
               <fieldset><legend>单独关掉</legend>
-                {#each applications as app (app._id)}
+                {#each applications as app (app.alias)}
                   <label><input type="checkbox" bind:group={blocked} value={app.alias} disabled={busy} />
                     <Label label={app.label} /></label>
                 {/each}
@@ -510,62 +612,58 @@
         {/if}
         {/if}
         {#if tab === 'modules'}
-        <section>
-          <h4>这个部门能用的模块</h4>
-          {#if live.modules === undefined}
-            <p>全部模块</p>
-          {:else if live.modules.length === 0}
-            <p>没有配置默认模块</p>
-          {:else}
-            <ul>
-              {#each live.modules as alias (alias)}
-                {@const application = moduleByAlias.get(alias)}
-                <li>{#if application}<Label label={application.label} />{:else}{alias}{/if}</li>
-              {/each}
-            </ul>
-          {/if}
-        </section>
           <div class="module-cards">
-            {#each applications as app (app._id)}
+            {#each applications as app (app.alias)}
               {@const row = draft.moduleAccess?.[app.alias] ??
-                (draft.moduleAccess === undefined ? initialMatrix(selected)[app.alias] : undefined)}
+                (draft.moduleAccess === undefined || app.alias === 'whatsapp' ? initialMatrix(selected)[app.alias] : undefined)}
               {@const enabled = row !== undefined && moduleRoles.some((role) => row[role] !== 'none')}
-              <section class="department-card">
-                <div class="module-card-header">
-                  <strong><Label label={app.label} /></strong>
+              {@const hasSpaces = departmentAutoJoinClasses[app.alias] !== undefined}
+              {@const expanded = expandedModules.has(app.alias)}
+              <section class="permissionModuleCard">
+                <div class="permissionModuleCard-header" class:hasRows={expanded}>
+                  <button type="button" class="permissionModuleCard-headerMain" aria-expanded={expanded}
+                    on:click={() => toggleModuleDetails(app.alias)}>
+                    <span class="module-icon"><Icon icon={app.icon} size="small" /></span>
+                    <span class="module-heading">
+                      <Label label={app.label} />
+                      <small class="module-summary" title={moduleSummary(app.alias, row)}>{moduleSummary(app.alias, row)}</small>
+                    </span>
+                  </button>
                   <Toggle on={enabled} disabled={!owner || busy} on:change={(event) => toggleCard(app.alias, event.detail)} />
                 </div>
-                {#if enabled}
-                  {#if ownModules.has(app.alias)}
-                    {#each moduleRoles as role}
-                      <label>{roleLabels[role]}
-                        <select value={row?.[role] ?? 'none'} disabled={!owner || busy}
-                          on:change={(event) => changeModule(app.alias, role, event.currentTarget.value)}>
-                          {#if row?.[role] === 'none'}<option value="none" disabled>不能用</option>{/if}
-                          <option value="view">只能看</option>
-                          <option value="edit">能编辑</option>
-                        </select>
-                      </label>
-                    {/each}
-                  {:else}
-                    <small>由部门空间权限决定</small>
-                  {/if}
-                {/if}
-                {#if departmentAutoJoinClasses[app.alias] !== undefined}
-                  {@const spaces = spaceOptions(app.alias)}
-                  <label>自动加入空间
-                    <select multiple disabled={!canEdit || busy}
-                      on:change={(event) => setAutoJoin(app.alias, event.currentTarget)}>
-                      {#each spaces as space (space._id)}
-                        <option value={space._id} selected={draft.autoJoin?.[app.alias]?.includes(space._id) ?? false}>
-                          {space.name}
-                        </option>
+                {#if expanded}
+                  <div class="permissionRows">
+                    {#if enabled && ownModules.has(app.alias)}
+                      {#each moduleRoles as role}
+                        <label class="permissionRow">
+                          <span>{roleLabels[role]}</span>
+                          <select value={row?.[role] ?? 'none'} disabled={!owner || busy}
+                            on:change={(event) => changeModule(app.alias, role, event.currentTarget.value)}>
+                            {#if row?.[role] === 'none'}<option value="none" disabled>不能用</option>{/if}
+                            <option value="view">只能看</option>
+                            <option value="edit">能编辑</option>
+                          </select>
+                        </label>
                       {/each}
-                      {#each (draft.autoJoin?.[app.alias] ?? []).filter((id) => !spaces.some((space) => space._id === id)) as id (id)}
-                        <option value={id} selected>已配置的空间</option>
-                      {/each}
-                    </select>
-                  </label>
+                    {:else if app.alias === 'whatsapp'}
+                      <div class="permissionRow"><small>{enabled ? '能用' : '不能用'}</small></div>
+                    {:else}
+                      <div class="permissionRow"><small>{enabled ? '由部门空间权限决定' : '不能用'}</small></div>
+                    {/if}
+                    {#if hasSpaces}
+                      {@const selectedSpaces = draft.autoJoin?.[app.alias] ?? []}
+                      <div class="permissionRow">
+                        <span>自动加入空间</span>
+                        <AvailableSpacesInput
+                          items={spaceItems(spaceOptions(app.alias), selectedSpaces)}
+                          selected={selectedSpaces}
+                          label={selectSpacesLabel}
+                          disabled={!canEdit || busy}
+                          on:selected={(event) => setAutoJoin(app.alias, event.detail)}
+                        />
+                      </div>
+                    {/if}
+                  </div>
                 {/if}
               </section>
             {/each}
@@ -607,31 +705,6 @@
         {/if}
         {#if canEdit && tab === 'members'}
         <p><Label label={departments.string.InviteHelp} /></p>
-        <div class="table-wrap">
-          <table>
-            <thead
-              ><tr
-                ><th><Label label={departments.string.Member} /></th>{#each roles as role}<th
-                    ><Label label={role.label} /></th
-                  >{/each}</tr
-              ></thead
-            >
-            <tbody
-              >{#each staff as person (person._id)}{#if person.personUuid != null}<tr
-                    ><td>{formatName(person.name)}</td>{#each roles as role}<td
-                        ><input
-                          type="checkbox"
-                          checked={draft[role.field].includes(person.personUuid)}
-                          disabled={!canToggleRole(role, person.personUuid)}
-                          on:change={() => {
-                            if (person.personUuid != null) toggleRole(role.field, person.personUuid)
-                          }}
-                        /></td
-                      >{/each}</tr
-                  >{/if}{/each}</tbody
-            >
-          </table>
-        </div>
         <div class="table-wrap">
           <table>
             <thead
@@ -695,12 +768,63 @@
     border: 1px solid var(--theme-button-border);
     border-radius: 0.75rem;
     background: var(--theme-bg-color);
+    color: var(--theme-content-color);
   }
-  .module-cards { display: grid; gap: 1rem; }
-  .module-card-header { display: flex; justify-content: space-between; align-items: center; }
+  .department-card strong { color: var(--theme-caption-color); }
+  button.department-card { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 0.75rem; }
+  .department-icon { display: flex; color: var(--theme-caption-color); }
+  .department-summary { display: grid; gap: 0.35rem; }
+  .module-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start; gap: 1.25rem; width: 100%; padding-top: 0.5rem; }
+  .permissionModuleCard {
+    display: flex; flex-direction: column; width: 100%; overflow: hidden;
+    border: 1px solid var(--theme-navpanel-divider); border-radius: var(--small-focus-BorderRadius);
+    background-color: var(--theme-panel-color); box-shadow: var(--theme-popup-shadow);
+  }
+  .permissionModuleCard-header {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 0.75rem;
+    align-items: center; padding: 0.75rem 1rem; background-color: var(--theme-comp-header-color);
+    color: var(--theme-content-color); font-weight: 500; font-size: 0.9375rem;
+  }
+  .permissionModuleCard-header.hasRows { border-bottom: 1px solid var(--theme-divider-color); }
+  .departments button.permissionModuleCard-headerMain {
+    display: flex; align-items: center; gap: 0.75rem; min-width: 0; text-align: start;
+    border: 0; background: transparent; padding: 0; cursor: pointer;
+  }
+  .module-heading { display: grid; gap: 0.25rem; min-width: 0; }
+  .module-summary { color: var(--theme-content-color); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .module-icon {
+    display: grid; place-items: center; width: 2rem; height: 2rem; flex-shrink: 0;
+    color: var(--theme-caption-color); background-color: var(--theme-button-default);
+    border-radius: var(--small-focus-BorderRadius);
+  }
+  .permissionRows { display: flex; flex-direction: column; padding: 0.25rem 1rem 0.75rem; }
+  .permissionRow {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.75rem;
+    padding: 0.625rem 0 0.625rem 0.25rem; min-height: 2.5rem; color: var(--theme-content-color);
+  }
+  .permissionRow + .permissionRow { border-top: 1px solid var(--theme-navpanel-divider); }
+  .breadcrumb-separator { color: var(--theme-content-color); padding-inline: 0.35rem; }
+  .departments { color: var(--theme-content-color); }
+  .departments button:not(.department-card), .departments select, .departments input:not([type='checkbox']) {
+    color: var(--theme-caption-color); background-color: var(--theme-bg-color);
+    border: 1px solid var(--theme-button-border); border-radius: 0.375rem; padding: 0.35rem 0.65rem;
+  }
+  .departments button:not(:disabled):hover { border-color: var(--theme-caption-color); }
+  .departments button:disabled { opacity: 0.65; }
   .tabs { display: flex; gap: 0.5rem; }
-  .tabs button[aria-pressed='true'] { font-weight: 600; }
-  .archived { opacity: 0.55; }
+  .tabs button {
+    color: var(--theme-content-color);
+    background: var(--theme-bg-color);
+    border: 1px solid var(--theme-button-border);
+    border-radius: 0.375rem;
+    padding: 0.375rem 0.75rem;
+  }
+  .tabs button:hover,
+  .tabs button[aria-pressed='true'] { color: var(--theme-caption-color); }
+  .tabs button[aria-pressed='true'] { border-color: var(--theme-caption-color); font-weight: 600; }
+  .archived { border-style: dashed; }
+  .archived strong, .archived .department-icon { color: var(--theme-content-color); }
+  .member-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; }
   .member {
     display: flex;
     flex-wrap: wrap;

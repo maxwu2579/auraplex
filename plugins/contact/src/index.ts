@@ -265,6 +265,7 @@ export const contactPlugin = plugin(contactId, {
     UserBoxList: '' as AnyComponent,
     ChannelPresenter: '' as AnyComponent,
     SpaceMembers: '' as AnyComponent,
+    AddMembersPopup: '' as AnyComponent,
     DeleteConfirmationPopup: '' as AnyComponent,
     PersonIdArrayEditor: '' as AnyComponent,
     AccountArrayEditor: '' as AnyComponent,

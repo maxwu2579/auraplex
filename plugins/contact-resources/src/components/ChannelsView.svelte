@@ -14,7 +14,8 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import type { Channel, ChannelProvider } from '@hcengineering/contact'
+  import contact, { type Channel, type ChannelProvider } from '@hcengineering/contact'
+  import { departmentModuleLevel } from '@hcengineering/presentation'
   import { AttachedData, Doc, Ref, toIdMap } from '@hcengineering/core'
   import notification, { DocNotifyContext, InboxNotification } from '@hcengineering/notification'
   import { Asset, IntlString, getResource } from '@hcengineering/platform'
@@ -119,7 +120,8 @@
     displayItems = result
   }
 
-  $: if (value) update(value, $contextByDocStore, $inboxNotificationsByContextStore, $channelProviders)
+  $: visibleProviders = $channelProviders.filter((provider) => provider._id !== contact.channelProvider.Whatsapp || $departmentModuleLevel('whatsapp') !== 'none')
+  $: if (value) update(value, $contextByDocStore, $inboxNotificationsByContextStore, visibleProviders)
 
   let displayItems: Item[] = []
   let divHTML: HTMLElement

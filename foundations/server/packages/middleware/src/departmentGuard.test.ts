@@ -162,3 +162,20 @@ test('department auto join can only be configured by authorized admins for a mat
   await expect(guard.tx(context('admin'), [tx('drive')])).rejects.toThrow()
   await expect(guard.tx(context('admin'), [tx('tracker')])).resolves.toBeDefined()
 })
+
+test('blocked WhatsApp messages are hidden and writes are rejected before reaching downstream guards', async () => {
+  const messageClass = 'whatsapp:class:Message' as Ref<Class<Doc>>
+  const ctx = { contextData: { account: { uuid: 'worker', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const findAll = jest.fn(async (_ctx, cls) => {
+    if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
+    if (cls === 'departments:class:ModuleGrant') return [{ extra: {}, blocked: ['whatsapp'] }]
+    return []
+  })
+  const tx = jest.fn(async () => [])
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, { findAll, tx } as unknown as Middleware)
+  expect(await guard.findAll(ctx, messageClass, {})).toHaveLength(0)
+  expect(findAll.mock.calls.some(([, cls]) => cls === messageClass)).toBe(false)
+  await expect(guard.tx(ctx, [{ ...update({}), objectClass: messageClass, objectSpace: core.space.Workspace }])).rejects.toThrow()
+  expect(tx).not.toHaveBeenCalled()
+})

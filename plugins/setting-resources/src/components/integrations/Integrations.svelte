@@ -15,7 +15,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { fade } from 'svelte/transition'
-  import { createQuery, getCurrentWorkspaceUuid } from '@hcengineering/presentation'
+  import { createQuery, departmentModuleLevel, getCurrentWorkspaceUuid } from '@hcengineering/presentation'
   import { type IntegrationType, IntegrationError } from '@hcengineering/setting'
   import setting from '@hcengineering/setting'
   import { type Integration } from '@hcengineering/account-client'
@@ -234,7 +234,9 @@
   }
 
   // Reactive statement to get filtered integration types
-  $: filteredIntegrationTypes = getFilteredIntegrationTypes(mode, integrationTypes, integrations)
+  $: filteredIntegrationTypes = getFilteredIntegrationTypes(mode,
+    integrationTypes.filter((type) => type.kind !== 'whatsapp' || $departmentModuleLevel('whatsapp') !== 'none'),
+    integrations)
 
   function getIntegrationKey (integrationInfo: IntegrationInfo): string {
     const { integration, integrationType } = integrationInfo

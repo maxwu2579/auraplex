@@ -13,8 +13,8 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { getCurrentAccount, hasAccountRole } from '@hcengineering/core'
-  import { createQuery, isAdminUser, isDisabled } from '@hcengineering/presentation'
+  import { getCurrentAccount, hasAccountRole, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import { createQuery, getClient, isAdminUser, isDisabled } from '@hcengineering/presentation'
   import setting, { SettingsCategory } from '@hcengineering/setting'
   import {
     Component,
@@ -34,33 +34,40 @@
   let category: SettingsCategory | undefined
   let categoryId: string = ''
 
-  let categories: SettingsCategory[] = []
+  let availableCategories: SettingsCategory[] = []
+  let departmentAdmin = false
   const account = getCurrentAccount()
   const admin = isAdminUser()
 
+  const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
+  const client = getClient()
+  if (client.getHierarchy().hasClass(departmentClass)) {
+    createQuery().query(departmentClass, {}, (docs) => {
+      departmentAdmin = docs.some((doc) => {
+        const row = doc as unknown as { 'departments:mixin:DepartmentAccess'?: { administrators: string[] } }
+        return row['departments:mixin:DepartmentAccess']?.administrators.includes(account.uuid) === true
+      })
+    })
+  }
+
+  $: categories = availableCategories.filter((item) =>
+    (hasAccountRole(account, item.role) || (item.name === 'owners' && departmentAdmin)) &&
+    !isDisabled(item.feature ?? '') && (admin || !(item.adminOnly ?? false)))
+  $: category = categories.find((item) => item.name === categoryId)
   const settingsQuery = createQuery()
   settingsQuery.query(
     setting.class.WorkspaceSettingCategory,
     {},
     (res) => {
-      categories = res.filter((p) => hasAccountRole(account, p.role) && !isDisabled(p.feature ?? ''))
-      if (!admin) {
-        categories = categories.filter((p) => !(p.adminOnly ?? false))
-      }
-      category = findCategory(categoryId)
+      availableCategories = res
     },
     { sort: { order: 1 } }
   )
-
-  function findCategory (name: string): SettingsCategory | undefined {
-    return categories.find((x) => x.name === name)
-  }
 
   onDestroy(
     resolvedLocationStore.subscribe((loc) => {
       void (async (loc: Location): Promise<void> => {
         categoryId = loc.path[4]
-        category = findCategory(categoryId)
       })(loc)
     })
   )

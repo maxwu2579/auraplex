@@ -19,7 +19,7 @@
   import { AttachedData, Doc, Ref, toIdMap } from '@hcengineering/core'
   import notification, { DocNotifyContext, InboxNotification } from '@hcengineering/notification'
   import { Asset, IntlString, getResource } from '@hcengineering/platform'
-  import presentation, { getClient } from '@hcengineering/presentation'
+  import presentation, { departmentModuleLevel, getClient } from '@hcengineering/presentation'
   import {
     Action,
     AnyComponent,
@@ -152,7 +152,8 @@
     updateMenu(displayItems, channelProviders)
   }
 
-  $: if (value) update(value, $contextByDocStore, $inboxNotificationsByContextStore, $channelProviders)
+  $: visibleProviders = $channelProviders.filter((provider) => provider._id !== contact.channelProvider.Whatsapp || $departmentModuleLevel('whatsapp') !== 'none')
+  $: if (value) update(value, $contextByDocStore, $inboxNotificationsByContextStore, visibleProviders)
 
   let displayItems: Item[] = []
   let actions: Action[] = []
@@ -190,14 +191,14 @@
       }
     })
   }
-  $: updateMenu(displayItems, $channelProviders)
+  $: updateMenu(displayItems, visibleProviders)
 
   const dropItem = (n: number): Item[] => {
     return displayItems.filter((it, i) => i !== n)
   }
   const saveItems = (): void => {
     value = filterUndefined(displayItems)
-    updateMenu(displayItems, $channelProviders)
+    updateMenu(displayItems, visibleProviders)
   }
 
   const showMenu = (ev: MouseEvent): void => {
