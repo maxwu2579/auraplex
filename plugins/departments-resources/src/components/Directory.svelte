@@ -492,7 +492,7 @@
   }
 </script>
 
-<section class="departments">
+<section class="hulyComponent departments">
   <Header adaptive="disabled">
     <Breadcrumb label={departments.string.Departments} size="large" isCurrent={live === undefined} on:click={returnToList} />
     {#if live}
@@ -767,6 +767,12 @@
 
 <style lang="scss">
   .departments {
+    box-sizing: border-box;
+    align-self: stretch;
+    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
     padding: 1.25rem;
     overflow: auto;
   }
@@ -776,6 +782,7 @@
     gap: 1rem;
     margin: 1rem 0;
   }
+  .layout { width: 100%; min-width: 0; }
   nav {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
@@ -855,9 +862,12 @@
     padding: 0.25rem 0;
   }
   .editor {
-    flex: 1;
+    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
+    max-width: none;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
   }
   .table-wrap {
