@@ -7,7 +7,7 @@
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Breadcrumb, Header, Label } from '@hcengineering/ui'
+  import { Breadcrumb, Header, Label, location } from '@hcengineering/ui'
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
@@ -166,6 +166,18 @@
         })
       } catch {
         checked.delete(access._id)
+      }
+    }
+  }
+  let openedByLink: string | undefined
+  $: {
+    const requested = $location.query?.department ?? undefined
+    if (requested === undefined) openedByLink = undefined
+    else if (requested !== openedByLink) {
+      const row = rows.find((item) => item._id === requested)
+      if (row !== undefined) {
+        openedByLink = requested
+        choose(row)
       }
     }
   }
