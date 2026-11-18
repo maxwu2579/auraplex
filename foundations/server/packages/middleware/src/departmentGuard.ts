@@ -218,7 +218,8 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     query: DocumentQuery<T>,
     options?: FindOptions<T>
   ): Promise<FindResult<T>> {
-    if (isSystem(ctx.contextData.account, ctx)) return await this.provideFindAll(ctx, _class, query, options)
+    // Internal loads (e.g. space security init) run without a user context.
+    if (ctx.contextData === undefined || isSystem(ctx.contextData.account, ctx)) return await this.provideFindAll(ctx, _class, query, options)
     const allowed = await this.moduleAccess(ctx)
     if (allowed === undefined) return await this.provideFindAll(ctx, _class, query, options)
     const canRead = (cls: Ref<Class<Doc>>): boolean => {
@@ -283,7 +284,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   override async searchFulltext (
     ctx: MeasureContext<SessionData>, query: SearchQuery, options: SearchOptions
   ): Promise<SearchResult> {
-    const allowed = isSystem(ctx.contextData.account, ctx) ? undefined : await this.moduleAccess(ctx)
+    const allowed = ctx.contextData === undefined || isSystem(ctx.contextData.account, ctx) ? undefined : await this.moduleAccess(ctx)
     if (allowed === undefined) return await super.searchFulltext(ctx, query, options)
     const canRead = (cls: Ref<Class<Doc>>): boolean => {
       const alias = this.protectedModule(cls)
