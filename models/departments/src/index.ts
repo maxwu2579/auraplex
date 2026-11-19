@@ -89,6 +89,11 @@ export class TOrder extends TDoc implements Order {
   @Hidden() stages!: Order['stages']
   @Prop(TypeNumber(), departments.string.CurrentStage) current!: number
   @Prop(TypeString(), departments.string.OrderState) state!: Order['state']
+  @Hidden() channel?: Order['channel']
+  @Hidden() component?: Order['component']
+  @Hidden() document?: Order['document']
+  @Hidden() folder?: Order['folder']
+  @Hidden() linkSpaces?: Order['linkSpaces']
 }
 
 @Model(departments.class.OrderAction, core.class.Doc, DOMAIN_ORDERS)

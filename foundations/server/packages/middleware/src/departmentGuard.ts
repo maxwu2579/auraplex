@@ -560,7 +560,10 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const order = await this.findOne(ctx, orderClass, tx.objectId)
       if (order === undefined) forbidden()
       const ops = (tx as TxUpdateDoc<Doc>).operations as Record<string, unknown>
-      if (!canEditOrder(ops, actor, owner, order as unknown as OrderLike)) forbidden()
+      const like = order as unknown as OrderLike
+      const involved = like.stages.some((stage) => stage.assignee === actor ||
+        departmentRoles.some((role) => role !== 'reader' && this.roleOf(stage.department, actor) === role))
+      if (!canEditOrder(ops, actor, owner, like, involved)) forbidden()
       return
     }
     // Order flow template

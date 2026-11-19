@@ -19,6 +19,7 @@
   import OrderFlowChart from './OrderFlowChart.svelte'
   import StatusTag from './StatusTag.svelte'
   import QrScanner from './QrScanner.svelte'
+  import OrderLinks from './OrderLinks.svelte'
   import QRCode from 'qrcode'
   import { getCurrentLocation } from '@hcengineering/ui'
   import { recordAudit } from '../audit'
@@ -634,6 +635,7 @@
           {/each}
         </ul>
 
+        <OrderLinks order={selected} {depts} />
         <div class="order-files">
           {#key selected._id}
             <Component is={attachmentsComponent} props={{ objectId: selected._id, _class: departments.class.Order, space: selected.space, readonly: !moduleCanEdit, attachments: attachmentCount }} />

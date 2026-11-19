@@ -126,3 +126,11 @@ test('a pending order is started by its salesperson or a scanner, and only admin
   expect(canCreateOrder({ salesOwner: 'wang', state: 'pending' }, 'wang', false, true)).toBe(true)
   expect(canCreateOrder({ salesOwner: 'wang', state: 'done' }, 'wang', false, true)).toBe(false)
 })
+
+test('people working on an order may link chat, tasks, document and folder once', () => {
+  expect(canEditOrder({ channel: 'c1' }, 'li', false, order(), true)).toBe(true)
+  expect(canEditOrder({ channel: 'c1' }, 'zhao', false, order(), false)).toBe(false)
+  expect(canEditOrder({ channel: 'c2' }, 'li', false, { ...order(), channel: 'c1' } as any, true)).toBe(false)
+  expect(canEditOrder({ folder: 'f1', linkSpaces: { folder: 'd1' } }, 'wang', false, order())).toBe(true)
+  expect(canEditOrder({ channel: 'c1', title: 'x' }, 'li', false, order(), true)).toBe(false)
+})

@@ -138,7 +138,29 @@ export function canCreateOrder (
 }
 
 /** Only the salesperson in charge (or a super admin) edits the order's own text fields. */
-export function canEditOrder (operations: Record<string, unknown>, actor: string, owner: boolean, order: OrderLike): boolean {
+const linkFields = ['channel', 'component', 'document', 'folder', 'linkSpaces']
+
+export function canEditOrder (
+  operations: Record<string, unknown>,
+  actor: string,
+  owner: boolean,
+  order: OrderLike,
+  involved = false
+): boolean {
+  const keys = Object.keys(operations)
+  // Chat, tasks, document and folder are linked once, by anyone working on the order.
+  if (keys.length > 0 && keys.every((key) => linkFields.includes(key))) {
+    if (!owner && order.salesOwner !== actor && !involved) return false
+    const current = order as unknown as Record<string, unknown>
+    return keys.every((key) => {
+      const value = operations[key]
+      if (key === 'linkSpaces') {
+        return value !== null && typeof value === 'object' && !Array.isArray(value) &&
+          Object.values(value).every((it) => typeof it === 'string')
+      }
+      return typeof value === 'string' && value !== '' && current[key] === undefined
+    })
+  }
   if (!owner && order.salesOwner !== actor) return false
   return Object.keys(operations).every((key) => key === 'title' || key === 'customer' || key === 'note')
 }

@@ -73,6 +73,13 @@ export interface Order extends Doc {
   current: number
   /** pending: created but not started yet (started by hand or by scanning its QR code). */
   state: 'pending' | 'active' | 'done'
+  /** Linked places, created on first use: chat channel, tracker component, document, drive folder. */
+  channel?: Ref<Doc>
+  component?: Ref<Doc>
+  document?: Ref<Doc>
+  folder?: Ref<Doc>
+  /** The tracker project / teamspace / drive that holds the linked component, document and folder. */
+  linkSpaces?: Record<string, Ref<Space>>
 }
 
 export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan'

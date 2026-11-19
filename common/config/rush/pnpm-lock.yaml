@@ -19718,6 +19718,12 @@ importers:
       '@hcengineering/departments':
         specifier: workspace:^0.7.0
         version: link:../departments
+      '@hcengineering/document':
+        specifier: workspace:*
+        version: link:../document
+      '@hcengineering/drive':
+        specifier: workspace:*
+        version: link:../drive
       '@hcengineering/hr':
         specifier: workspace:^0.7.0
         version: link:../hr
@@ -19727,6 +19733,9 @@ importers:
       '@hcengineering/presentation':
         specifier: workspace:^0.7.0
         version: link:../../packages/presentation
+      '@hcengineering/rank':
+        specifier: workspace:*
+        version: link:../../foundations/core/packages/rank
       '@hcengineering/task':
         specifier: workspace:^0.7.0
         version: link:../task
@@ -63924,7 +63933,7 @@ snapshots:
   node-loader@2.0.0(webpack@5.102.1):
     dependencies:
       loader-utils: 2.0.4
-      webpack: 5.102.1
+      webpack: 5.102.1(esbuild@0.25.12)(webpack-cli@5.1.4)
 
   node-localstorage@2.2.1:
     dependencies:
