@@ -195,6 +195,39 @@
     }
   }
 
+  // Name, customer and note: the salesperson who took the order and super admins may change them.
+  let editing = false
+  let editTitle = ''
+  let editCustomer = ''
+  let editNote = ''
+  $: canEditInfo = selected !== undefined && moduleCanEdit && (owner || selected.salesOwner === me.uuid)
+  $: if (selected?._id !== editingId) editing = false
+  let editingId: Ref<Order> | undefined
+  function startEdit (): void {
+    if (selected === undefined) return
+    editTitle = selected.title
+    editCustomer = selected.customer
+    editNote = selected.note ?? ''
+    editingId = selected._id
+    editing = true
+  }
+  async function saveInfo (): Promise<void> {
+    if (busy || selected === undefined || editTitle.trim() === '' || editCustomer.trim() === '') return
+    busy = true
+    error = ''
+    try {
+      const ops = client.apply(undefined, 'order-edit')
+      await ops.update(selected, { title: editTitle.trim(), customer: editCustomer.trim(), note: editNote.trim() })
+      if (!(await ops.commit()).result) throw new Error('refused')
+      editing = false
+      notice = '已保存。'
+    } catch {
+      error = '保存失败：只有接单销售和超级管理员能改。'
+    } finally {
+      busy = false
+    }
+  }
+
   async function act (kind: OrderActionKind, extra: Partial<OrderAction> = {}): Promise<void> {
     if (busy || selected === undefined || stage === undefined) return
     busy = true
@@ -325,8 +358,20 @@
 
     {#if selected !== undefined}
       <div class="detail">
-        <h3>{selected.number} {selected.title}</h3>
-        <p class="hint">客户：{selected.customer}　接单销售：{name(selected.salesOwner)}{selected.note ? `　备注：${selected.note}` : ''}</p>
+        {#if editing}
+          <div class="edit-info">
+            <label>订单名称 <input bind:value={editTitle} maxlength="120" /></label>
+            <label>客户 <input bind:value={editCustomer} maxlength="120" /></label>
+            <label>备注 <input bind:value={editNote} maxlength="500" /></label>
+            <div>
+              <button disabled={busy || editTitle.trim() === '' || editCustomer.trim() === ''} on:click={saveInfo}>保存</button>
+              <button disabled={busy} on:click={() => { editing = false }}>取消</button>
+            </div>
+          </div>
+        {:else}
+          <h3>{selected.number} {selected.title}{#if canEditInfo}<button class="edit-btn" on:click={startEdit}>编辑</button>{/if}</h3>
+          <p class="hint">客户：{selected.customer}　接单销售：{name(selected.salesOwner)}{selected.note ? `　备注：${selected.note}` : ''}</p>
+        {/if}
         <div class="progress-header">
           {#if !adjusting}
             <div class="order-progress">
@@ -484,6 +529,11 @@
 </section>
 
 <style>
+  .edit-btn { margin-left: 0.75rem; font-size: 0.75rem; font-weight: 400; }
+  .edit-info { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .edit-info label { display: flex; gap: 0.5rem; align-items: center; }
+  .edit-info input { flex: 1; }
+  .edit-info div { display: flex; gap: 0.5rem; }
   .late { color: var(--theme-error-color); font-weight: 500; }
   .orders { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.25rem; overflow: auto; height: 100%; }
   .progress-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
