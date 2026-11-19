@@ -666,7 +666,7 @@
 
 <style>
   .scan-btn, .qr-btn { margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; border: 1px solid var(--theme-divider-color); background: var(--theme-button-default); color: var(--theme-caption-color); cursor: pointer; font-size: 0.8rem; font-weight: 500; }
-  .start-later { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; white-space: nowrap; }
+  .start-later { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
   .qr-box { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
   .qr-box img { width: 9rem; height: 9rem; background: #fff; padding: 0.25rem; border-radius: 0.25rem; }
   .pending { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0; }
