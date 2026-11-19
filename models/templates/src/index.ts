@@ -77,7 +77,7 @@ export function createModel (builder: Builder): void {
       component: templates.component.Templates,
       group: 'settings-editor',
       feature: 'templates',
-      role: AccountRole.User,
+      role: AccountRole.Maintainer,
       order: 3500
     },
     templates.ids.Templates

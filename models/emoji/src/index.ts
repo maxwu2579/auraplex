@@ -44,7 +44,7 @@ export function createModel (builder: Builder): void {
     icon: emojiPlugin.icon.Emoji,
     component: emojiPlugin.component.SettingsEmojiTable,
     group: 'settings-editor',
-    role: AccountRole.User,
+    role: AccountRole.Maintainer,
     order: 5000
   })
 

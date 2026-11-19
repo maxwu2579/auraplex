@@ -399,7 +399,7 @@ export function createModel (builder: Builder): void {
       icon: setting.icon.Enums,
       component: setting.component.EnumSetting,
       group: 'settings-editor',
-      role: AccountRole.User,
+      role: AccountRole.Maintainer,
       order: 4600,
       expandable: true
     },
