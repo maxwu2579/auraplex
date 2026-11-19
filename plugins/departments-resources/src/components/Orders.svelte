@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Breadcrumb, Button, DropdownLabels, EditBox, Header, Label, Toggle, languageStore } from '@hcengineering/ui'
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('orders') === 'edit'
   import chunter from '@hcengineering/chunter'
@@ -13,10 +14,24 @@
     type OrderStage
   } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
-  import { getResource } from '@hcengineering/platform'
+  import { getResource, translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import OrderFlowChart from './OrderFlowChart.svelte'
   import { recordAudit } from '../audit'
+
+  function localizer (language: string) {
+    return (id: IntlString, params: Record<string, string | number> = {}): string => {
+      let value = ''
+      translateCB(id, params, language, (text) => { value = text })
+      return value
+    }
+  }
+  let local = localizer('en')
+  async function updateLanguage (language: string): Promise<void> {
+    await translate(departments.string.OrderWaitingOnMe, {}, language)
+    if (language === $languageStore) local = localizer(language)
+  }
+  $: void updateLanguage($languageStore)
 
   /** Orders: one per customer order, moving 销售 → 设计 → 生产 → 工程 → 培训. The server checks every button. */
   const client = getClient()
@@ -98,7 +113,7 @@
     if (d.readers.includes(who)) return 'reader'
     return undefined
   }
-  $: deptName = (id: Ref<Department> | undefined): string => depts.find((it) => it._id === id)?.name ?? '未指定部门'
+  $: deptName = (id: Ref<Department> | undefined): string => depts.find((it) => it._id === id)?.name ?? local(departments.string.OrderUnassignedDepartment)
   $: workers = (department: Ref<Department> | undefined): Employee[] =>
     owner && department === undefined
       ? staff
@@ -132,27 +147,27 @@
   $: shown = focusId !== undefined ? orders.filter((it) => it._id === focusId) : orders.filter((it) =>
     filter === 'all' ? true : filter === 'todo' ? waitingOnMe(it) : filter === 'late' ? isLate(it) && (owner || related(it)) : related(it))
 
-  const days = (from: number | undefined): string =>
-    from === undefined ? '' : `${Math.max(0, Math.floor((Date.now() - from) / 86400000))} 天`
+  $: days = (from: number | undefined): string =>
+    from === undefined ? '' : local(departments.string.OrderDays, { count: Math.max(0, Math.floor((Date.now() - from) / 86400000)) })
   const time = (t: number): string => new Date(t).toLocaleString()
   const dayMs = 86400000
   // Countdown for a stage with a time limit: 还剩 N 天 / 不到 1 天 / 超时 N 天.
-  const countdown = (s: { startedOn?: number, limitDays?: number } | undefined): { text: string, late: boolean } | undefined => {
+  $: countdown = (s: { startedOn?: number, limitDays?: number } | undefined): { text: string, late: boolean } | undefined => {
     if (s?.startedOn === undefined || s.limitDays === undefined || s.limitDays <= 0) return undefined
     const left = s.startedOn + s.limitDays * dayMs - Date.now()
-    if (left < 0) return { text: `超时 ${Math.ceil(-left / dayMs)} 天`, late: true }
-    return { text: left < dayMs ? '不到 1 天' : `还剩 ${Math.floor(left / dayMs)} 天`, late: false }
+    if (left < 0) return { text: local(departments.string.OrderOverdueDays, { count: Math.ceil(-left / dayMs) }), late: true }
+    return { text: left < dayMs ? local(departments.string.OrderUnderOneDay) : local(departments.string.OrderRemainingDays, { count: Math.floor(left / dayMs) }), late: false }
   }
-  const kindText: Record<OrderActionKind, string> = {
-    assign: '指定负责人',
-    step: '勾选步骤',
-    complete: '本段完成',
-    escalate: '上报主管',
-    return: '退回',
-    insert: '插入一段',
-    reorder: '调整顺序',
-    approve: '批准',
-    reject: '拒绝'
+  $: kindText = {
+    assign: local(departments.string.OrderAssign),
+    step: local(departments.string.OrderCheckStep),
+    complete: local(departments.string.OrderCompleteStage),
+    escalate: local(departments.string.OrderEscalate),
+    return: local(departments.string.OrderReturn),
+    insert: local(departments.string.OrderInsert),
+    reorder: local(departments.string.OrderReorder),
+    approve: local(departments.string.OrderApprove),
+    reject: local(departments.string.OrderReject)
   }
 
   function open (it: Order): void {
@@ -189,7 +204,7 @@
       note = ''
       selectedId = id
     } catch {
-      error = '没有新建订单的权限（要先加入一个部门）。'
+      error = local(departments.string.OrderCreateDenied)
     } finally {
       busy = false
     }
@@ -220,9 +235,9 @@
       await ops.update(selected, { title: editTitle.trim(), customer: editCustomer.trim(), note: editNote.trim() })
       if (!(await ops.commit()).result) throw new Error('refused')
       editing = false
-      notice = '已保存。'
+      notice = local(departments.string.OrderSaved)
     } catch {
-      error = '保存失败：只有接单销售和超级管理员能改。'
+      error = local(departments.string.OrderEditDenied)
     } finally {
       busy = false
     }
@@ -244,12 +259,12 @@
       })
       // The server checks who may do this; a refusal must show as an error, not as success.
       if (!(await ops.commit()).result) throw new Error('refused')
-      if (kind !== 'step') notice = kind === 'complete' && stage.approval ? '已提交审批。' : `已${kindText[kind]}。`
+      if (kind !== 'step') notice = kind === 'complete' && stage.approval ? local(departments.string.OrderSubmitted) : local(departments.string.OrderActionDone)
       reason = ''
       returnTarget = ''
       returnPerson = ''
     } catch {
-      error = '没有权限做这个操作，或者订单已经变化，请刷新后再看。'
+      error = local(departments.string.OrderActionDenied)
     } finally {
       busy = false
     }
@@ -318,26 +333,26 @@
 
 <section class="orders">
   <div class="head">
-    <h2>订单</h2>
+    <Header adaptive="disabled"><Breadcrumb label={departments.string.OrderPage1} size="large" isCurrent /></Header>
     {#if focusId === undefined}<div class="tabs">
-      <button class:on={filter === 'todo'} on:click={() => setFilter('todo')}>等我处理{todoCount > 0 ? ` (${todoCount})` : ''}</button>
-      <button class:on={filter === 'mine'} on:click={() => setFilter('mine')}>和我有关</button>
-      <button class:on={filter === 'late'} on:click={() => setFilter('late')}>超时</button>
-      <button class:on={filter === 'all'} on:click={() => setFilter('all')}>全部订单</button>
+      <button class:on={filter === 'todo'} on:click={() => setFilter('todo')}><Label label={departments.string.OrderWaitingOnMe} />{todoCount > 0 ? ` (${todoCount})` : ''}</button>
+      <Button selected={filter === 'mine'} kind="regular" label={departments.string.OrderPage2} on:click={() => setFilter('mine')} />
+      <Button selected={filter === 'late'} kind="regular" label={departments.string.OrderPage3} on:click={() => setFilter('late')} />
+      <Button selected={filter === 'all'} kind="regular" label={departments.string.OrderPage4} on:click={() => setFilter('all')} />
     </div>{/if}
   </div>
 
   {#if moduleCanEdit && focusId === undefined}<div class="create">
-    <input placeholder="订单名称，例如：贴标机 ×2" bind:value={title} maxlength="120" />
-    <input placeholder="客户" bind:value={customer} maxlength="120" />
-    <input placeholder="备注（可不填）" bind:value={note} maxlength="500" />
-    <button disabled={busy || title.trim() === '' || customer.trim() === ''} on:click={createOrder}>新建订单</button>
+    <EditBox placeholder={departments.string.OrderOrderTitle} bind:value={title} />
+    <EditBox placeholder={departments.string.OrderCustomer} bind:value={customer} />
+    <EditBox placeholder={departments.string.OrderOptionalNote} bind:value={note} />
+    <Button kind="primary" label={departments.string.OrderPage5} disabled={busy || title.trim() === '' || customer.trim() === ''} on:click={createOrder} />
   </div>{/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
 
   <div class="body">
     <table>
-      <thead><tr><th>编号</th><th>订单</th><th>客户</th><th>当前阶段</th><th>负责人</th><th>剩余 / 已用</th><th>接单销售</th></tr></thead>
+      <thead><tr><th><Label label={departments.string.OrderPage6} /></th><th><Label label={departments.string.OrderPage1} /></th><th><Label label={departments.string.OrderPage7} /></th><th><Label label={departments.string.OrderPage8} /></th><th><Label label={departments.string.OrderPage9} /></th><th><Label label={departments.string.OrderPage10} /></th><th><Label label={departments.string.OrderPage11} /></th></tr></thead>
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
@@ -346,13 +361,13 @@
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
-            <td>{it.state === 'done' ? '✅ 已完成' : cur?.name ?? ''}</td>
+            <td>{it.state === 'done' ? local(departments.string.OrderCompleted) : cur?.name ?? ''}</td>
             <td>{name(cur?.assignee)}</td>
-            <td class:late={left?.late === true}>{it.state === 'done' ? '' : left?.text ?? `已用 ${days(cur?.startedOn)}`}</td>
+            <td class:late={left?.late === true}>{it.state === 'done' ? '' : left?.text ?? local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
         {/each}
-        {#if shown.length === 0}<tr><td colspan="7" class="hint">还没有订单。</td></tr>{/if}
+        {#if shown.length === 0}<tr><td colspan="7" class="hint"><Label label={departments.string.OrderPage12} /></td></tr>{/if}
       </tbody>
     </table>
 
@@ -360,33 +375,33 @@
       <div class="detail">
         {#if editing}
           <div class="edit-info">
-            <label>订单名称 <input bind:value={editTitle} maxlength="120" /></label>
-            <label>客户 <input bind:value={editCustomer} maxlength="120" /></label>
-            <label>备注 <input bind:value={editNote} maxlength="500" /></label>
+            <label><Label label={departments.string.OrderPage13} /> <EditBox bind:value={editTitle} placeholder={departments.string.OrderPage13} /></label>
+            <label><Label label={departments.string.OrderPage7} /> <EditBox bind:value={editCustomer} placeholder={departments.string.OrderPage7} /></label>
+            <label><Label label={departments.string.OrderPage14} /> <EditBox bind:value={editNote} placeholder={departments.string.OrderPage14} /></label>
             <div>
-              <button disabled={busy || editTitle.trim() === '' || editCustomer.trim() === ''} on:click={saveInfo}>保存</button>
-              <button disabled={busy} on:click={() => { editing = false }}>取消</button>
+              <Button kind="primary" label={departments.string.OrderPage15} disabled={busy || editTitle.trim() === '' || editCustomer.trim() === ''} on:click={saveInfo} />
+              <button disabled={busy} on:click={() => { editing = false }}><Label label={departments.string.OrderPage16} /></button>
             </div>
           </div>
         {:else}
-          <h3>{selected.number} {selected.title}{#if canEditInfo}<button class="edit-btn" on:click={startEdit}>编辑</button>{/if}</h3>
-          <p class="hint">客户：{selected.customer}　接单销售：{name(selected.salesOwner)}{selected.note ? `　备注：${selected.note}` : ''}</p>
+          <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}</h3>
+          <p class="hint"><Label label={departments.string.OrderOrderInfo} params={{ customer: selected.customer, owner: name(selected.salesOwner) }} />{#if selected.note} · {selected.note}{/if}</p>
         {/if}
         <div class="progress-header">
           {#if !adjusting}
             <div class="order-progress">
-              <progress aria-label="订单进度" max={Math.max(1, selected.stages.length)}
+              <progress aria-label={local(departments.string.OrderProgress)} max={Math.max(1, selected.stages.length)}
                 value={selected.stages.filter((item) => item.status === 'done').length}></progress>
               {#if stage}
-                <div>第 {selected.current + 1}/{selected.stages.length} 段 · {stage.name} · 负责人 {name(stage.assignee)}
-                  {#if stage.startedOn !== undefined} · 已用 {days(stage.startedOn)}{/if}
+                <div><Label label={departments.string.OrderStageProgress} params={{ current: selected.current + 1, total: selected.stages.length, stage: stage.name, assignee: name(stage.assignee) }} />
+                  {#if stage.startedOn !== undefined} · <Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />{/if}
                   {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
                     · <span class:late={left?.late === true}>{left?.text}</span>{/if}
-                  {#if stage.status === 'approval'} · 等待审批{:else} · 进行中{/if}
-                  {#if returned} · 已退回{/if}
+                  {#if stage.status === 'approval'} · <Label label={departments.string.OrderAwaitingApproval} />{:else} · <Label label={departments.string.OrderInProgress} />{/if}
+                  {#if returned} · <Label label={departments.string.OrderReturned} />{/if}
                 </div>
               {:else if selected.state === 'done'}
-                <div>全部 {selected.stages.length} 段已完成</div>
+                <div><Label label={departments.string.OrderAllStagesDone} params={{ count: selected.stages.length }} /></div>
               {/if}
             </div>
           {/if}
@@ -394,7 +409,7 @@
             <button type="button" on:click={() => {
               adjusting = !adjusting
               openStage = ''
-            }}>{adjusting ? '完成调整' : '调整流程'}</button>
+            }}>{adjusting ? local(departments.string.OrderFinishAdjustment) : local(departments.string.OrderAdjustFlow)}</button>
           {/if}
         </div>
         {#if adjusting}
@@ -420,23 +435,23 @@
         {/if}
         {#if active && inspected !== undefined}
           <div class="card">
-            <div><b>{inspected.name}</b>（{deptName(inspected.department)}）　已用 {days(inspected.startedOn)}</div>
-            <label>负责人
+            <div><b>{inspected.name}</b>（{deptName(inspected.department)}）　<Label label={departments.string.OrderElapsed} params={{ duration: days(inspected.startedOn) }} /></div>
+            <label><Label label={departments.string.OrderPage9} />
               {#if (owner || inspectedRole === 'admin' || inspectedRole === 'supervisor') && inspected.status !== 'done'}
-                <select value={inspected.assignee ?? ''} disabled={busy}
-                  on:change={(event) => assignTo(event.currentTarget.value, inspected?.id)}>
-                  <option value="">（未指定）</option>
-                  {#each workers(inspected.department) as w (w._id)}<option value={w.personUuid}>{formatName(w.name)}</option>{/each}
-                </select>
+                <DropdownLabels selected={inspected.assignee ?? ''} autoSelect={false} disabled={busy}
+                  items={[{ id: '', label: local(departments.string.OrderUnassigned) },
+                    ...workers(inspected.department).flatMap((worker) => worker.personUuid == null ? [] :
+                      [{ id: worker.personUuid, label: formatName(worker.name) }])]}
+                  on:selected={(event) => assignTo(event.detail, inspected?.id)} />
               {:else}<span>{name(inspected.assignee)}</span>{/if}
             </label>
             {#if stage !== undefined && inspected.id === stage.id && stage.status === 'approval'}
-              <p>等待审批</p>
+              <p><Label label={departments.string.OrderPage19} /></p>
               {#if canApprove}
                 <div class="row">
-                  <button disabled={busy} on:click={() => act('approve')}>批准</button>
-                  <input placeholder="拒绝原因" bind:value={reason} maxlength="500" />
-                  <button disabled={busy || reason.trim() === ''} on:click={() => act('reject', { reason })}>拒绝</button>
+                  <Button kind="regular" label={departments.string.OrderPage21} disabled={busy} on:click={() => act('approve')} />
+                  <EditBox placeholder={departments.string.OrderRejectionReason} bind:value={reason} />
+                  <Button kind="regular" label={departments.string.OrderPage22} disabled={busy || reason.trim() === ''} on:click={() => act('reject', { reason })} />
                 </div>
               {/if}
             {:else if stage !== undefined && inspected.id === stage.id && stage.status === 'active'}
@@ -444,9 +459,8 @@
               <div class="steps">
                 {#each stage.steps as step, i (i)}
                   <label class="step"
-                    ><input
-                      type="checkbox"
-                      checked={step.done}
+                    ><Toggle
+                      on={step.done}
                       disabled={busy || !(lead || inCharge)}
                       on:change={() => act('step', { step: i })}
                     />{step.name}</label
@@ -455,36 +469,35 @@
               </div>
             {/if}
             <div class="row">
-              <button disabled={busy || !(lead || inCharge)} on:click={() => act('complete')}>{stage.approval ? '本段完成 → 提交审批' : '本段完成 → 交给下一段'}</button>
+              <button disabled={busy || !(lead || inCharge)} on:click={() => act('complete')}>{stage.approval ? local(departments.string.OrderSubmitApproval) : local(departments.string.OrderHandOff)}</button>
             </div>
             <div class="row">
-              <input placeholder="遇到问题？写下原因" bind:value={reason} maxlength="500" />
+              <EditBox placeholder={departments.string.OrderExplainIssue} bind:value={reason} />
               <button disabled={busy || !canWork || reason.trim() === ''} on:click={() => act('escalate', { reason })}
-                >上报主管</button
+                ><Label label={departments.string.OrderPage23} /></button
               >
             </div>
             {#if lead && selected.current > 0}
               <div class="row">
-                <select bind:value={returnTarget}>
-                  <option value="">退回到…</option>
-                  {#each selected.stages.slice(0, selected.current) as s (s.id)}<option value={s.id}>{s.name}</option>{/each}
-                </select>
-                <select bind:value={returnPerson}>
-                  <option value="">（负责人不变）</option>
-                  {#each workers(selected.stages.find((s) => s.id === returnTarget)?.department) as w (w._id)}
-                    <option value={w.personUuid}>{formatName(w.name)}</option>
-                  {/each}
-                </select>
+                <DropdownLabels selected={returnTarget} autoSelect={false} disabled={busy}
+                  items={[{ id: '', label: local(departments.string.OrderReturnTo) },
+                    ...selected.stages.slice(0, selected.current).map((item) => ({ id: item.id, label: item.name }))]}
+                  on:selected={(event) => { returnTarget = event.detail; returnPerson = '' }} />
+                <DropdownLabels selected={returnPerson} autoSelect={false} disabled={busy}
+                  items={[{ id: '', label: local(departments.string.OrderKeepAssignee) },
+                    ...workers(selected.stages.find((item) => item.id === returnTarget)?.department).flatMap(
+                      (worker) => worker.personUuid == null ? [] : [{ id: worker.personUuid, label: formatName(worker.name) }])]}
+                  on:selected={(event) => { returnPerson = event.detail }} />
                 <button
                   disabled={busy || returnTarget === '' || reason.trim() === ''}
-                  on:click={sendReturn}>退回（用上面写的原因）</button
+                  on:click={sendReturn}><Label label={departments.string.OrderPage29} /></button
                 >
               </div>
             {/if}
             {/if}
           </div>
         {:else if selected.state === 'done'}
-          <p class="ok">这个订单已经全部完成。</p>
+          <p class="ok"><Label label={departments.string.OrderPage27} /></p>
         {/if}
 
         {#if !adjusting && active}
@@ -494,33 +507,33 @@
             {/each}
           </ul>
         {/if}
-        <h4>联系相关的人</h4>
+        <h4><Label label={departments.string.OrderPage24} /></h4>
         <ul class="people">
           {#each contacts(selected) as c (c.stage.id)}
             {@const wa = whatsapp(c.who)}
             <li>
               <span>{c.stage.name}：{name(c.who)}</span>
-              {#if c.who !== me.uuid}<button on:click={() => chat(c.who)}>💬 私信</button>{/if}
+              {#if c.who !== me.uuid}<Button kind="regular" label={departments.string.OrderPage28} on:click={() => chat(c.who)} />{/if}
               {#if wa !== undefined}<a href={wa} target="_blank" rel="noopener">🟢 WhatsApp</a>{/if}
             </li>
           {/each}
         </ul>
 
-        <h4>经过记录</h4>
+        <h4><Label label={departments.string.OrderPage25} /></h4>
         <ul class="history">
           {#each (showAllHistory ? history : history.slice(0, 3)) as a (a._id)}
             <li>
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
-              {a.auto === true ? '系统自动' : name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? '提交审批' : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
+              {a.auto === true ? local(departments.string.OrderAutomatic) : name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? local(departments.string.OrderApprovalSubmitted) : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
                 ? ` → ${selected.stages.find((s) => s.id === a.target)?.name ?? ''}`
                 : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>
           {/each}
-          {#if history.length === 0}<li class="hint">还没有记录。</li>{/if}
+          {#if history.length === 0}<li class="hint"><Label label={departments.string.OrderPage26} /></li>{/if}
         </ul>
         {#if history.length > 3}
           <div><button type="button" aria-expanded={showAllHistory} on:click={() => { showAllHistory = !showAllHistory }}>
-            {showAllHistory ? '收起' : `显示全部（${history.length}）`}
+            {showAllHistory ? local(departments.string.OrderCollapse) : local(departments.string.OrderShowAll, { count: history.length })}
           </button></div>
         {/if}
       </div>
