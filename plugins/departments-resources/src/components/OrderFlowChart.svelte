@@ -1,7 +1,8 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import departmentPlugin from '@hcengineering/departments'
-  import { Label } from '@hcengineering/ui'
+  import { Label, languageStore } from '@hcengineering/ui'
+  import StatusTag from './StatusTag.svelte'
   import { createEventDispatcher } from 'svelte'
   export let cards: Array<{
     id: string, name: string, department: string, assignee?: string, status?: string,
@@ -93,12 +94,12 @@
       <strong>{card.name}</strong>
       <span>{card.department}</span>
       {#if card.assignee !== undefined}<span><Label label={departmentPlugin.string.FlowAssignee} params={{ name: card.assignee }} /></span>{/if}
-      {#if card.status}<span class="stage-status"><Label label={statuses[card.status]} /></span>{/if}
+      {#if card.status}<span class="stage-status"><StatusTag status={card.status === 'done' || card.status === 'active' || card.status === 'approval' ? card.status : 'waiting'} label={statuses[card.status]} /></span>{/if}
       {#if card.status === 'active' && card.startedOn !== undefined}
         <span><Label label={departmentPlugin.string.FlowElapsed} params={{ count: Math.max(0, Math.floor((Date.now() - card.startedOn) / 86400000)) }} /></span>
       {/if}
       {#if card.approval}<span><Label label={departmentPlugin.string.FlowNeedsApproval} /></span>{/if}
-      {#if card.limitDays}<span>限时 {card.limitDays} 天</span>{/if}
+      {#if card.limitDays}<span>{$languageStore === 'zh' ? `限时 ${card.limitDays} 天` : `Limit ${card.limitDays} d`}</span>{/if}
     </button>
   {/each}
   {#if editable}

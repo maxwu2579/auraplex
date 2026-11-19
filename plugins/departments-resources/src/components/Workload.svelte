@@ -117,7 +117,7 @@
           ]
         }
       ]),
-      `工作量_${new Date().toISOString().slice(0, 10)}.xlsx`
+      `${$languageStore === 'zh' ? '工作量' : 'Workload'}_${new Date().toISOString().slice(0, 10)}.xlsx`
     )
     void recordAudit('export', trackingText(departments.string.TrackingPageExportWorkload, { count: lines.length }))
   }

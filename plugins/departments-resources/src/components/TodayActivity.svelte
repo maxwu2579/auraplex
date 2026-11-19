@@ -162,7 +162,7 @@
           at: ev.lastOn,
           who: ev.actor,
           kind: trackingText(auditText[ev.kind]),
-          what: ev.count > 1 ? `${ev.label}（${ev.count} 次）` : ev.label,
+          what: ev.count > 1 ? ($languageStore === 'zh' ? `${ev.label}（${ev.count} 次）` : `${ev.label} (${ev.count}×)`) : ev.label,
           objectId: ev.objectId
         })
       }
@@ -207,7 +207,7 @@
       <header>
         <strong><Label label={departments.string.TrackingPageTodayTitle} /></strong>
         {#if panelDoc !== undefined}
-          <label><input type="checkbox" bind:checked={onlyThis} /> 只看这一个</label>
+          <label><input type="checkbox" bind:checked={onlyThis} /> {$languageStore === 'zh' ? '只看这一个' : 'Only this one'}</label>
         {/if}
         <button type="button" class="close" on:click={() => { open = false }}><Label label={departments.string.TrackingPageClose} /></button>
       </header>

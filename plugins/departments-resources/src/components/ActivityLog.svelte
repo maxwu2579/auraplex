@@ -271,7 +271,7 @@
       [trackingText(departments.string.TrackingPageWhen), trackingText(departments.string.TrackingPageWho), trackingText(departments.string.TrackingPageAction), trackingText(departments.string.TrackingPageObject), trackingText(departments.string.TrackingPageChanges)],
       ...shown.map((it) => [new Date(it.at).toLocaleString(), name(it.who), it.kind, it.what, it.detail])
     ]
-    downloadWorkbook(createWorkbook([{ name: trackingText(departments.string.TrackingPageActivity), rows: sheet }]), `操作记录_${from}_${to}.xlsx`)
+    downloadWorkbook(createWorkbook([{ name: trackingText(departments.string.TrackingPageActivity), rows: sheet }]), `${$languageStore === 'zh' ? '操作记录' : 'Activity'}_${from}_${to}.xlsx`)
     void recordAudit('export', trackingText(departments.string.TrackingPageExportActivity, { count: shown.length }))
   }
   function trackingText (id: IntlString, params: Record<string, string | number> = {}): string {

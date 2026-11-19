@@ -17,6 +17,7 @@
   import { getResource, translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import OrderFlowChart from './OrderFlowChart.svelte'
+  import StatusTag from './StatusTag.svelte'
   import { recordAudit } from '../audit'
 
   function localizer (language: string) {
@@ -361,9 +362,9 @@
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
-            <td>{it.state === 'done' ? local(departments.string.OrderCompleted) : cur?.name ?? ''}</td>
+            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
-            <td class:late={left?.late === true}>{it.state === 'done' ? '' : left?.text ?? local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}</td>
+            <td>{#if it.state !== 'done'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
         {/each}
@@ -396,8 +397,8 @@
                 <div><Label label={departments.string.OrderStageProgress} params={{ current: selected.current + 1, total: selected.stages.length, stage: stage.name, assignee: name(stage.assignee) }} />
                   {#if stage.startedOn !== undefined} · <Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />{/if}
                   {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
-                    · <span class:late={left?.late === true}>{left?.text}</span>{/if}
-                  {#if stage.status === 'approval'} · <Label label={departments.string.OrderAwaitingApproval} />{:else} · <Label label={departments.string.OrderInProgress} />{/if}
+                    · <StatusTag status={left?.late === true ? 'late' : 'active'} text={left?.text} />{/if}
+                  {#if stage.status === 'approval'} · <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{:else} · <StatusTag status="active" label={departments.string.OrderInProgress} />{/if}
                   {#if returned} · <Label label={departments.string.OrderReturned} />{/if}
                 </div>
               {:else if selected.state === 'done'}
