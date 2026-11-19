@@ -31,7 +31,17 @@
   let phones = new Map<string, string>()
   let actions: OrderAction[] = []
   let selectedId: Ref<Order> | undefined
-  let filter: 'mine' | 'all' = 'mine'
+  type OrderFilter = 'todo' | 'mine' | 'late' | 'all'
+  const filterKey = 'auraplex.orders.filter'
+  let filter: OrderFilter = 'mine'
+  try {
+    const saved = localStorage.getItem(filterKey)
+    if (saved === 'todo' || saved === 'mine' || saved === 'late' || saved === 'all') filter = saved
+  } catch {}
+  function setFilter (value: OrderFilter): void {
+    filter = value
+    try { localStorage.setItem(filterKey, value) } catch {}
+  }
   let title = ''
   let customer = ''
   let note = ''
@@ -105,12 +115,20 @@
   // Department admins and super admins may add a stage to one order mid-way.
   $: canInsert = owner || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
   $: liveDepts = depts.filter((d) => !d.archived)
-  $: shown = orders.filter(
-    (it) =>
-      filter === 'all' ||
-      it.salesOwner === me.uuid ||
-      it.stages.some((s) => s.assignee === me.uuid || roleOf(s.department, me.uuid) !== undefined)
-  )
+  $: related = (it: Order): boolean => it.salesOwner === me.uuid ||
+    it.stages.some((s) => s.assignee === me.uuid || roleOf(s.department, me.uuid) !== undefined)
+  // Waiting on me: the current stage is mine, or it waits for my approval.
+  $: waitingOnMe = (it: Order): boolean => {
+    const cur = it.stages[it.current]
+    if (it.state !== 'active' || cur === undefined) return false
+    if (cur.status === 'active') return cur.assignee === me.uuid
+    if (cur.status !== 'approval') return false
+    return cur.approval?.by === 'person' ? cur.approval.person === me.uuid : roleOf(cur.department, me.uuid) === 'admin'
+  }
+  $: isLate = (it: Order): boolean => it.state === 'active' && countdown(it.stages[it.current])?.late === true
+  $: todoCount = orders.filter(waitingOnMe).length
+  $: shown = orders.filter((it) =>
+    filter === 'all' ? true : filter === 'todo' ? waitingOnMe(it) : filter === 'late' ? isLate(it) && (owner || related(it)) : related(it))
 
   const days = (from: number | undefined): string =>
     from === undefined ? '' : `${Math.max(0, Math.floor((Date.now() - from) / 86400000))} 天`
@@ -267,8 +285,10 @@
   <div class="head">
     <h2>订单</h2>
     <div class="tabs">
-      <button class:on={filter === 'mine'} on:click={() => (filter = 'mine')}>和我有关</button>
-      <button class:on={filter === 'all'} on:click={() => (filter = 'all')}>全部订单</button>
+      <button class:on={filter === 'todo'} on:click={() => setFilter('todo')}>等我处理{todoCount > 0 ? ` (${todoCount})` : ''}</button>
+      <button class:on={filter === 'mine'} on:click={() => setFilter('mine')}>和我有关</button>
+      <button class:on={filter === 'late'} on:click={() => setFilter('late')}>超时</button>
+      <button class:on={filter === 'all'} on:click={() => setFilter('all')}>全部订单</button>
     </div>
   </div>
 
@@ -444,7 +464,7 @@
           {#each (showAllHistory ? history : history.slice(0, 3)) as a (a._id)}
             <li>
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
-              {name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? '提交审批' : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
+              {a.auto === true ? '系统自动' : name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? '提交审批' : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
                 ? ` → ${selected.stages.find((s) => s.id === a.target)?.name ?? ''}`
                 : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>
