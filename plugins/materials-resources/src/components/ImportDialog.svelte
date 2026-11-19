@@ -4,7 +4,7 @@
 // https://www.eclipse.org/legal/epl-2.0
 -->
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
@@ -68,8 +68,8 @@
     const from = formatQuantity(item.existing.stock)
     const to = formatQuantity(item.stock)
     return override
-      ? ` 将用 Excel 覆盖库存：${from} → ${to}（记一条盘点）`
-      : ` 已有流水，保留现有库存（系统 ${from}，Excel ${to}）`
+      ? ($chinese ? ` 将用 Excel 覆盖库存：${from} → ${to}（记一条盘点）` : ` stock will be replaced by Excel: ${from} → ${to} (one count record)`)
+      : ($chinese ? ` 已有流水，保留现有库存（系统 ${from}，Excel ${to}）` : ` has movements; current stock kept (system ${from}, Excel ${to})`)
   }
   function exportReport (): void {
     if (report === undefined) return
@@ -151,7 +151,7 @@
       const matched = existing.filter((material) => codes.has(material.normalizedCode))
       const found = new Set<Ref<Material>>()
       for (let i = 0; i < matched.length; i += 20) {
-        progress = `正在检查现有流水 ${Math.min(i + 20, matched.length)} / ${matched.length}`
+        progress = ($chinese ? `正在检查现有流水 ${Math.min(i + 20, matched.length)} / ${matched.length}` : `Checking movements ${Math.min(i + 20, matched.length)} / ${matched.length}`)
         await tick()
         const batch = matched.slice(i, i + 20)
         const checks = await Promise.all(
@@ -230,7 +230,7 @@
     try {
       if (archive === undefined) throw new Error($t('请重新选择文件'))
       for (const entry of chosen) {
-        progress = `正在处理物料 ${done + 1} / ${chosen.length}，已保存 ${done} 行，新增照片 ${photosDone} 张`
+        progress = ($chinese ? `正在处理物料 ${done + 1} / ${chosen.length}，已保存 ${done} 行，新增照片 ${photosDone} 张` : `Saving material ${done + 1} / ${chosen.length}; ${done} rows saved, ${photosDone} photos added`)
         await tick()
         const row = entry.row
         const code = row.code.trim()
@@ -241,10 +241,10 @@
           (current?._id ?? '') !== (entry.existing?._id ?? '') ||
           (current !== undefined && current.modifiedOn !== entry.existing?.modifiedOn)
         ) {
-          throw new Error(`第 ${row.row} 行的物料已变化，请重新预览。`)
+          throw new Error(($chinese ? `第 ${row.row} 行的物料已变化，请重新预览。` : `The material in row ${row.row} changed; please preview again.`))
         }
         const stock = entry.stock
-        if (stock === undefined) throw new Error(`第 ${row.row} 行库存无效。`)
+        if (stock === undefined) throw new Error(($chinese ? `第 ${row.row} 行库存无效。` : `Row ${row.row}: invalid stock.`))
         const fields = {
           code,
           normalizedCode,
@@ -321,7 +321,7 @@
             overrode = true
           } else diffs.push({ material: current, excel: stock })
         }
-        if (!(await ops.commit()).result) throw new Error(`第 ${row.row} 行保存冲突，请重新预览。`)
+        if (!(await ops.commit()).result) throw new Error(($chinese ? `第 ${row.row} 行保存冲突，请重新预览。` : `Row ${row.row}: save conflict; please preview again.`))
         done++
         saved.add(id)
         if (current === undefined) created++
@@ -338,7 +338,7 @@
           }
         }
       }
-      message = `已保存 ${done} 行，新增照片 ${photosDone} 张，跳过问题或编号变更照片 ${skippedPhotos} 张。请重新选择文件查看最新预览。`
+      message = ($chinese ? `已保存 ${done} 行，新增照片 ${photosDone} 张，跳过问题或编号变更照片 ${skippedPhotos} 张。请重新选择文件查看最新预览。` : `${done} rows saved, ${photosDone} photos added, ${skippedPhotos} photos skipped (problem or changed code). Choose the file again to see the latest preview.`)
       report = {
         at: importedAt,
         created,
@@ -349,7 +349,7 @@
       }
       loaded = false
     } catch (e) {
-      error = `已保存 ${done} 行、新增照片 ${photosDone} 张。${e instanceof Error ? e.message : '保存失败'} 请重新选择同一文件继续。`
+      error = ($chinese ? `已保存 ${done} 行、新增照片 ${photosDone} 张。${e instanceof Error ? e.message : '保存失败'} 请重新选择同一文件继续。` : `${done} rows saved, ${photosDone} photos added. ${e instanceof Error ? e.message : 'Could not save'} Choose the same file again to continue.`)
       loaded = false
     } finally {
       busy = false
@@ -374,7 +374,7 @@
         <p>
           本次导入（{formatDateTime(report.at)}）：新建 {report.created} 条，更新 {report.updated} 条{report.overridden >
           0
-            ? `，用 Excel 覆盖库存 ${report.overridden} 条`
+            ? ($chinese ? `，用 Excel 覆盖库存 ${report.overridden} 条` : `, ${report.overridden} stock values replaced by Excel`)
             : ''}。
         </p>
         <p>

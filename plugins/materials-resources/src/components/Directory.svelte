@@ -16,7 +16,7 @@
 
 -->
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import attachment, { type Photo } from '@hcengineering/attachment'
   import core, { generateId, isOwnerOrMaintainer } from '@hcengineering/core'
   import { type IntlString } from '@hcengineering/platform'
@@ -210,7 +210,7 @@
       ]),
       datedFilename($t('物料库存'), '', new Date())
     )
-    void recordExport(`导出物料库存 Excel（${rows.length} 条）`)
+    void recordExport(($chinese ? `导出物料库存 Excel（${rows.length} 条）` : `Export stock Excel (${rows.length})`))
   }
 
   function edit (material?: Material): void {

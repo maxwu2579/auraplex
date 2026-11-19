@@ -6,3 +6,6 @@ import { pick } from './tr'
 
 /** In pages: {$t('缺料')} */
 export const t = derived(languageStore, (lang) => (zh: string): string => pick(lang, zh))
+
+/** True while the page is shown in Chinese. */
+export const chinese = derived(languageStore, (lang) => lang === 'zh' || lang === '')

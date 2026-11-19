@@ -1,6 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import { translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
@@ -195,7 +195,7 @@
     <label><Label label={prospects.string.PageBody} /><textarea disabled={busy} rows="5" maxlength="30000" bind:value={body} /></label>
     <div class="row">
       <button disabled={!moduleCanEdit || busy || subject.trim() === '' || body.trim() === ''} on:click={send}
-        >{busy ? $t('处理中…') : `发送给 ${value.email}`}</button
+        >{busy ? $t('处理中…') : ($chinese ? `发送给 ${value.email}` : `Send to ${value.email}`)}</button
       >
     </div>
   {:else if configured}

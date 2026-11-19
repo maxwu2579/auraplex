@@ -1,6 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
@@ -98,7 +98,7 @@
     const chosen = candidates.filter((item) => checked.has(item.normalizedName))
     try {
       for (const item of chosen) {
-        progress = `正在保存产品 ${done + 1} / ${chosen.length}`
+        progress = ($chinese ? `正在保存产品 ${done + 1} / ${chosen.length}` : `Saving product ${done + 1} / ${chosen.length}`)
         await tick()
         const old = existingFor(item)
         const oldItems = oldLines(item)
@@ -136,13 +136,13 @@
             generateId<BomLine>()
           )
         }
-        if (!(await ops.commit()).result) throw new Error(`产品 ${item.name} 已变化，请重新预览。`)
+        if (!(await ops.commit()).result) throw new Error(($chinese ? `产品 ${item.name} 已变化，请重新预览。` : `Product ${item.name} changed; please preview again.`))
         done++
       }
-      message = `已保存 ${done} 个产品。`
+      message = ($chinese ? `已保存 ${done} 个产品。` : `${done} products saved.`)
       candidates = []
     } catch (e) {
-      error = `已保存 ${done} 个产品。${e instanceof Error ? e.message : '保存失败'} 其余产品未处理，请重新预览。`
+      error = ($chinese ? `已保存 ${done} 个产品。${e instanceof Error ? e.message : '保存失败'} 其余产品未处理，请重新预览。` : `${done} products saved. ${e instanceof Error ? e.message : 'Could not save'} The rest were not processed; please preview again.`)
       candidates = []
     } finally {
       busy = false

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import { translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
@@ -126,7 +126,7 @@
     fromQueue = false
   }
   async function remove (p: Prospect): Promise<void> {
-    if (!isOwnerOrMaintainer() || !window.confirm(`删除 ${p.name}？`)) return
+    if (!isOwnerOrMaintainer() || !window.confirm(($chinese ? `删除 ${p.name}？` : `Delete ${p.name}?`))) return
     try {
       await client.remove(p)
     } catch {
@@ -180,7 +180,7 @@
       ]),
       datedFilename(local(prospects.string.PageProspects), '', new Date())
     )
-    void recordExport(`导出名片 Excel（${visible.length} 条）`)
+    void recordExport(($chinese ? `导出名片 Excel（${visible.length} 条）` : `Export cards Excel (${visible.length})`))
   }
 </script>
 

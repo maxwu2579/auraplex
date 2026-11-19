@@ -1,6 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
-  import { t } from '../trStore'
+  import { chinese, t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import materials, {
@@ -105,7 +105,7 @@
       const snapshot: CalculationProduct[] = chosen.map((p) => {
         const raw = (counts[p._id] ?? '1').trim()
         if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
-          throw new Error(`产品 ${p.name} 的台数必须是大于 0 的整数。`)
+          throw new Error(($chinese ? `产品 ${p.name} 的台数必须是大于 0 的整数。` : `Units for ${p.name} must be a whole number above 0.`))
         }
         return {
           id: p._id,
@@ -192,7 +192,7 @@
         <div class="chosen-row">
           <span class="chosen-name" title={p.name}>{p.name}</span>
           <span><Label label={materials.string.PageQuantity} /></span><input
-            aria-label={`${p.name} 台数`}
+            aria-label={($chinese ? `${p.name} 台数` : `${p.name} units`)}
             inputmode="numeric"
             value={counts[p._id] ?? '1'}
             on:input={(e) => {
@@ -216,7 +216,7 @@
     <button disabled={results === undefined || stale} on:click={() => (issuing = true)}><Label label={materials.string.PageIssue} /></button>
     <button disabled={results === undefined || stale || exportProducts.length === 0} on:click={download}
       >{calculatedProducts.length > 1 && results !== undefined && !stale
-        ? `导出选中的 ${exportProducts.length} 个产品`
+        ? ($chinese ? `导出选中的 ${exportProducts.length} 个产品` : `Export ${exportProducts.length} selected products`)
         : $t('导出 Excel')}</button
     >
     <label
