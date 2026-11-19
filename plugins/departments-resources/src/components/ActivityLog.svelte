@@ -257,7 +257,11 @@
       loading = false
     }
   }
-  $: shown = rows.filter((it) => kind === '' || it.kind === kind)
+  // Search in the loaded records: person, action, object and details.
+  let search = ''
+  $: needle = search.trim().toLowerCase()
+  $: shown = rows.filter((it) => (kind === '' || it.kind === kind) &&
+    (needle === '' || [name(it.who), it.kind, it.what, it.detail].some((text) => text.toLowerCase().includes(needle))))
 
   function exportExcel (): void {
     const sheet = [
@@ -289,6 +293,7 @@
           <option value="">全部</option>
           {#each ['新建', '修改', '删除', '评论', '订单操作', '登录', '打开', '导出', '异常提醒'] as k}<option value={k}>{k}</option>{/each}
         </select></label>
+      <label>搜索<input type="search" placeholder="人名、订单号、文件名…" bind:value={search} /></label>
       <button disabled={loading} on:click={load}>{loading ? '正在读取…' : '查询'}</button>
       <button disabled={shown.length === 0} on:click={exportExcel}>导出 Excel</button>
     </div>
