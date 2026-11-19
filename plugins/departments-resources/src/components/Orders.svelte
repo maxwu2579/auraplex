@@ -683,9 +683,10 @@
   .order-progress progress { width: 100%; accent-color: var(--theme-link-color); }
   .progress-stages { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; color: var(--theme-content-color); }
   .waiting-stages { color: var(--theme-dark-color); }
-  .head { display: flex; justify-content: space-between; align-items: center; }
+  .head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
   h2, h3, h4 { margin: 0; }
-  .tabs { display: flex; gap: 0.25rem; }
+  .tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; }
+  .tabs button, .scan-btn { white-space: nowrap; flex-shrink: 0; }
   .create, .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
   .create input { flex: 1 1 10rem; }
   .row input { flex: 1 1 14rem; }
