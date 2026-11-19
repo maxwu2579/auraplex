@@ -266,7 +266,19 @@
     scan: L('扫码', 'Scanned')
   }
 
+  function closeDetail (): void {
+    selectedId = undefined
+    scannedId = undefined
+    showQr = false
+    editing = false
+  }
+
   function open (it: Order): void {
+    // Clicking the open order again closes it (not when it came from the inbox or a link).
+    if (selectedId === it._id && focusId === undefined) {
+      closeDetail()
+      return
+    }
     if (selectedId !== it._id) {
       actions = []
       showAllHistory = false
@@ -472,6 +484,7 @@
 
     {#if selected !== undefined}
       <div class="detail">
+        {#if focusId === undefined}<button class="detail-close" title={L('关闭', 'Close')} on:click={closeDetail}>✕</button>{/if}
         {#if editing}
           <div class="edit-info">
             <label><Label label={departments.string.OrderPage13} /> <EditBox bind:value={editTitle} placeholder={departments.string.OrderPage13} /></label>
@@ -704,6 +717,13 @@
   .tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; }
   .tabs button, .scan-btn { white-space: nowrap; flex-shrink: 0; }
   .create, .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  /* The new-order fields look like boxes, so it is clear where to type. */
+  .create { padding: 0.6rem; border: 1px solid var(--theme-divider-color); border-radius: 0.5rem; }
+  .create > :global(*:not(label):not(button)) { flex: 1 1 10rem; min-width: 8rem; padding: 0.4rem 0.6rem; border: 1px solid var(--theme-divider-color); border-radius: 0.375rem; background: var(--theme-bg-color); }
+  .start-later input { margin: 0; }
+  .detail { position: relative; }
+  .detail-close { position: absolute; top: 0.5rem; right: 0.5rem; width: 1.75rem; height: 1.75rem; border-radius: 0.375rem; border: 1px solid var(--theme-divider-color); background: var(--theme-button-default); color: var(--theme-caption-color); cursor: pointer; }
+  .detail-close:hover { background: var(--theme-button-hovered); }
   .create input { flex: 1 1 10rem; }
   .row input { flex: 1 1 14rem; }
   input, select, button {
