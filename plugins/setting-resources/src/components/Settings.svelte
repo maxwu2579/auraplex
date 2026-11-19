@@ -193,7 +193,7 @@
           label={setting.string.SelectWorkspace}
           on:click={selectWorkspace}
         />
-        {#if hasAccountRole(account, AccountRole.User) && !isDisabled('invites')}
+        {#if hasAccountRole(account, AccountRole.Maintainer) && !isDisabled('invites')}
           <NavItem
             icon={setting.icon.InviteWorkspace}
             label={setting.string.InviteWorkspace}
