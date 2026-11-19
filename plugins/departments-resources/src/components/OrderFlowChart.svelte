@@ -40,6 +40,16 @@
     event.dataTransfer.setData('application/x-auraplex-' + kind, id)
   }
 
+  // Phones cannot drag: move a stage one place left or right with buttons instead.
+  const movable = (index: number): boolean => editable && index >= firstEditable &&
+    (cards[index]?.status === undefined || cards[index]?.status === 'waiting')
+  function move (index: number, step: -1 | 1): void {
+    const position = step < 0 ? index - 1 : index + 2
+    if (step < 0 && !movable(index - 1)) return
+    if (step > 0 && index + 1 >= cards.length) return
+    dispatch('dropStage', { id: cards[index].id, position })
+  }
+
   function finishDrag (): void {
     dragging = undefined
     target = undefined
@@ -92,6 +102,12 @@
       on:drop={(event) => drop(event, index)}
       on:click={() => dispatch('select', card.id)}>
       <strong>{card.name}</strong>
+      {#if movable(index)}
+        <span class="move">
+          {#if movable(index - 1)}<span role="button" tabindex="0" title="←" on:click|stopPropagation={() => { move(index, -1) }} on:keydown|stopPropagation={(e) => { if (e.key === 'Enter') move(index, -1) }}>◀</span>{/if}
+          {#if index + 1 < cards.length}<span role="button" tabindex="0" title="→" on:click|stopPropagation={() => { move(index, 1) }} on:keydown|stopPropagation={(e) => { if (e.key === 'Enter') move(index, 1) }}>▶</span>{/if}
+        </span>
+      {/if}
       <span>{card.department}</span>
       {#if card.assignee !== undefined}<span><Label label={departmentPlugin.string.FlowAssignee} params={{ name: card.assignee }} /></span>{/if}
       {#if card.status}<span class="stage-status"><StatusTag status={card.status === 'done' || card.status === 'active' || card.status === 'approval' ? card.status : 'waiting'} label={statuses[card.status]} /></span>{/if}
@@ -111,6 +127,9 @@
 </div>
 
 <style>
+  .move { display: flex; gap: 0.35rem; }
+  .move span { padding: 0.1rem 0.45rem; border-radius: 0.25rem; border: 1px solid var(--theme-divider-color); font-size: 0.7rem; cursor: pointer; }
+  .move span:hover { background: var(--theme-button-hovered); }
   .chart, .palette { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
   .palette { margin-bottom: 0.75rem; }
   .palette button, .card {

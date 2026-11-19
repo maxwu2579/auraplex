@@ -673,6 +673,14 @@
   .big { padding: 0.6rem 1.4rem; font-size: 1rem; border-radius: 0.5rem; border: none; background: var(--theme-button-primary, #4c7dff); color: #fff; cursor: pointer; }
   .scanned { margin: 0; color: var(--theme-link-color, #4c7dff); font-size: 0.8rem; }
   @media (max-width: 720px) {
+    /* Phones: the order list becomes one card per order. */
+    .body > table, .body > table tbody { display: block; width: 100%; }
+    .body > table thead { display: none; }
+    .body > table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 0.15rem 0.75rem; padding: 0.6rem 0.75rem; margin-bottom: 0.5rem; border: 1px solid var(--theme-divider-color); border-radius: 0.5rem; }
+    .body > table td { padding: 0; border: none; }
+    .body > table td:nth-child(1) { font-weight: 600; color: var(--theme-caption-color); }
+    .body > table td:nth-child(2) { grid-column: 1 / -1; order: -1; font-size: 1rem; color: var(--theme-caption-color); }
+    .head, .create { gap: 0.4rem; }
     .orders :global(table) { font-size: 0.8rem; }
     .big { width: 100%; padding: 0.9rem; font-size: 1.1rem; }
     .qr-box { flex-direction: column; align-items: flex-start; }
