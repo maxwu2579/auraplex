@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { translate, translateCB, type IntlString } from '@hcengineering/platform'
+  import { languageStore } from '@hcengineering/ui'
+  import { Label } from '@hcengineering/ui'
+
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import { isOwnerOrMaintainer } from '@hcengineering/core'
@@ -26,12 +30,26 @@
   let backIndex = -1
   let fromQueue = false
   let error = ''
-  const statuses: Record<ProspectStatus, string> = {
-    new: '未联系',
-    sent: '已发邮件',
-    replied: '已回复',
-    'do-not-send': '不要再发',
-    bounced: '邮件退回'
+  function localizer (language: string): (id: IntlString) => string {
+    return (id) => {
+      let value = ''
+      translateCB(id, {}, language, (text) => { value = text })
+      return value
+    }
+  }
+  let local = localizer('en')
+  async function updateLanguage (language: string): Promise<void> {
+    await translate(prospects.string.PageLibrary, {}, language)
+    if (language === $languageStore) local = localizer(language)
+  }
+  $: void updateLanguage($languageStore)
+  let statuses: Record<ProspectStatus, string>
+  $: statuses = {
+    new: local(prospects.string.PageNew),
+    sent: local(prospects.string.PageSent),
+    replied: local(prospects.string.PageReplied),
+    'do-not-send': local(prospects.string.PageOptOut),
+    bounced: local(prospects.string.PageBounced)
   }
   query.query(prospects.class.Prospect, {}, (items) => {
     all = items
@@ -116,18 +134,18 @@
   }
   function exportList (): void {
     const columns: Array<[string, keyof Prospect]> = [
-      ['姓名', 'name'],
-      ['公司', 'company'],
-      ['职位', 'title'],
-      ['手机', 'mobile'],
-      ['电话', 'phone'],
-      ['邮箱', 'email'],
-      ['网站', 'website'],
-      ['地址', 'address'],
-      ['国家', 'country'],
-      ['行业', 'industry'],
-      ['来源', 'source'],
-      ['备注', 'notes']
+      [local(prospects.string.PageName), 'name'],
+      [local(prospects.string.PageCompany), 'company'],
+      [local(prospects.string.PageJobTitle), 'title'],
+      [local(prospects.string.PageMobile), 'mobile'],
+      [local(prospects.string.PagePhone), 'phone'],
+      [local(prospects.string.PageEmail), 'email'],
+      [local(prospects.string.PageWebsite), 'website'],
+      [local(prospects.string.PageAddress), 'address'],
+      [local(prospects.string.PageCountry), 'country'],
+      [local(prospects.string.PageIndustry), 'industry'],
+      [local(prospects.string.PageSource), 'source'],
+      [local(prospects.string.PageNotes), 'notes']
     ]
     const displayTime = (time?: number): string => (time === undefined ? '' : new Date(time).toLocaleString())
     const rows = visible.map((p) => [
@@ -138,28 +156,28 @@
       p.emailCount ?? 0,
       p.recognitionModel ?? '',
       displayTime(p.recognizedAt),
-      p.recognitionConfirmed ? '是' : '否'
+      p.recognitionConfirmed ? local(prospects.string.PageYes) : local(prospects.string.PageNo)
     ])
     downloadWorkbook(
       createWorkbook([
         {
-          name: '潜在客户',
+          name: local(prospects.string.PageProspects),
           rows: [
             [
               ...columns.map(([title]) => title),
-              '来源日期',
-              '状态',
-              '最后发邮件时间',
-              '发送次数',
-              '识别模型',
-              '识别时间',
-              '人工确认'
+              local(prospects.string.PageSourceDate),
+              local(prospects.string.PageStatus),
+              local(prospects.string.PageLastEmail),
+              local(prospects.string.PageSendCount),
+              local(prospects.string.PageModel),
+              local(prospects.string.PageRecognizedAt),
+              local(prospects.string.PageConfirmed)
             ],
             ...rows
           ]
         }
       ]),
-      datedFilename('潜在客户', '', new Date())
+      datedFilename(local(prospects.string.PageProspects), '', new Date())
     )
     void recordExport(`导出名片 Excel（${visible.length} 条）`)
   }
@@ -167,13 +185,13 @@
 
 <div class="page">
   <header>
-    <h1>名片库</h1>
+    <h1><Label label={prospects.string.PageLibrary} /></h1>
     {#if moduleCanEdit}<button
       on:click={() => {
         edit()
-      }}>手动新增</button
+      }}><Label label={prospects.string.PageAdd} /></button
     ><label class="upload"
-      >批量选择名片正面<input
+      ><Label label={prospects.string.PageUpload} /><input
         type="file"
         accept="image/*"
         multiple
@@ -182,50 +200,50 @@
           e.currentTarget.value = ''
         }}
       /></label
-    >{/if}<button on:click={exportList}>导出 Excel</button>
+    >{/if}<button on:click={exportList}><Label label={prospects.string.PageExport} /></button>
   </header>
   {#if moduleCanEdit && queue.length > 0}<section>
       <p>待处理照片 {queue.length} 张；选择正面和可选背面进行配对。</p>
       <label
-        >正面 <select bind:value={frontIndex}
+        ><Label label={prospects.string.PageFront} /><select bind:value={frontIndex}
           >{#each queue as file, i}<option value={i}>{file.name}</option>{/each}</select
         ></label
       ><label
-        >背面 <select bind:value={backIndex}
-          ><option value={-1}>无背面</option>{#each queue as file, i}<option value={i}>{file.name}</option
+        ><Label label={prospects.string.PageBack} /><select bind:value={backIndex}
+          ><option value={-1}>{local(prospects.string.PageNoBack)}</option>{#each queue as file, i}<option value={i}>{file.name}</option
             >{/each}</select
         ></label
-      ><button disabled={frontIndex === backIndex} on:click={queueEdit}>核对这张名片</button><button
+      ><button disabled={frontIndex === backIndex} on:click={queueEdit}><Label label={prospects.string.PageReview} /></button><button
         on:click={() => {
           queue = []
           frontIndex = 0
           backIndex = -1
-        }}>清空待处理</button
+        }}><Label label={prospects.string.PageClearQueue} /></button
       >
     </section>{/if}
   <div class="filters">
-    <input placeholder="搜索姓名、公司、邮箱、电话" bind:value={search} /><label
-      >状态<select bind:value={status}
-        ><option value="">全部</option>{#each Object.entries(statuses) as [key, label]}<option value={key}
+    <input placeholder={local(prospects.string.PageSearch)} bind:value={search} /><label
+      ><Label label={prospects.string.PageStatus} /><select bind:value={status}
+        ><option value="">{local(prospects.string.PageAll)}</option>{#each Object.entries(statuses) as [key, label]}<option value={key}
             >{label}</option
           >{/each}</select
       ></label
     >
     <label
-      >来源<select bind:value={source}
-        ><option value="">全部</option><option value="未填写">未填写</option>{#each sources as item}<option
+      ><Label label={prospects.string.PageSource} /><select bind:value={source}
+        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each sources as item}<option
             >{item}</option
           >{/each}</select
       ></label
     ><label
-      >国家<select bind:value={country}
-        ><option value="">全部</option><option value="未填写">未填写</option>{#each countries as item}<option
+      ><Label label={prospects.string.PageCountry} /><select bind:value={country}
+        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each countries as item}<option
             >{item}</option
           >{/each}</select
       ></label
     ><label
-      >行业<select bind:value={industry}
-        ><option value="">全部</option><option value="未填写">未填写</option>{#each industries as item}<option
+      ><Label label={prospects.string.PageIndustry} /><select bind:value={industry}
+        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each industries as item}<option
             >{item}</option
           >{/each}</select
       ></label
@@ -237,22 +255,22 @@
         country = ''
         industry = ''
         period = ''
-      }}>清除筛选</button
-    >{#if period}<span>筛选：{period === 'week' ? '本周新增' : '本月新增'}</span>{/if}
+      }}><Label label={prospects.string.PageClearFilters} /></button
+    >{#if period}<span>筛选：{period === 'week' ? local(prospects.string.PageWeek) : local(prospects.string.PageMonth)}</span>{/if}
   </div>
   {#if error}<p role="alert">{error}</p>{/if}
-  <p>共 {visible.length} 条</p>
+  <p><Label label={prospects.string.PageTotal} /> {visible.length}</p>
   <div class="table-wrap">
     <table>
       <thead
         ><tr
-          >{#each [['name', '姓名'], ['company', '公司'], ['title', '职位'], ['mobile', '手机'], ['phone', '电话'], ['email', '邮箱'], ['country', '国家'], ['industry', '行业'], ['source', '来源'], ['status', '状态']] as col}<th
+          >{#each [['name', local(prospects.string.PageName)], ['company', local(prospects.string.PageCompany)], ['title', local(prospects.string.PageJobTitle)], ['mobile', local(prospects.string.PageMobile)], ['phone', local(prospects.string.PagePhone)], ['email', local(prospects.string.PageEmail)], ['country', local(prospects.string.PageCountry)], ['industry', local(prospects.string.PageIndustry)], ['source', local(prospects.string.PageSource)], ['status', local(prospects.string.PageStatus)]] as col}<th
               ><button
                 on:click={() => {
                   order(col[0])
                 }}>{col[1]}</button
               ></th
-            >{/each}<th>操作</th></tr
+            >{/each}<th><Label label={prospects.string.PageActions} /></th></tr
         ></thead
       ><tbody
         >{#each visible as item (item._id)}<tr
@@ -260,7 +278,7 @@
               ><button
                 on:click={() => {
                   edit(item)
-                }} disabled={!moduleCanEdit}>{item.name !== '' ? item.name : '未填写'}</button
+                }} disabled={!moduleCanEdit}>{item.name !== '' ? item.name : local(prospects.string.PageMissing)}</button
               ></td
             ><td>{item.company}</td><td>{item.title}</td><td>{item.mobile}</td><td>{item.phone}</td><td>{item.email}</td
             ><td>{item.country}</td><td>{item.industry}</td><td>{item.source}</td><td
@@ -269,8 +287,8 @@
               ><button
                 on:click={() => {
                   edit(item)
-                }} disabled={!moduleCanEdit}>查看 / 编辑</button
-              >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}>删除</button>{/if}</td
+                }} disabled={!moduleCanEdit}><Label label={prospects.string.PageEdit} /></button
+              >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
             ></tr
           >{:else}<tr><td colspan="11">没有符合条件的记录。</td></tr>{/each}</tbody
       >

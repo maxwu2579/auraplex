@@ -1,5 +1,9 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { translate, translateCB, type IntlString } from '@hcengineering/platform'
+  import { languageStore } from '@hcengineering/ui'
+  import { Label } from '@hcengineering/ui'
+
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import contact, { formatName, type Employee } from '@hcengineering/contact'
@@ -156,25 +160,38 @@
   $: canSend = configured && value.status !== 'do-not-send' && value.status !== 'bounced'
   $: ownerPerson = owner === '' ? undefined : employees.find((it) => it.personUuid === owner)
   $: ownerLabel = ownerPerson === undefined ? '负责人' : formatName(ownerPerson.name)
+  function localizer (language: string): (id: IntlString) => string {
+    return (id) => {
+      let value = ''
+      translateCB(id, {}, language, (text) => { value = text })
+      return value
+    }
+  }
+  let local = localizer('en')
+  async function updateLanguage (language: string): Promise<void> {
+    await translate(prospects.string.PageLibrary, {}, language)
+    if (language === $languageStore) local = localizer(language)
+  }
+  $: void updateLanguage($languageStore)
 </script>
 
 <section class="mail">
-  <h3>邮件</h3>
+  <h3><Label label={prospects.string.PageMail} /></h3>
   <p class="hint">
     {#if statusMessage !== ''}{statusMessage}{:else}发件邮箱：{address}{#if lastPoll !== undefined}
         ；上次检查收件箱：{time(lastPoll.at)}
         {lastPoll.ok ? '正常' : (lastPoll.error ?? '失败')}{/if}{/if}
   </p>
   <label class="owner"
-    >负责人<select bind:value={owner} on:change={saveOwner}
-      ><option value="">（未选择）</option>{#each employees as employee (employee._id)}<option
+    ><Label label={prospects.string.PageOwner} /><select bind:value={owner} on:change={saveOwner}
+      ><option value="">{local(prospects.string.PageNoneSelected)}</option>{#each employees as employee (employee._id)}<option
           value={employee.personUuid}>{formatName(employee.name)}</option
         >{/each}</select
     ></label
   >
   {#if canSend}
-    <label>主题<input disabled={busy} maxlength="200" bind:value={subject} /></label>
-    <label>正文<textarea disabled={busy} rows="5" maxlength="30000" bind:value={body} /></label>
+    <label><Label label={prospects.string.PageSubject} /><input disabled={busy} maxlength="200" bind:value={subject} /></label>
+    <label><Label label={prospects.string.PageBody} /><textarea disabled={busy} rows="5" maxlength="30000" bind:value={body} /></label>
     <div class="row">
       <button disabled={!moduleCanEdit || busy || subject.trim() === '' || body.trim() === ''} on:click={send}
         >{busy ? '处理中…' : `发送给 ${value.email}`}</button
@@ -185,7 +202,7 @@
   {/if}
   {#if error}<p role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
   {#if mails.length === 0}
-    <p class="hint">还没有往来邮件。</p>
+    <p class="hint"><Label label={prospects.string.PageNoMail} /></p>
   {:else}
     <ul>
       {#each mails as mail (mail._id)}
@@ -204,12 +221,12 @@
               <button
                 on:click={() => {
                   void resolve(mail, true)
-                }}>有，已发出</button
+                }}><Label label={prospects.string.PageConfirmSent} /></button
               >
               <button
                 on:click={() => {
                   void resolve(mail, false)
-                }}>没有发出</button
+                }}><Label label={prospects.string.PageConfirmUnsent} /></button
               >
             </div>
           {/if}

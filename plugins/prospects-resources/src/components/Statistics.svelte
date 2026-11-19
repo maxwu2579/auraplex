@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { translate, translateCB, type IntlString } from '@hcengineering/platform'
+  import { languageStore } from '@hcengineering/ui'
+  import { Label } from '@hcengineering/ui'
+
   import prospects, { prospectStats, type Prospect } from '@hcengineering/prospects'
   import { createQuery } from '@hcengineering/presentation'
   import { getCurrentLocation, navigate } from '@hcengineering/ui'
@@ -15,36 +19,51 @@
     loc.path[3] = 'directory'
     navigate(loc)
   }
-  const statuses: Record<string, string> = {
-    new: '未联系',
-    sent: '已发邮件',
-    replied: '已回复',
-    'do-not-send': '不要再发',
-    bounced: '邮件退回'
+  function localizer (language: string): (id: IntlString) => string {
+    return (id) => {
+      let value = ''
+      translateCB(id, {}, language, (text) => { value = text })
+      return value
+    }
   }
-  const groups: Array<{ key: 'source' | 'country' | 'industry' | 'status', title: string }> = [
-    { key: 'source', title: '来源' },
-    { key: 'country', title: '国家' },
-    { key: 'industry', title: '行业' },
-    { key: 'status', title: '状态' }
+  let local = localizer('en')
+  async function updateLanguage (language: string): Promise<void> {
+    await translate(prospects.string.PageLibrary, {}, language)
+    if (language === $languageStore) local = localizer(language)
+  }
+  $: void updateLanguage($languageStore)
+  let statuses: Record<string, string>
+  $: statuses = {
+    new: local(prospects.string.PageNew),
+    sent: local(prospects.string.PageSent),
+    replied: local(prospects.string.PageReplied),
+    'do-not-send': local(prospects.string.PageOptOut),
+    bounced: local(prospects.string.PageBounced)
+  }
+  let groups: Array<{ key: 'source' | 'country' | 'industry' | 'status', title: string }>
+  $: groups = [
+    { key: 'source', title: local(prospects.string.PageSource) },
+    { key: 'country', title: local(prospects.string.PageCountry) },
+    { key: 'industry', title: local(prospects.string.PageIndustry) },
+    { key: 'status', title: local(prospects.string.PageStatus) }
   ]
 </script>
 
 <div class="page">
-  <h1>潜在客户统计</h1>
+  <h1><Label label={prospects.string.PageStatistics} /></h1>
   <div class="summary">
     <button
       on:click={() => {
         open()
-      }}>总数 {stats.total}</button
+      }}><Label label={prospects.string.PageTotal} /> {stats.total}</button
     ><button
       on:click={() => {
         open('period', 'week')
-      }}>本周新增 {stats.week}</button
+      }}><Label label={prospects.string.PageWeek} /> {stats.week}</button
     ><button
       on:click={() => {
         open('period', 'month')
-      }}>本月新增 {stats.month}</button
+      }}><Label label={prospects.string.PageMonth} /> {stats.month}</button
     >
   </div>
   {#each groups as group}

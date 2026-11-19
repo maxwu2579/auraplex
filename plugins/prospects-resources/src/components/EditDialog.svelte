@@ -1,5 +1,9 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { translate, translateCB, type IntlString } from '@hcengineering/platform'
+  import { languageStore } from '@hcengineering/ui'
+  import { Label } from '@hcengineering/ui'
+
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import attachment, { type Photo } from '@hcengineering/attachment'
@@ -82,20 +86,34 @@
   onDestroy(() => {
     if (frontPreview !== '') URL.revokeObjectURL(frontPreview)
     if (backPreview !== '') URL.revokeObjectURL(backPreview)
+  function localizer (language: string): (id: IntlString) => string {
+    return (id) => {
+      let value = ''
+      translateCB(id, {}, language, (text) => { value = text })
+      return value
+    }
+  }
+  let local = localizer('en')
+  async function updateLanguage (language: string): Promise<void> {
+    await translate(prospects.string.PageLibrary, {}, language)
+    if (language === $languageStore) local = localizer(language)
+  }
+  $: void updateLanguage($languageStore)
   })
-  const fields: Array<{ key: keyof typeof draft, label: string }> = [
-    { key: 'name', label: '姓名' },
-    { key: 'company', label: '公司' },
-    { key: 'title', label: '职位' },
-    { key: 'mobile', label: '手机' },
-    { key: 'phone', label: '电话' },
-    { key: 'email', label: '邮箱' },
-    { key: 'website', label: '网站' },
-    { key: 'address', label: '地址' },
-    { key: 'country', label: '国家' },
-    { key: 'industry', label: '行业' },
-    { key: 'source', label: '来源' },
-    { key: 'notes', label: '备注' }
+  let fields: Array<{ key: keyof typeof draft, label: string }>
+  $: fields = [
+    { key: 'name', label: local(prospects.string.PageName) },
+    { key: 'company', label: local(prospects.string.PageCompany) },
+    { key: 'title', label: local(prospects.string.PageJobTitle) },
+    { key: 'mobile', label: local(prospects.string.PageMobile) },
+    { key: 'phone', label: local(prospects.string.PagePhone) },
+    { key: 'email', label: local(prospects.string.PageEmail) },
+    { key: 'website', label: local(prospects.string.PageWebsite) },
+    { key: 'address', label: local(prospects.string.PageAddress) },
+    { key: 'country', label: local(prospects.string.PageCountry) },
+    { key: 'industry', label: local(prospects.string.PageIndustry) },
+    { key: 'source', label: local(prospects.string.PageSource) },
+    { key: 'notes', label: local(prospects.string.PageNotes) }
   ]
   const headers = (): Record<string, string> => ({
     Authorization: 'Bearer ' + (getMetadata(presentation.metadata.Token) ?? ''),
@@ -286,11 +304,11 @@
   <section class="dialog" role="dialog" aria-modal="true" aria-label="名片核对">
     <header>
       <h2>{value === undefined ? '新增潜在客户' : '客户资料'}</h2>
-      <button disabled={busy} on:click={() => dispatch('close')}>关闭</button>
+      <button disabled={busy} on:click={() => dispatch('close')}><Label label={prospects.string.PageClose} /></button>
     </header>
     <div class="images">
       <label
-        >正面（必填）<input
+        ><Label label={prospects.string.PageRequiredFront} /><input
           disabled={busy}
           type="file"
           accept="image/*"
@@ -300,7 +318,7 @@
           }}
         /></label
       ><label
-        >背面（可选）<input
+        ><Label label={prospects.string.PageOptionalBack} /><input
           disabled={busy}
           type="file"
           accept="image/*"
@@ -320,24 +338,24 @@
           >{/await}{/each}
       {#if front}<span>正面已选择：{front.name}</span>{/if}{#if back}<span>背面已选择：{back.name}</span>{/if}
     </div>
-    <button disabled={busy || !configured || front === undefined} on:click={recognize}>AI 识别</button
+    <button disabled={busy || !configured || front === undefined} on:click={recognize}><Label label={prospects.string.PageRecognize} /></button
     >{#if statusMessage !== ''}<span>{statusMessage}</span>{/if}
-    <p>识别后请核对或修改，再点击保存。</p>
+    <p><Label label={prospects.string.PageReviewHelp} /></p>
     <div class="fields">
       {#each fields as field}<label
           >{field.label}{#if needsReview(field.key)}
-            <strong>请核对</strong>{/if}<input
+            <strong><Label label={prospects.string.PageVerify} /></strong>{/if}<input
             disabled={busy}
             bind:value={draft[field.key]}
             on:change={checkDuplicatesSafe}
           /></label
         >{/each}
-      <label>来源日期<input disabled={busy} type="date" bind:value={sourceDate} /></label>
+      <label><Label label={prospects.string.PageSourceDate} /><input disabled={busy} type="date" bind:value={sourceDate} /></label>
       <label
-        >状态<select disabled={busy} bind:value={status}
-          ><option value="new">未联系</option><option value="sent">已发邮件</option><option value="replied"
-            >已回复</option
-          ><option value="do-not-send">不要再发</option><option value="bounced">邮件退回</option></select
+        ><Label label={prospects.string.PageStatus} /><select disabled={busy} bind:value={status}
+          ><option value="new">{local(prospects.string.PageNew)}</option><option value="sent">{local(prospects.string.PageSent)}</option><option value="replied"
+            >{local(prospects.string.PageReplied)}</option
+          ><option value="do-not-send">{local(prospects.string.PageOptOut)}</option><option value="bounced">{local(prospects.string.PageBounced)}</option></select
         ></label
       >
     </div>
@@ -363,7 +381,7 @@
     {#if value !== undefined}<MailPanel {value} />{/if}
   </section>
   {#if preview}<div class="preview" role="presentation" on:click|self={() => (preview = undefined)}>
-      <button on:click={() => (preview = undefined)}>关闭</button><img src={preview} alt="名片大图" />
+      <button on:click={() => (preview = undefined)}><Label label={prospects.string.PageClose} /></button><img src={preview} alt="名片大图" />
     </div>{/if}
 </div>
 
