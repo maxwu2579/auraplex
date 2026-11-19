@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
@@ -55,7 +56,7 @@
   let warning = ''
   let duplicate: Prospect | undefined
   let configured = false
-  let statusMessage = '正在检查识别服务…'
+  let statusMessage = $t('正在检查识别服务…')
   let model = value?.recognitionModel
   let recognizedAt = value?.recognizedAt
   let review: RecognitionField[] = []
@@ -123,14 +124,14 @@
     try {
       const res = await fetch('/prospects-api/status', { headers: headers() })
       if (!res.ok) {
-        statusMessage = '识别服务连不上'
+        statusMessage = $t('识别服务连不上')
         return
       }
       configured = (await res.json()).configured === true
-      statusMessage = configured ? '' : '识别服务未配置'
+      statusMessage = configured ? '' : $t('识别服务未配置')
     } catch {
       configured = false
-      statusMessage = '识别服务连不上'
+      statusMessage = $t('识别服务连不上')
     }
   })
   async function compressed (file: File): Promise<File> {
@@ -142,7 +143,7 @@
     const context = canvas.getContext('2d')
     if (context === null) {
       bitmap.close()
-      throw new Error('无法处理图片')
+      throw new Error($t('无法处理图片'))
     }
     context.fillStyle = '#fff'
     context.fillRect(0, 0, canvas.width, canvas.height)
@@ -151,7 +152,7 @@
     const blob = await new Promise<Blob | null>((resolve) => {
       canvas.toBlob(resolve, 'image/jpeg', 0.85)
     })
-    if (blob === null) throw new Error('图片压缩失败')
+    if (blob === null) throw new Error($t('图片压缩失败'))
     return new File([blob], 'card.jpg', { type: 'image/jpeg' })
   }
   async function readUrl (file: File): Promise<string> {
@@ -161,7 +162,7 @@
         resolve(String(reader.result))
       }
       reader.onerror = () => {
-        reject(new Error('图片读取失败'))
+        reject(new Error($t('图片读取失败')))
       }
       reader.readAsDataURL(file)
     })
@@ -181,14 +182,14 @@
         body: JSON.stringify({ images })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : '识别服务连不上')
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : $t('识别服务连不上'))
       draft = { ...draft, ...data.values }
       review = data.needsReview
       model = data.model
       recognizedAt = data.recognizedAt
       recognized = true
     } catch (e) {
-      error = e instanceof Error ? e.message : '识别服务连不上'
+      error = e instanceof Error ? e.message : $t('识别服务连不上')
     } finally {
       busy = false
     }
@@ -206,7 +207,7 @@
     try {
       await checkDuplicates()
     } catch {
-      warning = '查重暂不可用，保存时会再检查。'
+      warning = $t('查重暂不可用，保存时会再检查。')
     }
   }
   async function save (): Promise<void> {
@@ -216,12 +217,12 @@
     try {
       await checkDuplicates()
       if (duplicate !== undefined) {
-        error = '邮箱已存在，请查看已有记录。'
+        error = $t('邮箱已存在，请查看已有记录。')
         return
       }
       if (warning !== '' && !window.confirm(`${warning}\n仍要保存吗？`)) return
       if (front === undefined && !photos.some((photo) => photo.name === 'front.jpg')) {
-        error = '请上传名片正面。'
+        error = $t('请上传名片正面。')
         return
       }
       const normalizedEmail = normalizeEmail(draft.email)
@@ -287,13 +288,13 @@
         if (normalizedEmail !== '') duplicate = await client.findOne(prospects.class.Prospect, { normalizedEmail })
         error =
           duplicate !== undefined && duplicate._id !== id
-            ? '邮箱已存在，请查看已有记录。'
-            : '资料发生变化，请重新打开后再试。'
+            ? $t('邮箱已存在，请查看已有记录。')
+            : $t('资料发生变化，请重新打开后再试。')
         return
       }
       dispatch('saved')
     } catch {
-      error = '保存失败，请检查网络后重试。'
+      error = $t('保存失败，请检查网络后重试。')
     } finally {
       busy = false
     }
@@ -301,9 +302,9 @@
 </script>
 
 <div class="overlay" role="presentation">
-  <section class="dialog" role="dialog" aria-modal="true" aria-label="名片核对">
+  <section class="dialog" role="dialog" aria-modal="true" aria-label={$t('名片核对')}>
     <header>
-      <h2>{value === undefined ? '新增潜在客户' : '客户资料'}</h2>
+      <h2>{value === undefined ? $t('新增潜在客户') : $t('客户资料')}</h2>
       <button disabled={busy} on:click={() => dispatch('close')}><Label label={prospects.string.PageClose} /></button>
     </header>
     <div class="images">
@@ -329,12 +330,12 @@
         /></label
       >
       {#if frontPreview}<button on:click={() => (preview = frontPreview)}
-          ><img class="thumb" src={frontPreview} alt="待核对的正面" /></button
+          ><img class="thumb" src={frontPreview} alt={$t('待核对的正面')} /></button
         >{/if}{#if backPreview}<button on:click={() => (preview = backPreview)}
-          ><img class="thumb" src={backPreview} alt="待核对的背面" /></button
+          ><img class="thumb" src={backPreview} alt={$t('待核对的背面')} /></button
         >{/if}
       {#each photos as photo (photo._id)}{#await getBlobRef(photo.file, photo.name) then image}<button
-            on:click={() => (preview = image.src)}>{photo.name === 'front.jpg' ? '查看正面' : '查看背面'}</button
+            on:click={() => (preview = image.src)}>{photo.name === 'front.jpg' ? $t('查看正面') : $t('查看背面')}</button
           >{/await}{/each}
       {#if front}<span>正面已选择：{front.name}</span>{/if}{#if back}<span>背面已选择：{back.name}</span>{/if}
     </div>
@@ -368,20 +369,20 @@
       识别模型：{model ?? '—'}；识别时间：{recognizedAt === undefined
         ? '—'
         : new Date(recognizedAt).toLocaleString()}；人工确认：{recognized
-          ? '保存后确认'
+          ? $t('保存后确认')
           : value?.recognitionConfirmed === true
-            ? '是'
-            : '否'}
+            ? $t('是')
+            : $t('否')}
     </p>
     {#if warning}<p>{warning}</p>{/if}{#if error}<p role="alert">{error}</p>{/if}{#if duplicate}<button
         on:click={() => dispatch('openDuplicate', duplicate)}
         >查看已有记录：{duplicate.name} · {duplicate.company}</button
       >{/if}
-    <footer><button disabled={busy || !moduleCanEdit} on:click={save}>{busy ? '处理中…' : '确认保存'}</button></footer>
+    <footer><button disabled={busy || !moduleCanEdit} on:click={save}>{busy ? $t('处理中…') : $t('确认保存')}</button></footer>
     {#if value !== undefined}<MailPanel {value} />{/if}
   </section>
   {#if preview}<div class="preview" role="presentation" on:click|self={() => (preview = undefined)}>
-      <button on:click={() => (preview = undefined)}><Label label={prospects.string.PageClose} /></button><img src={preview} alt="名片大图" />
+      <button on:click={() => (preview = undefined)}><Label label={prospects.string.PageClose} /></button><img src={preview} alt={$t('名片大图')} />
     </div>{/if}
 </div>
 

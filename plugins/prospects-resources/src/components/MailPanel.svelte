@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
@@ -20,7 +21,7 @@
   let configured = false
   let address = ''
   let lastPoll: { at: number, ok: boolean, error?: string } | undefined
-  let statusMessage = '正在检查邮件服务…'
+  let statusMessage = $t('正在检查邮件服务…')
   let owner: AccountUuid | '' = value.owner ?? ''
   let employees: Employee[] = []
   let mails: ProspectMail[] = []
@@ -56,16 +57,16 @@
     try {
       const res = await fetch('/prospect-mail-api/status', { headers: headers() })
       if (!res.ok) {
-        statusMessage = res.status === 503 ? '邮件未配置' : '邮件服务连不上'
+        statusMessage = res.status === 503 ? $t('邮件未配置') : $t('邮件服务连不上')
         return
       }
       const data = await res.json()
       configured = data.configured === true
       address = typeof data.address === 'string' ? data.address : ''
       lastPoll = data.lastPoll
-      statusMessage = configured ? '' : '邮件未配置'
+      statusMessage = configured ? '' : $t('邮件未配置')
     } catch {
-      statusMessage = '邮件服务连不上'
+      statusMessage = $t('邮件服务连不上')
     }
   }
   onMount(loadStatus)
@@ -78,7 +79,7 @@
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      throw new Error(typeof data.error === 'string' ? data.error : '邮件服务连不上')
+      throw new Error(typeof data.error === 'string' ? data.error : $t('邮件服务连不上'))
     }
   }
   async function saveOwner (): Promise<void> {
@@ -87,7 +88,7 @@
       if (owner === '') await client.update(value, { $unset: { owner: true } })
       else await client.update(value, { owner })
     } catch {
-      error = '负责人保存失败'
+      error = $t('负责人保存失败')
     }
   }
   async function send (): Promise<void> {
@@ -101,9 +102,9 @@
       sendRequest = undefined
       subject = ''
       body = ''
-      notice = '已发出。'
+      notice = $t('已发出。')
     } catch (e) {
-      error = e instanceof Error ? e.message : '发送失败'
+      error = e instanceof Error ? e.message : $t('发送失败')
     } finally {
       busy = false
     }
@@ -118,9 +119,9 @@
     try {
       await post('forward', { prospectId: value._id, replyId: reply._id, requestId: request })
       forwardRequests.delete(reply._id)
-      notice = '已转给负责人。'
+      notice = $t('已转给负责人。')
     } catch (e) {
-      error = e instanceof Error ? e.message : '转发失败'
+      error = e instanceof Error ? e.message : $t('转发失败')
     } finally {
       busy = false
     }
@@ -142,24 +143,24 @@
           await ops.update(current, { $inc: { emailCount: 1 } })
         }
       }
-      if (!(await ops.commit()).result) error = '记录已经变化，请刷新后再看。'
+      if (!(await ops.commit()).result) error = $t('记录已经变化，请刷新后再看。')
     } catch {
-      error = '保存失败'
+      error = $t('保存失败')
     }
   }
   const time = (t: number): string => new Date(t).toLocaleString()
   const kind = (mail: ProspectMail): string =>
-    mail.direction === 'incoming' ? '客户回复' : mail.direction === 'forward' ? '转给负责人' : '发出'
+    mail.direction === 'incoming' ? $t('客户回复') : mail.direction === 'forward' ? $t('转给负责人') : $t('发出')
   const deliveryText: Record<ProspectMail['delivery'], string> = {
-    sending: '正在发送',
-    sent: '已发出',
-    failed: '没发出',
-    uncertain: '结果不确定',
-    received: '已收到'
+    sending: $t('正在发送'),
+    sent: $t('已发出'),
+    failed: $t('没发出'),
+    uncertain: $t('结果不确定'),
+    received: $t('已收到')
   }
   $: canSend = configured && value.status !== 'do-not-send' && value.status !== 'bounced'
   $: ownerPerson = owner === '' ? undefined : employees.find((it) => it.personUuid === owner)
-  $: ownerLabel = ownerPerson === undefined ? '负责人' : formatName(ownerPerson.name)
+  $: ownerLabel = ownerPerson === undefined ? $t('负责人') : formatName(ownerPerson.name)
   function localizer (language: string): (id: IntlString) => string {
     return (id) => {
       let value = ''
@@ -180,7 +181,7 @@
   <p class="hint">
     {#if statusMessage !== ''}{statusMessage}{:else}发件邮箱：{address}{#if lastPoll !== undefined}
         ；上次检查收件箱：{time(lastPoll.at)}
-        {lastPoll.ok ? '正常' : (lastPoll.error ?? '失败')}{/if}{/if}
+        {lastPoll.ok ? $t('正常') : (lastPoll.error ?? $t('失败'))}{/if}{/if}
   </p>
   <label class="owner"
     ><Label label={prospects.string.PageOwner} /><select bind:value={owner} on:change={saveOwner}
@@ -194,11 +195,11 @@
     <label><Label label={prospects.string.PageBody} /><textarea disabled={busy} rows="5" maxlength="30000" bind:value={body} /></label>
     <div class="row">
       <button disabled={!moduleCanEdit || busy || subject.trim() === '' || body.trim() === ''} on:click={send}
-        >{busy ? '处理中…' : `发送给 ${value.email}`}</button
+        >{busy ? $t('处理中…') : `发送给 ${value.email}`}</button
       >
     </div>
   {:else if configured}
-    <p class="hint">这个客户的状态是"不要再发"或"邮件退回"，不能发邮件。</p>
+    <p class="hint">这个客户的状态是$t('不要再发')或$t('邮件退回')，不能发邮件。</p>
   {/if}
   {#if error}<p role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
   {#if mails.length === 0}
@@ -217,7 +218,7 @@
           {#if mail.direction !== 'forward'}<pre>{mail.body}</pre>{/if}
           {#if mail.delivery === 'uncertain' || (mail.delivery === 'sending' && Date.now() - mail.sentAt > 120000)}
             <div class="row">
-              <span class="hint">请到 Gmail 的"已发送"里看看这封有没有发出：</span>
+              <span class="hint">请到 Gmail 的$t('已发送')里看看这封有没有发出：</span>
               <button
                 on:click={() => {
                   void resolve(mail, true)
@@ -239,7 +240,7 @@
               {#if done.length === 0}
                 <button
                   disabled={busy || !configured || owner === ''}
-                  title={owner === '' ? '请先选择负责人' : ''}
+                  title={owner === '' ? $t('请先选择负责人') : ''}
                   on:click={() => {
                     void forward(mail)
                   }}>转给{ownerLabel}</button

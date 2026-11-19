@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../trStore'
   import { translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
@@ -74,7 +75,7 @@
     return (p.createdOn ?? p.modifiedOn) >= start.getTime() && (p.createdOn ?? p.modifiedOn) <= now.getTime()
   }
   function matches (value: string, filter: string): boolean {
-    return filter === '' || (filter === '未填写' ? value === '' : value === filter)
+    return filter === '' || (filter === $t('未填写') ? value === '' : value === filter)
   }
   $: visible = all
     .filter(
@@ -129,7 +130,7 @@
     try {
       await client.remove(p)
     } catch {
-      error = '删除失败，请检查权限后重试。'
+      error = $t('删除失败，请检查权限后重试。')
     }
   }
   function exportList (): void {
@@ -231,19 +232,19 @@
     >
     <label
       ><Label label={prospects.string.PageSource} /><select bind:value={source}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each sources as item}<option
+        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each sources as item}<option
             >{item}</option
           >{/each}</select
       ></label
     ><label
       ><Label label={prospects.string.PageCountry} /><select bind:value={country}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each countries as item}<option
+        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each countries as item}<option
             >{item}</option
           >{/each}</select
       ></label
     ><label
       ><Label label={prospects.string.PageIndustry} /><select bind:value={industry}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value="未填写">{local(prospects.string.PageMissing)}</option>{#each industries as item}<option
+        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each industries as item}<option
             >{item}</option
           >{/each}</select
       ></label
@@ -290,7 +291,7 @@
                 }} disabled={!moduleCanEdit}><Label label={prospects.string.PageEdit} /></button
               >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
             ></tr
-          >{:else}<tr><td colspan="11">没有符合条件的记录。</td></tr>{/each}</tbody
+          >{:else}<tr><td colspan="11">{$t('没有符合条件的记录。')}</td></tr>{/each}</tbody
       >
     </table>
   </div>
