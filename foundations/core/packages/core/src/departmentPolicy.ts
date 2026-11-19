@@ -16,7 +16,7 @@ export const moduleRoles = ['admin', 'supervisor', 'employee', 'reader'] as cons
 export type ModuleRole = typeof moduleRoles[number]
 export type ModuleLevel = 'none' | 'view' | 'edit'
 export type ModuleAccess = Record<string, Record<ModuleRole, ModuleLevel>>
-export type CompanyModuleDefaults = Partial<Record<'employee' | 'maintainer', Record<string, ModuleLevel>>>
+export type CompanyModuleDefaults = Partial<Record<'employee' | 'supervisor' | 'maintainer', Record<string, ModuleLevel>>>
 
 export function companyModuleRole (role: string): keyof CompanyModuleDefaults | undefined {
   return role === 'USER' ? 'employee' : role === 'MAINTAINER' ? 'maintainer' : undefined

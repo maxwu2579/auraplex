@@ -323,7 +323,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         const defaults = fields.companyDefaults
         if (defaults === null || typeof defaults !== 'object' || Array.isArray(defaults)) forbidden()
         for (const [role, levels] of Object.entries(defaults)) {
-          if ((role !== 'employee' && role !== 'maintainer') || levels === null || typeof levels !== 'object' ||
+          if ((role !== 'employee' && role !== 'supervisor' && role !== 'maintainer') || levels === null || typeof levels !== 'object' ||
             Array.isArray(levels) || Object.entries(levels).some(([alias, level]) =>
               alias.trim() === '' || (level !== 'none' && level !== 'view' && level !== 'edit'))) forbidden()
         }

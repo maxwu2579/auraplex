@@ -92,7 +92,7 @@
     moduleSettings = items[0]
   })
 
-  const companyRoles = [{ id: 'employee', label: '员工' }, { id: 'maintainer', label: '管理员' }] as const
+  const companyRoles = [{ id: 'maintainer', label: '管理员' }, { id: 'supervisor', label: '主管' }, { id: 'employee', label: '员工' }] as const
   let companyDraft: CompanyModuleDefaults | undefined
   let companySaved = false
 
@@ -134,7 +134,11 @@
   }
 
   function companyPrefill (alias: string, role: ModuleRole): ModuleLevel {
-    const level = moduleSettings?.companyDefaults?.employee?.[alias] ?? (alias === 'whatsapp' ? 'edit' : 'none')
+    const defaults = moduleSettings?.companyDefaults
+    const source = role === 'admin' ? defaults?.maintainer ?? defaults?.employee
+      : role === 'supervisor' ? defaults?.supervisor ?? defaults?.employee
+        : defaults?.employee
+    const level = source?.[alias] ?? (alias === 'whatsapp' ? 'edit' : 'none')
     return role === 'reader' && level === 'edit' ? 'view' : level
   }
 
@@ -375,7 +379,7 @@
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
     return Object.fromEntries(applications.map(({ alias }) => [alias,
       access?.moduleAccess?.[alias] ?? Object.fromEntries(moduleRoles.map((role) => [role,
-        access === undefined && moduleSettings?.companyDefaults?.employee !== undefined ? companyPrefill(alias, role) :
+        access === undefined && moduleSettings?.companyDefaults !== undefined ? companyPrefill(alias, role) :
           alias === 'whatsapp' ? 'edit' :
           access?.moduleAccess !== undefined ? 'none' :
           access !== undefined ? defaultModuleLevel(alias, role, access.modules) :
@@ -569,7 +573,7 @@
   {#if selected === undefined}
     <details class="company-defaults">
       <summary>公司默认</summary>
-      <p>不在任何部门的人用这里的默认；新建部门时按这里预填；已在部门的人以部门设置为准。</p>
+      <p>不在任何部门的人按公司角色（员工 / 管理员）用这里的默认；新建部门时管理员、主管、员工三列按这里预填（访客列按员工、最多只能看）；已在部门的人以部门设置为准。“主管”只用于预填部门。</p>
       <button type="button" on:click={openGuestPermissions}>访客能用什么在 设置 → 访客 → 应用权限 里设</button>
       <div class="table-wrap">
         <table>
