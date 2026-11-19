@@ -214,3 +214,26 @@ test('only owners can save validated company module defaults', async () => {
   await expect(guard.tx(ctx(AccountRole.Owner), [change({ guest: { document: 'edit' } })])).rejects.toThrow()
   await expect(guard.tx(ctx(AccountRole.Owner), [change({ employee: { document: 'all' } })])).rejects.toThrow()
 })
+
+test('only department admins pick the default order owner, and only among the members', async () => {
+  const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
+  const department = {
+    _id: 'dept', _class: departmentClass, space: core.space.Workspace,
+    [departmentAccessMixin]: { administrators: ['admin'], supervisors: ['lead'], employees: ['worker'] }
+  }
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => (cls === departmentClass ? [department] : [])),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const context = (uuid: string) => ({ contextData: { account: { uuid, role: AccountRole.User }, broadcast: { txes: [] } } }) as unknown as MeasureContext<SessionData>
+  const guard = await DepartmentGuardMiddleware.create(context('admin'), pipeline, next)
+  const tx = (orderAssignee: string | null) => ({
+    _class: core.class.TxMixin, objectClass: departmentClass, objectId: department._id,
+    objectSpace: department.space, mixin: departmentAccessMixin, attributes: { orderAssignee }
+  }) as unknown as TxCUD<Doc>
+  await expect(guard.tx(context('worker'), [tx('lead')])).rejects.toThrow()
+  await expect(guard.tx(context('admin'), [tx('stranger')])).rejects.toThrow()
+  await expect(guard.tx(context('admin'), [tx('lead')])).resolves.toBeDefined()
+  await expect(guard.tx(context('admin'), [tx(null)])).resolves.toBeDefined()
+})

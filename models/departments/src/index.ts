@@ -65,6 +65,7 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Hidden() modules?: string[]
   @Hidden() autoJoin?: DepartmentAccess['autoJoin']
   @Hidden() moduleAccess?: DepartmentAccess['moduleAccess']
+  @Hidden() orderAssignee?: DepartmentAccess['orderAssignee']
   @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
 }
@@ -100,6 +101,7 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Hidden() target?: string
   @Hidden() name?: string
   @Hidden() department?: OrderAction['department']
+  @Hidden() auto?: boolean
   @Prop(TypeString(), departments.string.Note) reason?: string
 }
 

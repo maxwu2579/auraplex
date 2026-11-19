@@ -85,6 +85,7 @@ export interface DepartmentRecord {
   modules?: unknown
   moduleAccess?: unknown
   autoJoin?: unknown
+  orderAssignee?: unknown
   supervisorsSeeTracking: boolean
   employeesSeeTracking: boolean
 }
@@ -115,6 +116,7 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     modules: access.modules,
     moduleAccess: access.moduleAccess,
     autoJoin: access.autoJoin,
+    orderAssignee: access.orderAssignee,
     supervisorsSeeTracking: access.supervisorsSeeTracking === true,
     employeesSeeTracking: access.employeesSeeTracking === true
   }
@@ -531,7 +533,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const attributes = create ? ((tx as TxCreateDoc<Doc>).attributes as unknown as Record<string, unknown>) : {}
     if (tx.objectClass === orderActionClass) {
       // The history is never edited, not even by super admins.
-      if (!create || attributes.actor !== actor) forbidden()
+      if (!create || attributes.actor !== actor || attributes.auto !== undefined) forbidden()
       const order = await this.findOne(ctx, orderClass, attributes.order as Ref<Doc>)
       if (order === undefined) forbidden()
       const live = this.departments.filter((d) => !d.archived)
@@ -636,6 +638,13 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
           if (space === undefined || space.archived || (!owner && !space.owners?.includes(actor))) forbidden()
         }
       }
+    }
+    if ((next.orderAssignee ?? null) !== (before?.orderAssignee ?? null)) {
+      // The default order owner is picked by the department admins or super admins, among the members.
+      if (!owner && !old.members.admin.includes(ctx.contextData.account.uuid)) forbidden()
+      const value = next.orderAssignee
+      if (value !== undefined && value !== null && (typeof value !== 'string' ||
+        !departmentRoles.some((role) => role !== 'reader' && next.members[role].includes(value)))) forbidden()
     }
     const matrix = next.moduleAccess
     if (JSON.stringify(matrix) !== JSON.stringify(before?.moduleAccess)) {

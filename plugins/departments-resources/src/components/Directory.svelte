@@ -11,7 +11,7 @@
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
-  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules' | 'moduleAccess' | 'autoJoin'>
+  type Draft = Pick<DepartmentAccess, RoleField | PermissionField | 'archived' | 'supervisorsSeeTracking' | 'employeesSeeTracking' | 'contactVisibility' | 'modules' | 'moduleAccess' | 'autoJoin' | 'orderAssignee'>
   const client = getClient()
   const hierarchy = client.getHierarchy()
   interface ModuleApplication extends Doc {
@@ -241,6 +241,11 @@
       }
     }
   }
+  // An empty choice is saved as null so a previously chosen person is really cleared.
+  function setOrderAssignee (value: string): void {
+    if (draft === undefined) return
+    draft = { ...draft, orderAssignee: (value === '' ? null : value) as unknown as AccountUuid }
+  }
   function clone (access: DepartmentAccess): Draft {
     return {
       administrators: [...access.administrators],
@@ -257,7 +262,8 @@
       contactVisibility: access.contactVisibility ?? 'company',
       ...(access.modules !== undefined ? { modules: [...access.modules] } : {}),
       supervisorsSeeTracking: access.supervisorsSeeTracking === true,
-      employeesSeeTracking: access.employeesSeeTracking === true
+      employeesSeeTracking: access.employeesSeeTracking === true,
+      ...(access.orderAssignee != null ? { orderAssignee: access.orderAssignee } : {})
     }
   }
   $: orderedRows = [...rows].sort((a, b) => Number(a.archived) - Number(b.archived) || a.name.localeCompare(b.name))
@@ -811,6 +817,15 @@
             disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
           /><Label label={departments.string.EmployeesSeeTracking} /></label
         >
+        <label class="order-assignee">订单默认负责人
+          <select value={draft.orderAssignee ?? ''} disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
+            on:change={(event) => { setOrderAssignee(event.currentTarget.value) }}>
+            <option value="">不设（自动选第一个主管，没有主管选管理员）</option>
+            {#each members([...draft.administrators, ...draft.supervisors, ...draft.employees]) as person (person._id)}
+              <option value={person.personUuid}>{formatName(person.name)}</option>
+            {/each}
+          </select>
+        </label>
         {/if}
         {#if canEdit && tab === 'members'}
         <p><Label label={departments.string.InviteHelp} /></p>

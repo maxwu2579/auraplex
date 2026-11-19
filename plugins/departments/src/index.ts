@@ -22,6 +22,8 @@ export interface DepartmentAccess extends Department {
   modules?: string[]
   autoJoin?: Record<string, Ref<Space>[]>
   moduleAccess?: ModuleAccess
+  /** Who gets a new order stage of this department when nobody was picked (must be a member). */
+  orderAssignee?: AccountUuid
   /** Tracking access: supervisors (set by super admins) and staff (set by the department admin). */
   supervisorsSeeTracking?: boolean
   employeesSeeTracking?: boolean
@@ -89,6 +91,8 @@ export interface OrderAction extends Doc {
   /** insert: name and department of the stage added right after the current one. */
   name?: string
   department?: Ref<Department>
+  /** Written by the system for an automatic assignment; only kept in the history. */
+  auto?: boolean
 }
 
 export const defaultOrderStages: OrderFlowStage[] = [

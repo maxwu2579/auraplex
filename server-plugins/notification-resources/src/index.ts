@@ -1875,6 +1875,20 @@ async function markOrderOverdue (
   return true
 }
 
+/** Default owner of a stage: the department's chosen person, else its first supervisor, else its first admin. */
+async function autoAssignee (control: TriggerControl, department: Ref<Doc> | undefined): Promise<AccountUuid | undefined> {
+  if (department === undefined) return undefined
+  const doc = (await control.findAll(control.ctx, hr.class.Department, { _id: department as Ref<any> }, { limit: 1 }))[0]
+  if (doc === undefined || !control.hierarchy.hasMixin(doc, departments.mixin.DepartmentAccess)) return undefined
+  const access = control.hierarchy.as(doc, departments.mixin.DepartmentAccess)
+  if (access.archived) return undefined
+  const members = [...access.administrators, ...access.supervisors, ...access.employees]
+  if (access.orderAssignee !== undefined && access.orderAssignee !== null && members.includes(access.orderAssignee)) {
+    return access.orderAssignee
+  }
+  return access.supervisors[0] ?? access.administrators[0]
+}
+
 async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Promise<Tx[]> {
   const flow = (
     await control.findAll(control.ctx, departments.class.OrderFlow, { _id: departments.ids.OrderFlow }, { limit: 1 })
@@ -1965,9 +1979,26 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
         next.startedOn = now
         delete next.remindedOn
         current = index + 1
+        if (next.assignee === undefined) {
+          const picked = await autoAssignee(control, next.department)
+          if (picked !== undefined) {
+            next.assignee = picked
+            // Kept in the history only; OnOrder skips automatic records.
+            results.push(control.txFactory.createTxCreateDoc(departments.class.OrderAction, tx.objectSpace, {
+              order: order._id,
+              kind: 'assign',
+              stage: next.id,
+              actor: systemAccountUuid as AccountUuid,
+              assignee: picked,
+              auto: true
+            }))
+            await notifyOrder(control, results, tx, order, [picked], departments.string.OrderAssigned, `${title}\n${next.name}：由你负责（自动指定）`)
+          }
+        }
         const leads = await departmentLeads(control, next.department)
         const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
-        await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver, `${title}\n${stage.name} 已完成，轮到：${next.name}，请分配负责人`)
+        await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
+          `${title}\n${stage.name} 已完成，轮到：${next.name}${next.assignee === undefined ? '，请分配负责人' : ''}`)
       } else {
         current = stages.length
         state = 'done'
@@ -2041,6 +2072,7 @@ export async function OnOrder (txes: Tx[], control: TriggerControl): Promise<Tx[
     if (create.objectClass === departments.class.Order) {
       results.push(...(await setupOrder(control, create as TxCreateDoc<Order>)))
     } else if (create.objectClass === departments.class.OrderAction) {
+      if ((create.attributes as unknown as OrderAction).auto === true) continue
       results.push(...(await applyOrderAction(control, create as TxCreateDoc<OrderAction>)))
     }
   }
