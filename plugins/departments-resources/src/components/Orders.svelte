@@ -48,6 +48,8 @@
   let actions: OrderAction[] = []
   // Files on an order (drawings, contracts, photos); loaded by id so this plugin does not depend on attachments.
   const attachmentsComponent = 'attachment:component:Attachments' as AnyComponent
+  // The list shows once the order's file counter is known (the server keeps it up to date).
+  $: attachmentCount = (selected as unknown as { attachments?: number } | undefined)?.attachments ?? 0
   /** Opened from the inbox or a link: show just this order. */
   export let focusId: Ref<Order> | undefined = undefined
   let selectedId: Ref<Order> | undefined = focusId
@@ -524,7 +526,7 @@
 
         <div class="order-files">
           {#key selected._id}
-            <Component is={attachmentsComponent} props={{ objectId: selected._id, _class: departments.class.Order, space: selected.space, readonly: !moduleCanEdit }} />
+            <Component is={attachmentsComponent} props={{ objectId: selected._id, _class: departments.class.Order, space: selected.space, readonly: !moduleCanEdit, attachments: attachmentCount }} />
           {/key}
         </div>
 
