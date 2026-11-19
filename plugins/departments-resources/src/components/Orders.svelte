@@ -286,13 +286,13 @@
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
+          {@const left = it.state === 'done' ? undefined : countdown(cur)}
           <tr class:sel={it._id === selectedId} on:click={() => open(it)}>
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
             <td>{it.state === 'done' ? '✅ 已完成' : cur?.name ?? ''}</td>
             <td>{name(cur?.assignee)}</td>
-            {@const left = it.state === 'done' ? undefined : countdown(cur)}
             <td class:late={left?.late === true}>{it.state === 'done' ? '' : left?.text ?? `已用 ${days(cur?.startedOn)}`}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
