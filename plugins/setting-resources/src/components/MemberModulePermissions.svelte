@@ -64,8 +64,17 @@
   $: editable = isConfigured && (owner || selectedDepartments.some((dept) => dept.members.admin.includes(actor.uuid)))
   $: final = effectiveDepartmentModules(person, role === AccountRole.Owner, enabled, departments, { extra, blocked })
   $: ceiling = effectiveDepartmentModules(actor.uuid, owner, true, departments, actorGrant)
+  const roleOptions = [
+    { key: 'admin', label: '管理员' }, { key: 'supervisor', label: '主管' },
+    { key: 'employee', label: '员工' }, { key: 'reader', label: '访客' }
+  ] as const
+  const finalLevels: Array<{ level: ModuleLevel, label: string }> = [
+    { level: 'edit', label: '能编辑' }, { level: 'view', label: '只能看' }, { level: 'none', label: '不能用' }
+  ]
+  $: exceptionCount = new Set([...Object.keys(extra), ...blocked]).size
   $: sources = selectedDepartments.map((dept) => ({
     name: dept.name,
+    roles: roleOptions.filter(({ key }) => dept.members[key].includes(person)).map(({ label }) => label),
     access: effectiveDepartmentModules(person, false, true, [dept])
   }))
 
@@ -114,18 +123,33 @@
     <Button kind="regular" on:click={() => dispatch('close')}><span slot="content">关闭</span></Button>
   </header>
   <small>{enabled ? '已启用按部门控制模块。' : '按部门控制模块未开启，以下配置在启用后生效。'}</small>
-  <h4>各部门授予的权限</h4>
-  {#each sources as source}
-    <section>
-      <strong>{source.name}</strong>
-      <ul>
-        {#each apps.filter(({ alias }) => source.access(alias) !== 'none') as app (app.alias)}
-          <li><Label label={app.label} /> · {levelText(app.alias, source.access(app.alias))}</li>
-        {:else}<li>没有可用模块</li>{/each}
-      </ul>
-    </section>
-  {:else}<p>未加入部门</p>{/each}
-  <h4>个人例外</h4>
+  <section aria-label="最终权限" class="result">
+    {#each finalLevels as { level, label }}
+      <div class="result-row">
+        <strong>{label}</strong>
+        <div class="tags">
+          {#each apps.filter(({ alias }) => final(alias) === level) as app (app.alias)}
+            <span class="tag"><Label label={app.label} /></span>
+          {:else}—{/each}
+        </div>
+      </div>
+    {/each}
+  </section>
+  <details>
+    <summary>来自部门</summary>
+    {#each sources as source}
+      <details class="department-source">
+        <summary>{source.name}（{source.roles.join(' / ')}）</summary>
+        <ul>
+          {#each apps.filter(({ alias }) => source.access(alias) !== 'none') as app (app.alias)}
+            <li><Label label={app.label} /> · {levelText(app.alias, source.access(app.alias))}</li>
+          {:else}<li>没有可用模块</li>{/each}
+        </ul>
+      </details>
+    {:else}<p>未加入部门</p>{/each}
+  </details>
+  <details>
+    <summary>个人额外 / 屏蔽（{exceptionCount}）</summary>
   {#if isConfigured && loaded}
     <table>
       <thead><tr><th>模块</th><th>额外给</th><th>单独关掉</th></tr></thead>
@@ -152,12 +176,7 @@
     {/if}
   {/if}
   {#if error}<p role="alert">{error}</p>{/if}
-  <h4>最终能用的模块</h4>
-  <ul>
-    {#each apps.filter(({ alias }) => final(alias) !== 'none') as app (app.alias)}
-      <li><Label label={app.label} /> · {levelText(app.alias, final(app.alias))}</li>
-    {:else}<li>没有可用模块</li>{/each}
-  </ul>
+  </details>
 </aside>
 
 <style>
@@ -166,6 +185,13 @@
     flex: 0 0 min(29rem, 48%); gap: 0.55rem; padding: 1rem;
     color: var(--theme-content-color); background: var(--theme-panel-color); border-inline-start: 1px solid var(--theme-divider-color);
   }
+  .result { display: grid; gap: 0.55rem; }
+  .result-row { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; }
+  .tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .tag { background: var(--theme-button-default); color: var(--theme-caption-color); border: 1px solid var(--theme-button-border); border-radius: 0.35rem; padding: 0.15rem 0.35rem; }
+  details { border-top: 1px solid var(--theme-divider-color); padding-block: 0.35rem; }
+  summary { color: var(--theme-caption-color); cursor: pointer; }
+  .department-source { margin-inline-start: 0.85rem; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
   h3, h4, p { margin: 0; }
   h3, h4, strong { color: var(--theme-caption-color); }

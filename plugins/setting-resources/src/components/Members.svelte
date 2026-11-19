@@ -253,6 +253,7 @@
   <div class="hulyComponent-content__column content member-list">
     <Scroller align={'center'} padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
       <div class="hulyComponent-content">
+        <small>公司级角色。部门里的管理员/主管在'部门'列里设。</small>
         <div class="member-columns p-2">
           <strong><Label label={setting.string.Members} /></strong>
           <strong><Label label={setting.string.Role} /></strong>
@@ -282,7 +283,6 @@
                   void change(personUuid, e.detail)
                 }}
               />
-                <small>公司级角色。部门里的管理员/主管在'部门'列里设。</small>
               </div>
               <div class="department-links">
                 {#each memberships.get(personUuid) ?? [] as department (department.id)}
