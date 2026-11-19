@@ -18,6 +18,9 @@
   import { createQuery, getClient } from '@hcengineering/presentation'
   import OrderFlowChart from './OrderFlowChart.svelte'
   import StatusTag from './StatusTag.svelte'
+  import QrScanner from './QrScanner.svelte'
+  import QRCode from 'qrcode'
+  import { getCurrentLocation } from '@hcengineering/ui'
   import { recordAudit } from '../audit'
 
   function localizer (language: string) {
@@ -39,6 +42,84 @@
   const hierarchy = client.getHierarchy()
   const me = getCurrentAccount()
   const owner = me.role === AccountRole.Owner
+  // QR codes: an order's code opens it here; company admins, department admins and super admins may scan.
+  $: L = (zhText: string, enText: string): string => ($languageStore === 'zh' ? zhText : enText)
+  let startLater = false
+  let scanning = false
+  let showQr = false
+  let qrImage = ''
+  let scannedId: Ref<Order> | undefined
+  let pendingScan: string | undefined = getCurrentLocation().query?.scan ?? undefined
+  $: canScan = owner || me.role === AccountRole.Maintainer || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
+  $: canStart = selected !== undefined && selected.state === 'pending' && (canScan || selected.salesOwner === me.uuid)
+  const scanLink = (number: string): string => {
+    const loc = getCurrentLocation()
+    return `${window.location.origin}/workbench/${loc.path[1]}/orders/orders?scan=${encodeURIComponent(number)}`
+  }
+  $: if (showQr && selected !== undefined) {
+    void QRCode.toDataURL(scanLink(selected.number), { margin: 1, width: 320 }).then((url: string) => { qrImage = url })
+  }
+  function printQr (): void {
+    if (selected === undefined || qrImage === '') return
+    const w = window.open('', '_blank', 'width=420,height=560')
+    if (w === null) return
+    const doc = w.document
+    doc.title = selected.number
+    const box = doc.createElement('div')
+    box.style.cssText = 'font-family:sans-serif;text-align:center;padding:16px'
+    const img = doc.createElement('img')
+    img.src = qrImage
+    img.style.width = '260px'
+    const n = doc.createElement('h2')
+    n.textContent = `${selected.number} ${selected.title}`
+    const c = doc.createElement('p')
+    c.textContent = selected.customer
+    box.append(img, n, c)
+    doc.body.append(box)
+    setTimeout(() => { w.print() }, 300)
+  }
+  // Read an order number from a scanned link (…?scan=ORD-0003) or plain text.
+  function scannedNumber (text: string): string | undefined {
+    try {
+      const url = new URL(text)
+      const value = url.searchParams.get('scan')
+      if (value !== null) return value
+    } catch {}
+    const match = /ORD-\d+/.exec(text)
+    return match?.[0]
+  }
+  async function handleScan (number: string): Promise<void> {
+    const found = orders.find((it) => it.number === number)
+    if (found === undefined) {
+      error = L(`找不到订单 ${number}，或者你没有权限查看。`, `Order ${number} not found, or you cannot see it.`)
+      return
+    }
+    open(found)
+    scannedId = found._id
+    if (!canScan) return
+    try {
+      // D: keep who scanned and when in the order history.
+      const ops = client.apply(undefined, 'order-scan')
+      await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
+        order: found._id, kind: 'scan', stage: found.stages[Math.min(found.current, found.stages.length - 1)]?.id ?? '', actor: me.uuid
+      })
+      await ops.commit()
+    } catch {}
+  }
+  $: if (pendingScan !== undefined && orders.length > 0) {
+    const number = pendingScan
+    pendingScan = undefined
+    void handleScan(number)
+  }
+  function onDetected (event: CustomEvent<string>): void {
+    scanning = false
+    const number = scannedNumber(event.detail)
+    if (number === undefined) {
+      error = L('这个二维码不是订单二维码。', 'This QR code is not an order code.')
+      return
+    }
+    void handleScan(number)
+  }
   type Role = 'admin' | 'supervisor' | 'employee' | 'reader'
 
   let orders: Order[] = []
@@ -172,7 +253,9 @@
     insert: local(departments.string.OrderInsert),
     reorder: local(departments.string.OrderReorder),
     approve: local(departments.string.OrderApprove),
-    reject: local(departments.string.OrderReject)
+    reject: local(departments.string.OrderReject),
+    start: L('开始流程', 'Started'),
+    scan: L('扫码', 'Scanned')
   }
 
   function open (it: Order): void {
@@ -201,7 +284,7 @@
         salesOwner: me.uuid,
         stages: [],
         current: 0,
-        state: 'active'
+        state: startLater ? 'pending' : 'active'
       }, id)
       if (!(await ops.commit()).result) throw new Error('refused')
       title = ''
@@ -344,6 +427,7 @@
       <Button selected={filter === 'mine'} kind="regular" label={departments.string.OrderPage2} on:click={() => setFilter('mine')} />
       <Button selected={filter === 'late'} kind="regular" label={departments.string.OrderPage3} on:click={() => setFilter('late')} />
       <Button selected={filter === 'all'} kind="regular" label={departments.string.OrderPage4} on:click={() => setFilter('all')} />
+      {#if canScan}<button class="scan-btn" on:click={() => { scanning = true }}>📷 {L('扫码', 'Scan')}</button>{/if}
     </div>{/if}
   </div>
 
@@ -351,8 +435,10 @@
     <EditBox placeholder={departments.string.OrderOrderTitle} bind:value={title} />
     <EditBox placeholder={departments.string.OrderCustomer} bind:value={customer} />
     <EditBox placeholder={departments.string.OrderOptionalNote} bind:value={note} />
+    <label class="start-later"><input type="checkbox" bind:checked={startLater} /> {L('先不开始（扫码或按"开始流程"再开始）', 'Start later (scan or press Start)')}</label>
     <Button kind="primary" label={departments.string.OrderPage5} disabled={busy || title.trim() === '' || customer.trim() === ''} on:click={createOrder} />
   </div>{/if}
+  {#if scanning}<QrScanner on:detected={onDetected} on:close={() => { scanning = false }} />{/if}
   {#if error}<p class="err" role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
 
   <div class="body">
@@ -366,7 +452,7 @@
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
-            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
+            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
             <td>{#if it.state !== 'done'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
@@ -389,7 +475,24 @@
             </div>
           </div>
         {:else}
-          <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}</h3>
+          {#if scannedId === selected._id}<p class="scanned">📷 {L('扫码打开', 'Opened by scan')}</p>{/if}
+          <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}
+            <button class="qr-btn" on:click={() => { showQr = !showQr }}>{L('二维码', 'QR code')}</button></h3>
+          {#if showQr}
+            <div class="qr-box">
+              {#if qrImage !== ''}<img src={qrImage} alt={selected.number} />{/if}
+              <div>
+                <p class="hint">{L('贴在机器或图纸上，扫码就打开这张订单。', 'Stick it on the machine or drawings; scanning opens this order.')}</p>
+                <button on:click={printQr}>{L('打印', 'Print')}</button>
+              </div>
+            </div>
+          {/if}
+          {#if selected.state === 'pending'}
+            <div class="pending">
+              <StatusTag status="waiting" text={L('未开始', 'Not started')} />
+              {#if canStart}<button class="big" disabled={busy} on:click={() => act('start', { stage: selected?.stages[0]?.id })}>▶ {L('开始流程', 'Start')}</button>{/if}
+            </div>
+          {/if}
           <p class="hint"><Label label={departments.string.OrderOrderInfo} params={{ customer: selected.customer, owner: name(selected.salesOwner) }} />{#if selected.note} · {selected.note}{/if}</p>
         {/if}
         <div class="progress-header">
@@ -402,7 +505,7 @@
                   {#if stage.startedOn !== undefined} · <Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />{/if}
                   {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
                     · <StatusTag status={left?.late === true ? 'late' : 'active'} text={left?.text} />{/if}
-                  {#if stage.status === 'approval'} · <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{:else} · <StatusTag status="active" label={departments.string.OrderInProgress} />{/if}
+                  {#if stage.status === 'approval'} · <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{:else if stage.status === 'active'} · <StatusTag status="active" label={departments.string.OrderInProgress} />{/if}
                   {#if returned} · <Label label={departments.string.OrderReturned} />{/if}
                 </div>
               {:else if selected.state === 'done'}
@@ -553,6 +656,18 @@
 </section>
 
 <style>
+  .scan-btn, .qr-btn { margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; border: 1px solid var(--theme-divider-color); background: var(--theme-button-default); color: var(--theme-caption-color); cursor: pointer; font-size: 0.8rem; font-weight: 500; }
+  .start-later { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; white-space: nowrap; }
+  .qr-box { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
+  .qr-box img { width: 9rem; height: 9rem; background: #fff; padding: 0.25rem; border-radius: 0.25rem; }
+  .pending { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0; }
+  .big { padding: 0.6rem 1.4rem; font-size: 1rem; border-radius: 0.5rem; border: none; background: var(--theme-button-primary, #4c7dff); color: #fff; cursor: pointer; }
+  .scanned { margin: 0; color: var(--theme-link-color, #4c7dff); font-size: 0.8rem; }
+  @media (max-width: 720px) {
+    .orders :global(table) { font-size: 0.8rem; }
+    .big { width: 100%; padding: 0.9rem; font-size: 1.1rem; }
+    .qr-box { flex-direction: column; align-items: flex-start; }
+  }
   .order-files { margin: 0.75rem 0; }
   .edit-btn { margin-left: 0.75rem; font-size: 0.75rem; font-weight: 400; }
   .edit-info { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
