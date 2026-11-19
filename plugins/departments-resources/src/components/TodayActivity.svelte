@@ -119,12 +119,19 @@
           const title = titleOf((tx as TxCreateDoc<Doc>).attributes as unknown as Record<string, unknown>)
           if (title !== '') titles.set(tx.objectId, title)
         }
-        if (!titles.has(tx.objectId)) byClass.set(tx.objectClass, (byClass.get(tx.objectClass) ?? new Set()).add(tx.objectId))
+        if (tx.objectClass === departments.class.OrderAction && tx._class === core.class.TxCreateDoc) {
+          // Show the order itself (ORD-0001 …) rather than the action record.
+          const order = ((tx as TxCreateDoc<Doc>).attributes as unknown as { order: Ref<Doc> }).order
+          byClass.set(departments.class.Order, (byClass.get(departments.class.Order) ?? new Set()).add(order))
+        } else if (!titles.has(tx.objectId)) byClass.set(tx.objectClass, (byClass.get(tx.objectClass) ?? new Set()).add(tx.objectId))
       }
       for (const [_class, ids] of byClass) {
         try {
           const docs = await client.findAll(_class, { _id: { $in: [...ids] } })
-          for (const it of docs) titles.set(it._id, titleOf(it as unknown as Record<string, unknown>))
+          for (const it of docs) {
+            const doc = it as unknown as Record<string, unknown>
+            titles.set(it._id, _class === departments.class.Order ? `${doc.number as string} ${doc.title as string}` : titleOf(doc))
+          }
         } catch {}
       }
       const next: Row[] = []
@@ -141,7 +148,7 @@
           at: tx.modifiedOn,
           who: bySocial.get(tx.modifiedBy),
           kind,
-          what: isOrderAction ? '订单' : `${await classLabel(tx.objectClass)}${title !== '' ? '：' + title : ''}`,
+          what: isOrderAction ? (title !== '' ? title : '订单') : `${await classLabel(tx.objectClass)}${title !== '' ? '：' + title : ''}`,
           objectId: target
         })
       }
