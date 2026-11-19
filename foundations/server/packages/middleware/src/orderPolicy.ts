@@ -156,7 +156,7 @@ export function canEditOrder (
       const value = operations[key]
       if (key === 'linkSpaces') {
         return value !== null && typeof value === 'object' && !Array.isArray(value) &&
-          Object.values(value).every((it) => typeof it === 'string')
+          Object.entries(value).every(([kind, it]) => linkFields.includes(kind) && kind !== 'linkSpaces' && typeof it === 'string')
       }
       return typeof value === 'string' && value !== '' && current[key] === undefined
     })
