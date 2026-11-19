@@ -1767,8 +1767,11 @@ async function notifyOrder (
   order: Order,
   accounts: AccountUuid[],
   header: CommonInboxNotification['header'],
-  text: string
+  zh: string,
+  en?: string
 ): Promise<void> {
+  // The text is sent in Chinese and English; the header is translated by each person's app.
+  const text = en === undefined ? zh : `${zh}\n${en}`
   const targets = [...new Set(accounts)]
   if (targets.length === 0) return
   const receivers = await getReceiversInfo(control.ctx, targets, control)
@@ -1870,7 +1873,8 @@ async function markOrderOverdue (
   if (leads.length === 0) return false
   const days = Math.floor((tx.modifiedOn - stage.startedOn) / 86400000)
   await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated,
-    `${order.number} ${order.title}：${stage.name} 已经 ${days} 天还没完成`)
+    `${order.number} ${order.title}：${stage.name} 已经 ${days} 天还没完成`,
+    `${stage.name}: not finished after ${days} day(s)`)
   stage.remindedOn = tx.modifiedOn
   return true
 }
@@ -1936,13 +1940,14 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
   const now = tx.modifiedOn
   const title = `${order.number} ${order.title}`
   const reason = action.reason !== undefined && action.reason.trim() !== '' ? `\n原因：${action.reason}` : ''
+  const reasonEn = action.reason !== undefined && action.reason.trim() !== '' ? ` (reason: ${action.reason})` : ''
   let current = order.current
   let state = order.state
   switch (action.kind) {
     case 'assign':
       stage.assignee = action.assignee
       if (action.assignee !== undefined) {
-        await notifyOrder(control, results, tx, order, [action.assignee], departments.string.OrderAssigned, `${title}\n${stage.name}：由你负责`)
+        await notifyOrder(control, results, tx, order, [action.assignee], departments.string.OrderAssigned, `${title}\n${stage.name}：由你负责`, `${stage.name}: you are in charge`)
       }
       break
     case 'step': {
@@ -1955,7 +1960,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       stage.status = 'active'
       if (stage.assignee !== undefined) {
         await notifyOrder(control, results, tx, order, [stage.assignee], departments.string.OrderReturned,
-          title + '\n' + stage.name + ' 审批未通过' + reason)
+          title + '\n' + stage.name + ' 审批未通过' + reason, `${stage.name}: approval rejected${reasonEn}`)
       }
       break
     case 'approve':
@@ -1968,7 +1973,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
           control.hierarchy.asIf(department, departments.mixin.DepartmentAccess)?.administrators ?? []
         const people = stage.approval.by === 'person' ? [stage.approval.person] : admins
         await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
-          title + '\n' + stage.name + ' 等待审批')
+          title + '\n' + stage.name + ' 等待审批', `${stage.name}: waiting for approval`)
         break
       }
       stage.status = 'done'
@@ -1992,23 +1997,24 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
               assignee: picked,
               auto: true
             }))
-            await notifyOrder(control, results, tx, order, [picked], departments.string.OrderAssigned, `${title}\n${next.name}：由你负责（自动指定）`)
+            await notifyOrder(control, results, tx, order, [picked], departments.string.OrderAssigned, `${title}\n${next.name}：由你负责（自动指定）`, `${next.name}: you are in charge (assigned automatically)`)
           }
         }
         const leads = await departmentLeads(control, next.department)
         const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
         await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
-          `${title}\n${stage.name} 已完成，轮到：${next.name}${next.assignee === undefined ? '，请分配负责人' : ''}`)
+          `${title}\n${stage.name} 已完成，轮到：${next.name}${next.assignee === undefined ? '，请分配负责人' : ''}`,
+          `${stage.name} is done, next: ${next.name}${next.assignee === undefined ? ' (please assign someone)' : ''}`)
       } else {
         current = stages.length
         state = 'done'
-        await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderFinished, `${title}\n全部完成`)
+        await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderFinished, `${title}\n全部完成`, 'All stages are done')
       }
       break
     }
     case 'escalate': {
       const leads = await departmentLeads(control, stage.department)
-      await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated, `${title}\n${stage.name} 上报主管${reason}`)
+      await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated, `${title}\n${stage.name} 上报主管${reason}`, `${stage.name}: raised to the supervisors${reasonEn}`)
       break
     }
     case 'return': {
@@ -2026,7 +2032,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       if (action.assignee !== undefined) back.assignee = action.assignee
       current = target
       const people = [order.salesOwner, ...(back.assignee !== undefined ? [back.assignee] : [])]
-      await notifyOrder(control, results, tx, order, people, departments.string.OrderReturned, `${title}\n${stage.name} 退回到 ${back.name}${reason}`)
+      await notifyOrder(control, results, tx, order, people, departments.string.OrderReturned, `${title}\n${stage.name} 退回到 ${back.name}${reason}`, `${stage.name}: sent back to ${back.name}${reasonEn}`)
       break
     }
     case 'reorder': {
@@ -2046,7 +2052,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       if (position <= index || position > stages.length) return []
       stages.splice(position, 0, added)
       const leads = await departmentLeads(control, added.department)
-      await notifyOrder(control, results, tx, order, [order.salesOwner, ...leads], departments.string.OrderHandedOver, `${title}\n${stage.name} 之后插入了一段：${name}${reason}`)
+      await notifyOrder(control, results, tx, order, [order.salesOwner, ...leads], departments.string.OrderHandedOver, `${title}\n${stage.name} 之后插入了一段：${name}${reason}`, `Stage added after ${stage.name}: ${name}${reasonEn}`)
       break
     }
   }
