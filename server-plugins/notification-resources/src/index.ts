@@ -1899,31 +1899,33 @@ async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Pro
   )[0]
   const template = flow?.stages !== undefined && flow.stages.length > 0 ? flow.stages : defaultOrderStages
   const now = tx.modifiedOn
+  // A pending order waits until someone starts it (for example by scanning its QR code).
+  const pending = tx.attributes.state === 'pending'
   const stages: OrderStage[] = template.map((stage, i) => ({
     id: stage.id,
     name: stage.name,
     department: stage.department,
     limitDays: stage.limitDays,
     approval: stage.approval,
-    status: i === 0 ? 'active' : 'waiting',
+    status: i === 0 && !pending ? 'active' : 'waiting',
     // The salesperson who takes the order runs the first stage.
     assignee: i === 0 ? tx.attributes.salesOwner : undefined,
     steps: stage.steps.map((name) => ({ name, done: false })),
-    startedOn: i === 0 ? now : undefined
+    startedOn: i === 0 && !pending ? now : undefined
   }))
   const orders = await control.findAll(control.ctx, departments.class.Order, {}, { projection: { number: 1 } })
   const highest = orders.reduce((max, it) => Math.max(max, Number(/(\d+)$/.exec(it.number ?? '')?.[1] ?? 0)), 0)
   const number = `ORD-${String(highest + 1).padStart(4, '0')}`
   const results: Tx[] = []
   const order = { ...TxProcessor.createDoc2Doc(tx), number }
-  if (stages[0] !== undefined) await syncOrderTodo(control, results, order, stages[0], now)
+  if (stages[0] !== undefined && !pending) await syncOrderTodo(control, results, order, stages[0], now)
   return [
     ...results,
     control.txFactory.createTxUpdateDoc(departments.class.Order, tx.objectSpace, tx.objectId, {
       stages,
       number,
       current: 0,
-      state: 'active'
+      state: pending ? 'pending' : 'active'
     })
   ]
 }
@@ -1944,6 +1946,37 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
   let current = order.current
   let state = order.state
   switch (action.kind) {
+    case 'scan':
+      // Only kept in the history: who scanned the order's QR code and when.
+      return []
+    case 'start': {
+      if (order.state !== 'pending' || index !== 0) return []
+      stage.status = 'active'
+      stage.startedOn = now
+      current = 0
+      state = 'active'
+      if (stage.assignee === undefined) {
+        const picked = await autoAssignee(control, stage.department)
+        if (picked !== undefined) {
+          stage.assignee = picked
+          results.push(control.txFactory.createTxCreateDoc(departments.class.OrderAction, tx.objectSpace, {
+            order: order._id,
+            kind: 'assign',
+            stage: stage.id,
+            actor: systemAccountUuid as AccountUuid,
+            assignee: picked,
+            auto: true
+          }))
+        }
+      }
+      if (stage.assignee !== undefined) {
+        await notifyOrder(control, results, tx, order, [stage.assignee], departments.string.OrderAssigned,
+          `${title}\n${stage.name}：由你负责（流程已开始）`, `${stage.name}: you are in charge (the order has started)`)
+      }
+      await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderHandedOver,
+        `${title}\n流程已开始`, 'The order has started')
+      break
+    }
     case 'assign':
       stage.assignee = action.assignee
       if (action.assignee !== undefined) {

@@ -110,3 +110,19 @@ test('approval and rejection are limited to the selected approver and owner', ()
   expect(canOrderAction(value, { kind: 'reject', stage: stage.id }, 'boss', true, roleOf)).toBe(false)
   expect(canOrderAction(value, { kind: 'reject', stage: stage.id, reason: '缺资料' }, 'boss', true, roleOf)).toBe(true)
 })
+
+test('a pending order is started by its salesperson or a scanner, and only admins may scan', () => {
+  const pending = { ...order(), state: 'pending', current: 0, stages: order().stages.map((it) => ({ ...it, status: 'waiting' })) }
+  const start = { kind: 'start', stage: 's' }
+  expect(canOrderAction(pending, start, 'wang', false, roleOf)).toBe(true)
+  expect(canOrderAction(pending, start, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(pending, start, 'ming', false, roleOf, { adminSomewhere: true })).toBe(true)
+  expect(canOrderAction(pending, start, 'boss', false, roleOf, { maintainer: true })).toBe(true)
+  expect(canOrderAction(pending, { kind: 'start', stage: 'p' }, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), start, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(pending, { kind: 'complete', stage: 's' }, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'scan', stage: 'p' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { kind: 'scan', stage: 'p' }, 'ming', false, roleOf, { adminSomewhere: true })).toBe(true)
+  expect(canCreateOrder({ salesOwner: 'wang', state: 'pending' }, 'wang', false, true)).toBe(true)
+  expect(canCreateOrder({ salesOwner: 'wang', state: 'done' }, 'wang', false, true)).toBe(false)
+})

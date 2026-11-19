@@ -19739,6 +19739,12 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      jsqr:
+        specifier: 1.4.0
+        version: 1.4.0
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       svelte:
         specifier: ^4.2.20
         version: 4.2.20
@@ -19752,6 +19758,9 @@ importers:
       '@types/node':
         specifier: ^22.18.1
         version: 22.19.0
+      '@types/qrcode':
+        specifier: 1.5.5
+        version: 1.5.5
       sass:
         specifier: ^1.80.0
         version: 1.93.3
@@ -47008,6 +47017,9 @@ packages:
   '@types/pug@2.0.10':
     resolution: {integrity: sha512-Sk/uYFOBAB7mb74XcpizmH0KOR2Pv3D2Hmrh1Dmy5BmK3MpdSa5kqZcg6EKBdklU0bFXX9gCfzvpnyUehrPIuA==}
 
+  '@types/qrcode@1.5.5':
+    resolution: {integrity: sha512-CdfBi/e3Qk+3Z/fXYShipBT13OJ2fDO2Q2w5CIP5anLTLIndQG9z6P1cnm+8zCWSpm5dnxMFd/uREtb0EXuQzg==}
+
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
 
@@ -50772,6 +50784,9 @@ packages:
 
   jspdf@2.5.2:
     resolution: {integrity: sha512-myeX9c+p7znDWPk0eTrujCzNjT+CXdXyk7YmJq5nD5V7uLLKmSXnlQ/Jn/kuo3X09Op70Apm0rQSnFWyGK8uEQ==}
+
+  jsqr@1.4.0:
+    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   jszip@2.7.0:
     resolution: {integrity: sha512-JIsRKRVC3gTRo2vM4Wy9WBC3TRcfnIZU8k65Phi3izkvPH975FowRYtKGT6PxevA0XnJ/yO8b0QwV0ydVyQwfw==}
@@ -58432,6 +58447,10 @@ snapshots:
 
   '@types/pug@2.0.10': {}
 
+  '@types/qrcode@1.5.5':
+    dependencies:
+      '@types/node': 22.19.0
+
   '@types/qrcode@1.5.6':
     dependencies:
       '@types/node': 22.19.0
@@ -63064,6 +63083,8 @@ snapshots:
       dompurify: 2.5.9
       html2canvas: 1.4.1
 
+  jsqr@1.4.0: {}
+
   jszip@2.7.0:
     dependencies:
       pako: 1.0.11
@@ -63903,7 +63924,7 @@ snapshots:
   node-loader@2.0.0(webpack@5.102.1):
     dependencies:
       loader-utils: 2.0.4
-      webpack: 5.102.1(esbuild@0.25.12)(webpack-cli@5.1.4)
+      webpack: 5.102.1
 
   node-localstorage@2.2.1:
     dependencies:

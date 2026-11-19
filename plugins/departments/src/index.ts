@@ -71,10 +71,11 @@ export interface Order extends Doc {
   salesOwner: AccountUuid
   stages: OrderStage[]
   current: number
-  state: 'active' | 'done'
+  /** pending: created but not started yet (started by hand or by scanning its QR code). */
+  state: 'pending' | 'active' | 'done'
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {

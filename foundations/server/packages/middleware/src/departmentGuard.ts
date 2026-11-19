@@ -539,7 +539,8 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const live = this.departments.filter((d) => !d.archived)
       const ok = canOrderAction(order as unknown as OrderLike, attributes as any, actor, owner, this.roleOf, {
         adminSomewhere: live.some((d) => d.members.admin.includes(actor)),
-        departments: live.map((d) => d._id as string)
+        departments: live.map((d) => d._id as string),
+        maintainer: ctx.contextData.account.role === AccountRole.Maintainer
       })
       if (!ok) forbidden()
       return

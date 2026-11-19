@@ -59,8 +59,14 @@ export function canOrderAction (
   actor: string,
   owner: boolean,
   roleOf: RoleOf,
-  extra: { adminSomewhere?: boolean, departments?: string[] } = {}
+  extra: { adminSomewhere?: boolean, departments?: string[], maintainer?: boolean } = {}
 ): boolean {
+  // Scanning an order's QR code: company admins, department admins and super admins.
+  const scanner = owner || extra.adminSomewhere === true || extra.maintainer === true
+  if (action.kind === 'scan') return scanner && order.stages.some((it) => it.id === action.stage)
+  if (action.kind === 'start') {
+    return order.state === 'pending' && (scanner || order.salesOwner === actor) && order.stages[0]?.id === action.stage
+  }
   if (order.state !== 'active') return false
   const index = order.stages.findIndex((it) => it.id === action.stage)
   const stage = order.stages[index]
@@ -124,6 +130,8 @@ export function canCreateOrder (
 ): boolean {
   if (!owner && !worksSomewhere) return false
   if (!owner && attributes.salesOwner !== actor) return false
+  // A new order runs at once, or waits until someone starts it (for example by scanning its QR code).
+  if (attributes.state !== undefined && attributes.state !== 'active' && attributes.state !== 'pending') return false
   const stages = attributes.stages
   // Stages, number and progress are filled in by the system from the current flow.
   return (stages === undefined || (Array.isArray(stages) && stages.length === 0)) && (attributes.current ?? 0) === 0
