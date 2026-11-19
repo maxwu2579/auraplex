@@ -23,6 +23,8 @@
   import MemberModulePermissions from './MemberModulePermissions.svelte'
   import setting from '../plugin'
   import { getAccountClient } from '../utils'
+  import { translate } from '@hcengineering/platform'
+  import { languageStore } from '@hcengineering/ui'
   import { Analytics } from '@hcengineering/analytics'
 
   const query = createQuery()
@@ -74,7 +76,7 @@
       if (!(await ops.commit()).result) throw new Error('Department membership was not saved')
       editingPerson = undefined
     } catch {
-      departmentError = '未能保存。请确认你有权调整该部门的成员和角色，或刷新后再试。'
+      departmentError = await translate(setting.string.MemberPageMemberUpdateFailed, {}, $languageStore)
     } finally {
       departmentBusy = false
     }
@@ -235,16 +237,16 @@
 
   </Header>
   <div class="member-filters">
-    <label>姓名 / 邮箱 <SearchInput bind:value={search} /></label>
-    <label>部门
+    <label><Label label={setting.string.MemberPageNameOrEmail} /> <SearchInput bind:value={search} /></label>
+    <label><Label label={setting.string.MemberPageDepartment} />
       <select bind:value={departmentFilter}>
-        <option value="">全部部门</option>
+        <option value=""><Label label={setting.string.MemberPageAllDepartments} /></option>
         {#each departmentRows as row (row.doc._id)}<option value={row.doc._id}>{row.name}</option>{/each}
       </select>
     </label>
-    <label>公司级角色
+    <label><Label label={setting.string.MemberPageCompanyRole} />
       <select bind:value={roleFilter}>
-        <option value="">全部角色</option>
+        <option value=""><Label label={setting.string.MemberPageAllRoles} /></option>
         {#each items as item (item.id)}<option value={item.id}><Label label={item.label} /></option>{/each}
       </select>
     </label>
@@ -253,12 +255,12 @@
   <div class="hulyComponent-content__column content member-list">
     <Scroller align={'center'} padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
       <div class="hulyComponent-content">
-        <small>公司级角色。部门里的管理员/主管在'部门'列里设。</small>
+        <small><Label label={setting.string.MemberPageCompanyRoleHint} /></small>
         <div class="member-columns p-2">
           <strong><Label label={setting.string.Members} /></strong>
           <strong><Label label={setting.string.Role} /></strong>
           <strong><Label label={departmentLabel} /></strong>
-          <strong>权限</strong>
+          <strong><Label label={setting.string.MemberPagePermissions} /></strong>
         </div>
         {#each filteredEmployees.slice(0, visibleCount) as employee (employee._id)}
           {@const personUuid = employee.personUuid ?? undefined}
@@ -296,23 +298,23 @@
                   <Button kind="regular" size="small" on:click={() => {
                     editingPerson = editingPerson === personUuid ? undefined : personUuid
                     chooseDepartment('', personUuid)
-                  }}><span slot="content">编辑部门</span></Button>
+                  }}><span slot="content"><Label label={setting.string.MemberPageEditDepartment} /></span></Button>
                 {/if}
                 {#if editingPerson === personUuid}
                   <div class="department-editor">
-                    <label>部门
+                    <label><Label label={setting.string.MemberPageDepartment} />
                       <select value={selectedDepartment} disabled={departmentBusy}
                         on:change={(event) => chooseDepartment(event.currentTarget.value, personUuid)}>
-                        <option value="">选择部门</option>
+                        <option value=""><Label label={setting.string.MemberPageChooseDepartment} /></option>
                         {#each editableDepartments as row (row.doc._id)}
                           <option value={row.doc._id}>{row.name}</option>
                         {/each}
                       </select>
                     </label>
                     {#if selectedRow}
-                      <label>角色
+                      <label><Label label={setting.string.MemberPageRole} />
                         <select bind:value={selection} disabled={departmentBusy}>
-                          <option value="">不在此部门</option>
+                          <option value=""><Label label={setting.string.MemberPageNotInDepartment} /></option>
                           {#each roleFields as field, i}
                             <option value={field} disabled={!roleSelectable(field) && field !== selection}>
                               <Label label={departmentRoleLabel(roleLabels[i])} />
@@ -321,24 +323,24 @@
                         </select>
                       </label>
                       <Button kind="regular" size="small" disabled={departmentBusy}
-                        on:click={() => saveDepartment(personUuid)}><span slot="content">保存</span></Button>
+                        on:click={() => saveDepartment(personUuid)}><span slot="content"><Label label={setting.string.MemberPageSave} /></span></Button>
                     {/if}
                     {#if departmentError}<span role="alert">{departmentError}</span>{/if}
                   </div>
                 {/if}
               </div>
               <Button kind="regular" size="small" on:click={() => { permissionPerson = personUuid }}>
-                <span slot="content">权限</span>
+                <span slot="content"><Label label={setting.string.MemberPagePermissions} /></span>
               </Button>
             </div>
           {/if}
         {:else}
-          <p>没有符合筛选条件的成员。</p>
+          <p><Label label={setting.string.MemberPageNoMembers} /></p>
         {/each}
         {#if visibleCount < filteredEmployees.length}
           {#key visibleCount}
             <div use:loadOnScroll>
-              <Button kind="regular" on:click={() => { visibleCount += 50 }}><span slot="content">加载更多</span></Button>
+              <Button kind="regular" on:click={() => { visibleCount += 50 }}><span slot="content"><Label label={setting.string.MemberPageLoadMore} /></span></Button>
             </div>
           {/key}
         {/if}

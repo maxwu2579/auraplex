@@ -6,9 +6,10 @@
     canChangeDepartmentModuleException, departmentModuleGrantClass, departmentModuleSettingsClass,
     departmentModuleSettingsId, effectiveDepartmentModules, normalizeModuleExtra, getCurrentAccount
   } from '@hcengineering/core'
-  import type { IntlString } from '@hcengineering/platform'
+  import { translate, type IntlString } from '@hcengineering/platform'
+  import setting from '../plugin'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { Button, Label } from '@hcengineering/ui'
+  import { Button, Label, languageStore, Toggle } from '@hcengineering/ui'
   import { createEventDispatcher } from 'svelte'
 
   export let person: AccountUuid
@@ -67,11 +68,11 @@
   $: final = effectiveDepartmentModules(person, role === AccountRole.Owner, enabled, departments, { extra, blocked }, companyModuleDefault(defaults, role))
   $: ceiling = effectiveDepartmentModules(actor.uuid, owner, true, departments, actorGrant, companyModuleDefault(defaults, actor.role))
   const roleOptions = [
-    { key: 'admin', label: '管理员' }, { key: 'supervisor', label: '主管' },
-    { key: 'employee', label: '员工' }, { key: 'reader', label: '访客' }
+    { key: 'admin', label: setting.string.MemberPageAdministrator }, { key: 'supervisor', label: setting.string.MemberPageSupervisor },
+    { key: 'employee', label: setting.string.MemberPageStaff }, { key: 'reader', label: setting.string.MemberPageGuest }
   ] as const
   const finalLevels: Array<{ level: ModuleLevel, label: string }> = [
-    { level: 'edit', label: '能编辑' }, { level: 'view', label: '只能看' }, { level: 'none', label: '不能用' }
+    { level: 'edit', label: setting.string.MemberPageCanEdit }, { level: 'view', label: setting.string.MemberPageViewOnly }, { level: 'none', label: setting.string.MemberPageUnavailable }
   ]
   $: exceptionCount = new Set([...Object.keys(extra), ...blocked]).size
   $: sources = selectedDepartments.map((dept) => ({
@@ -80,10 +81,10 @@
     access: effectiveDepartmentModules(person, false, true, [dept])
   }))
 
-  function levelText (alias: string, level: ModuleLevel): string {
-    if (level === 'none') return '不能用'
-    if (!ownedModules.has(alias)) return '能用'
-    return level === 'edit' ? '能编辑' : '只能看'
+  function levelText (alias: string, level: ModuleLevel): IntlString {
+    if (level === 'none') return setting.string.MemberPageUnavailable
+    if (!ownedModules.has(alias)) return setting.string.MemberPageAvailable
+    return level === 'edit' ? setting.string.MemberPageCanEdit : setting.string.MemberPageViewOnly
   }
 
   function changeExtra (alias: string, value: string): void {
@@ -96,7 +97,7 @@
     if (!editable || !loaded || busy) return
     error = ''
     if (!owner && !canChangeDepartmentModuleException(actor.uuid, person, departments, ceiling, original, { extra, blocked })) {
-      error = '只能修改自己管理的部门成员，且不能超出可授予的模块权限。'
+      error = await translate(setting.string.MemberPageGrantScope, {}, $languageStore)
       return
     }
     busy = true
@@ -112,23 +113,23 @@
       if (!(await ops.commit()).result) throw new Error('Could not save module permissions')
       dispatch('close')
     } catch {
-      error = '保存失败。请检查权限，或关闭后重新打开再试。'
+      error = await translate(setting.string.MemberPageGrantFailed, {}, $languageStore)
     } finally {
       busy = false
     }
   }
 </script>
 
-<aside aria-label="成员模块权限" class="permission-panel">
+<aside aria-labelledby="member-permission-title" class="permission-panel">
   <header>
-    <h3>{name} · 权限</h3>
-    <Button kind="regular" on:click={() => dispatch('close')}><span slot="content">关闭</span></Button>
+    <h3 id="member-permission-title">{name} · <Label label={setting.string.MemberPagePermissions} /></h3>
+    <Button kind="regular" on:click={() => dispatch('close')}><span slot="content"><Label label={setting.string.MemberPageClose} /></span></Button>
   </header>
-  <small>{enabled ? '已启用按部门控制模块。' : '按部门控制模块未开启，以下配置在启用后生效。'}</small>
-  <section aria-label="最终权限" class="result">
+  <small><Label label={enabled ? setting.string.MemberPageControlEnabled : setting.string.MemberPageControlDisabled} /></small>
+  <section  class="result">
     {#each finalLevels as { level, label }}
       <div class="result-row">
-        <strong>{label}</strong>
+        <strong><Label {label} /></strong>
         <div class="tags">
           {#each apps.filter(({ alias }) => final(alias) === level) as app (app.alias)}
             <span class="tag"><Label label={app.label} /></span>
@@ -138,44 +139,44 @@
     {/each}
   </section>
   <details>
-    <summary>来自部门</summary>
+    <summary><Label label={setting.string.MemberPageFromDepartments} /></summary>
     {#each sources as source}
       <details class="department-source">
-        <summary>{source.name}（{source.roles.join(' / ')}）</summary>
+        <summary>{source.name}（{#each source.roles as role, index}{index > 0 ? ' / ' : ''}<Label label={role} />{/each}）</summary>
         <ul>
           {#each apps.filter(({ alias }) => source.access(alias) !== 'none') as app (app.alias)}
-            <li><Label label={app.label} /> · {levelText(app.alias, source.access(app.alias))}</li>
-          {:else}<li>没有可用模块</li>{/each}
+            <li><Label label={app.label} /> · <Label label={levelText(app.alias, source.access(app.alias))} /></li>
+          {:else}<li><Label label={setting.string.MemberPageNoModules} /></li>{/each}
         </ul>
       </details>
-    {:else}<p>{companyModuleDefault(defaults, role) === undefined ? '未加入部门' :
-      companyModuleRole(role) === 'maintainer' ? '来自公司默认（管理员）' : '来自公司默认（员工）'}</p>{/each}
+    {:else}<p><Label label={companyModuleDefault(defaults, role) === undefined ? setting.string.MemberPageNoDepartment :
+      companyModuleRole(role) === 'maintainer' ? setting.string.MemberPageCompanyAdminDefault : setting.string.MemberPageCompanyStaffDefault} /></p>{/each}
   </details>
   <details>
-    <summary>个人额外 / 屏蔽（{exceptionCount}）</summary>
+    <summary><Label label={setting.string.MemberPageExceptions} params={{ count: exceptionCount }} /></summary>
   {#if isConfigured && loaded}
     <table>
-      <thead><tr><th>模块</th><th>额外给</th><th>单独关掉</th></tr></thead>
+      <thead><tr><th><Label label={setting.string.MemberPageModule} /></th><th><Label label={setting.string.MemberPageExtra} /></th><th><Label label={setting.string.MemberPageBlock} /></th></tr></thead>
       <tbody>
         {#each apps as app (app.alias)}
           <tr>
             <th><Label label={app.label} /></th>
-            <td><select aria-label={'额外给 ' + app.alias} value={extra[app.alias] ?? ''} disabled={!editable || busy}
+            <td><select aria-label={app.alias} value={extra[app.alias] ?? ''} disabled={!editable || busy}
               on:change={(event) => changeExtra(app.alias, event.currentTarget.value)}>
-              <option value="">无</option>
+              <option value=""><Label label={setting.string.MemberPageNoExtra} /></option>
               {#if ownedModules.has(app.alias) || extra[app.alias] === 'view'}
-                <option value="view" disabled={ceiling(app.alias) === 'none'}>只能看</option>
+                <option value="view" disabled={ceiling(app.alias) === 'none'}><Label label={setting.string.MemberPageViewOnly} /></option>
               {/if}
-              <option value="edit" disabled={ceiling(app.alias) !== 'edit'}>{ownedModules.has(app.alias) ? '能编辑' : '能用'}</option>
+              <option value="edit" disabled={ceiling(app.alias) !== 'edit'}><Label label={ownedModules.has(app.alias) ? setting.string.MemberPageCanEdit : setting.string.MemberPageAvailable} /></option>
             </select></td>
-            <td><input type="checkbox" aria-label={'单独关掉 ' + app.alias} value={app.alias} bind:group={blocked}
-              disabled={!editable || busy} /></td>
+            <td><Toggle on={blocked.includes(app.alias)} disabled={!editable || busy}
+              on:change={(event) => { blocked = event.detail ? [...new Set([...blocked, app.alias])] : blocked.filter((alias) => alias !== app.alias) }} /></td>
           </tr>
         {/each}
       </tbody>
     </table>
     {#if editable}
-      <Button kind="regular" disabled={busy} on:click={save}><span slot="content">保存个人例外</span></Button>
+      <Button kind="regular" disabled={busy} on:click={save}><span slot="content"><Label label={setting.string.MemberPageSaveExceptions} /></span></Button>
     {/if}
   {/if}
   {#if error}<p role="alert">{error}</p>{/if}

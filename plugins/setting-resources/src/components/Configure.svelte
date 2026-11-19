@@ -23,7 +23,7 @@
     PluginConfigurationCard
   } from '@hcengineering/presentation'
   import ratingPlugin, { getRaiting, type PersonRating } from '@hcengineering/rating'
-  import { getEmbeddedLabel } from '@hcengineering/platform'
+  import { type IntlString } from '@hcengineering/platform'
   import { Breadcrumb, Button, Header, Label, Scroller } from '@hcengineering/ui'
   import setting from '../plugin'
 
@@ -53,10 +53,10 @@
       saving = false
     }
   }
-  const filters: Array<{ id: 'all' | 'on' | 'off', label: string }> = [
-    { id: 'all', label: '全部' },
-    { id: 'on', label: '已开启' },
-    { id: 'off', label: '已关闭' }
+  const filters: Array<{ id: 'all' | 'on' | 'off', label: IntlString }> = [
+    { id: 'all', label: setting.string.MemberPageAll },
+    { id: 'on', label: setting.string.MemberPageEnabled },
+    { id: 'off', label: setting.string.MemberPageDisabled }
   ]
 
   const sysQuery = createQuery()
@@ -84,17 +84,17 @@
     <div class="toolbar px-4">
       {#each filters as it}
         <Button
-          label={getEmbeddedLabel(it.label)}
+          label={it.label}
           kind={filter === it.id ? 'primary' : 'regular'}
           on:click={() => { filter = it.id }}
         />
       {/each}
       <div class="flex-grow" />
       {#if pending.size > 0}
-        <span class="hint">有 {pending.size} 项改动，保存后网站会刷新一次</span>
-        <Button label={getEmbeddedLabel('取消')} kind={'regular'} disabled={saving} on:click={() => { pending = new Map() }} />
+        <span class="hint"><Label label={setting.string.MemberPagePending} params={{ count: pending.size }} /></span>
+        <Button label={setting.string.MemberPageCancel} kind={'regular'} disabled={saving} on:click={() => { pending = new Map() }} />
       {/if}
-      <Button label={getEmbeddedLabel('保存')} kind={'primary'} disabled={saving || pending.size === 0} on:click={save} />
+      <Button label={setting.string.MemberPageSave} kind={'primary'} disabled={saving || pending.size === 0} on:click={save} />
     </div>
     <Scroller padding={'var(--spacing-3)'} bottomPadding={'var(--spacing-3)'}>
       <div class="modules-grid">
