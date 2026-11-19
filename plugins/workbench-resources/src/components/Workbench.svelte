@@ -1183,7 +1183,7 @@
               props={{ ...currentView.componentProps, currentSpace, currentView, workbenchWidth }}
             />
           {:else if blockedModule}
-            <div class="flex-center h-full"><h2>没有权限使用这个模块，请联系部门管理员</h2></div>
+            <div class="flex-center h-full"><h2>{$languageStore === 'zh' ? '没有权限使用这个模块，请联系部门管理员' : 'You do not have access to this module. Please ask your department admin.'}</h2></div>
           {:else if $accessDeniedStore}
             <div class="flex-center h-full">
               <h2><Label label={workbench.string.AccessDenied} /></h2>
