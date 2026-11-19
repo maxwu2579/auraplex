@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import { generateId } from '@hcengineering/core'
@@ -27,7 +28,7 @@
   let completed = false
   let locked = false
   let error = ''
-  const changed = '库存已变化，请关闭后重新计算'
+  const changed = $t('库存已变化，请关闭后重新计算')
   function close (): void {
     if (!busy) dispatch('close')
   }
@@ -86,7 +87,7 @@
       }
       completed = true
     } catch {
-      error = '出库结果无法确认，请关闭窗口后检查库存和流水，再重新计算。'
+      error = $t('出库结果无法确认，请关闭窗口后检查库存和流水，再重新计算。')
       locked = true
     } finally {
       busy = false
@@ -98,7 +99,7 @@
   <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="issue-title">
     <div class="head">
       <h2 id="issue-title"><Label label={materials.string.PageIssue} /></h2>
-      <button on:click={close} disabled={busy} aria-label="关闭">×</button>
+      <button on:click={close} disabled={busy} aria-label={$t('关闭')}>×</button>
     </div>
     {#if completed}
       <p role="status">已出库 {plan.items.length} 项</p>
@@ -108,7 +109,7 @@
         <div class="error" role="alert">
           <strong><Label label={materials.string.PageCantIssue} /></strong>
           {#each plan.blocked as row}<p>
-              {row.code}：需要 {row.required ?? '未知'}，库存 {row.stock ?? '未知'}，缺 {row.shortage ?? '未知'}
+              {row.code}：需要 {row.required ?? $t('未知')}，库存 {row.stock ?? $t('未知')}，缺 {row.shortage ?? $t('未知')}
             </p>{/each}
         </div>
       {/if}
@@ -136,7 +137,7 @@
       {#if plan.skipped.length > 0}<h3><Label label={materials.string.PageSkipped} /></h3>
         <ul>
           {#each plan.skipped as item}<li>
-              {item.row.code !== '' ? item.row.code : '无编号'} · {item.row.name}：{item.reasons.join('；')}
+              {item.row.code !== '' ? item.row.code : $t('无编号')} · {item.row.name}：{item.reasons.join('；')}
             </li>{/each}
         </ul>{/if}
       {#if error !== ''}<p class="error" role="alert">{error}</p>{/if}
@@ -146,7 +147,7 @@
           class="primary"
           on:click={submit}
           disabled={busy || locked || plan.blocked.length > 0 || plan.items.length === 0}
-          >{busy ? '正在出库…' : '确认出库'}</button
+          >{busy ? $t('正在出库…') : $t('确认出库')}</button
         >{/if}
     </div>
   </section>

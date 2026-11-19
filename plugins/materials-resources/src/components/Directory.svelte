@@ -16,6 +16,7 @@
 
 -->
 <script lang="ts">
+  import { t } from '../trStore'
   import attachment, { type Photo } from '@hcengineering/attachment'
   import core, { generateId, isOwnerOrMaintainer } from '@hcengineering/core'
   import { type IntlString } from '@hcengineering/platform'
@@ -173,7 +174,7 @@
       m.stock,
       m.minimumStock ?? undefined,
       m.unit,
-      isLowStock(m) ? '是' : '',
+      isLowStock(m) ? $t('是') : '',
       formatDateTime(m.lastMovementOn),
       formatDateTime(m.modifiedOn),
       formatDateTime(m.lastImportedOn),
@@ -182,32 +183,32 @@
     downloadWorkbook(
       createWorkbook([
         {
-          name: '物料库存',
+          name: $t('物料库存'),
           rows: [
             [
-              '编号',
-              '名称',
-              '型号',
-              '品牌',
-              '类别',
-              '组别',
-              '货架',
-              '层',
-              '当前库存',
-              '最低库存',
-              '单位',
-              '低于最低库存',
-              '最后变动时间',
-              '更新时间',
-              '上次导入时间',
-              '备注'
+              $t('编号'),
+              $t('名称'),
+              $t('型号'),
+              $t('品牌'),
+              $t('类别'),
+              $t('组别'),
+              $t('货架'),
+              $t('层'),
+              $t('当前库存'),
+              $t('最低库存'),
+              $t('单位'),
+              $t('低于最低库存'),
+              $t('最后变动时间'),
+              $t('更新时间'),
+              $t('上次导入时间'),
+              $t('备注')
             ],
             ...rows
           ],
           styles: [undefined, ...filtered.map((m) => (isLowStock(m) ? 'red' : undefined))]
         }
       ]),
-      datedFilename('物料库存', '', new Date())
+      datedFilename($t('物料库存'), '', new Date())
     )
     void recordExport(`导出物料库存 Excel（${rows.length} 条）`)
   }
@@ -563,7 +564,7 @@
                   {#await getBlobRef(photo.file, photo.name) then image}<button
                       type="button"
                       class="thumb"
-                      title="点击看大图"
+                      title={$t('点击看大图')}
                       on:click={() => (photoTarget = selected)}><img src={image.src} alt={photo.name} /></button
                     >{/await}
                   <button

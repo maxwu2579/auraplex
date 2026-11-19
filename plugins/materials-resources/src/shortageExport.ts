@@ -3,11 +3,12 @@
 // https://www.eclipse.org/legal/epl-2.0
 import { calculateShortages, type CalculationProduct, type ShortageRow, type Material } from '@hcengineering/materials'
 import { createWorkbook, datedFilename, type Cell, type RowStyle, type Sheet } from './xlsx'
+import { tt } from './tr'
 
 type Stock = Pick<Material, 'normalizedCode' | 'name' | 'stock' | 'rack' | 'level'>
-const names: Record<ShortageRow['status'], string> = { shortage: '缺料', problem: '有问题', enough: '够用' }
+const names: Record<ShortageRow['status'], string> = { shortage: tt('缺料'), problem: tt('有问题'), enough: tt('够用') }
 const colours: Record<ShortageRow['status'], RowStyle> = { shortage: 'red', problem: 'yellow', enough: undefined }
-const headings = ['状态', '编号', '名称', '需要', '库存', '缺多少', '位置（货架 / 层）', '用于产品和装配段', '问题']
+const headings = [tt('状态'), tt('编号'), tt('名称'), tt('需要'), tt('库存'), tt('缺多少'), tt('位置（货架 / 层）'), tt('用于产品和装配段'), tt('问题')]
 function sheetFor (name: string, rows: ShortageRow[]): Sheet {
   return {
     name,
@@ -17,14 +18,14 @@ function sheetFor (name: string, rows: ShortageRow[]): Sheet {
         names[r.status],
         r.code,
         r.name,
-        r.required ?? '未知',
-        r.assumedZero ? '未知（按 0 估算）' : (r.stock ?? '未知'),
-        r.shortage ?? '未知',
+        r.required ?? tt('未知'),
+        r.assumedZero ? tt('未知（按 0 估算）') : (r.stock ?? tt('未知')),
+        r.shortage ?? tt('未知'),
         [r.rack, r.level].filter(Boolean).join(' / '),
         r.uses
           .map(
             (u) =>
-              `${u.product} × ${u.count} / ${u.section !== '' ? u.section : '未指定装配段'}：${u.required ?? '未知'}`
+              `${u.product} × ${u.count} / ${u.section !== '' ? u.section : tt('未指定装配段')}：${u.required ?? tt('未知')}`
           )
           .join('；'),
         r.issues.join('；')
@@ -45,22 +46,22 @@ function byStatus (rows: ShortageRow[]): ShortageRow[] {
 }
 export function createShortageWorkbook (products: CalculationProduct[], materials: Stock[]): Uint8Array {
   const combined = byStatus(calculateShortages(products, materials))
-  const sheets: Sheet[] = [sheetFor('物料明细', combined)]
+  const sheets: Sheet[] = [sheetFor(tt('物料明细'), combined)]
   if (products.length === 1) {
     sheets.push(
       sheetFor(
-        '缺料表',
+        tt('缺料表'),
         combined.filter((r) => r.status === 'shortage')
       )
     )
     sheets.push(
       sheetFor(
-        '问题表',
+        tt('问题表'),
         combined.filter((r) => r.status === 'problem')
       )
     )
   } else {
-    const summary: Cell[][] = [['产品', '台数', '缺料项', '问题项', '够用项']]
+    const summary: Cell[][] = [[tt('产品'), tt('台数'), tt('缺料项'), tt('问题项'), tt('够用项')]]
     for (const product of products) {
       const rows = calculateShortages([product], materials)
       summary.push([
@@ -71,7 +72,7 @@ export function createShortageWorkbook (products: CalculationProduct[], material
         rows.filter((r) => r.status === 'enough').length
       ])
     }
-    sheets.push({ name: '汇总', rows: summary })
+    sheets.push({ name: tt('汇总'), rows: summary })
     for (const product of products) {
       sheets.push(sheetFor(product.name, byStatus(calculateShortages([product], materials))))
     }
@@ -80,5 +81,5 @@ export function createShortageWorkbook (products: CalculationProduct[], material
 }
 export function shortageFilename (products: CalculationProduct[], date: Date): string {
   const title = products.map((p) => p.name).join('_')
-  return datedFilename('缺料计算', title !== '' ? title : '产品', date)
+  return datedFilename(tt('缺料计算'), title !== '' ? title : tt('产品'), date)
 }

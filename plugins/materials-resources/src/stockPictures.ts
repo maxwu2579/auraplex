@@ -3,6 +3,7 @@
 // https://www.eclipse.org/legal/epl-2.0
 
 import { strFromU8, unzipSync } from 'fflate'
+import { tt } from './tr'
 
 export interface StockPicture {
   row: number
@@ -16,9 +17,9 @@ const MAX_XML = 50_000_000
 const imageExtension = /\.(png|jpe?g|gif|bmp)$/i
 
 function xml (bytes: Uint8Array | undefined): Document {
-  if (bytes === undefined) throw new Error('Excel 图片索引缺少必要文件')
+  if (bytes === undefined) throw new Error(tt('Excel 图片索引缺少必要文件'))
   const result = new DOMParser().parseFromString(strFromU8(bytes), 'application/xml')
-  if (result.getElementsByTagName('parsererror').length > 0) throw new Error('Excel 图片索引格式无效')
+  if (result.getElementsByTagName('parsererror').length > 0) throw new Error(tt('Excel 图片索引格式无效'))
   return result
 }
 function descendants (node: Document | Element, name: string): Element[] {
@@ -35,7 +36,7 @@ function resolve (source: string, target: string): string {
   const prefix = target.startsWith('/') ? target : `${source.slice(0, source.lastIndexOf('/') + 1)}${target}`
   for (const item of prefix.split('/')) {
     if (item === '..') {
-      if (parts.length === 0) throw new Error('Excel 图片链接无效')
+      if (parts.length === 0) throw new Error(tt('Excel 图片链接无效'))
       parts.pop()
     } else if (item !== '' && item !== '.') parts.push(item)
   }
@@ -68,7 +69,7 @@ function unpack (data: Uint8Array, names: Set<string>, found?: Set<string>): Rec
     filter: (entry) => {
       found?.add(entry.name)
       if (!names.has(entry.name)) return false
-      if (entry.originalSize > MAX_XML) throw new Error('Excel 图片索引文件过大')
+      if (entry.originalSize > MAX_XML) throw new Error(tt('Excel 图片索引文件过大'))
       return true
     }
   })
@@ -84,7 +85,7 @@ export function indexStockPictures (data: Uint8Array): StockPicture[] {
   )
   const sheetId = sheet?.getAttributeNS(REL, 'id')
   const sheetPart = workbookLinks.find((item) => item.id === sheetId)?.target
-  if (sheetPart === undefined) throw new Error('库存工作表链接无效')
+  if (sheetPart === undefined) throw new Error(tt('库存工作表链接无效'))
   const linkByKind = (kind: string): string | undefined => workbookLinks.find((item) => item.kind === kind)?.target
   const meta = linkByKind('sheetMetadata')
   const values = linkByKind('rdRichValue')
@@ -189,7 +190,7 @@ export function indexStockPictures (data: Uint8Array): StockPicture[] {
     }
   }
   for (const part of drawingParts) {
-    if (drawings[part] === undefined) throw new Error('Excel 浮动图片索引缺失')
+    if (drawings[part] === undefined) throw new Error(tt('Excel 浮动图片索引缺失'))
     const targets = relationships(drawings[relPath(part)], part)
     for (const anchor of [
       ...descendants(xml(drawings[part]), 'twoCellAnchor'),

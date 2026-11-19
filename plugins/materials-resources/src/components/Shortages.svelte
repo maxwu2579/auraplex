@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import materials, {
@@ -61,7 +62,7 @@
   $: ready = productsReady && materialsReady && linesReady
   $: stale = results !== undefined && calculatedRevision !== revision
   $: visible = results?.filter((row) => filter === 'all' || row.status === filter) ?? []
-  const label: Record<ShortageStatus, string> = { shortage: '缺料', problem: '有问题', enough: '够用' }
+  const label: Record<ShortageStatus, string> = { shortage: $t('缺料'), problem: $t('有问题'), enough: $t('够用') }
   $: byId = new Map(products.map((p) => [p._id as string, p]))
   // Material by code, for the "查看" photo button (first one wins if a code is in stock twice).
   $: byCode = materialsList.reduce((map, m) => {
@@ -98,9 +99,9 @@
   function calculate (): void {
     error = ''
     try {
-      if (!ready) throw new Error('数据仍在加载，请稍候。')
+      if (!ready) throw new Error($t('数据仍在加载，请稍候。'))
       const chosen = chosenProducts
-      if (chosen.length === 0 || chosen.length !== selected.length) throw new Error('请选择有效的产品。')
+      if (chosen.length === 0 || chosen.length !== selected.length) throw new Error($t('请选择有效的产品。'))
       const snapshot: CalculationProduct[] = chosen.map((p) => {
         const raw = (counts[p._id] ?? '1').trim()
         if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
@@ -131,7 +132,7 @@
       calculatedRevision = revision
     } catch (e) {
       results = undefined
-      error = e instanceof Error ? e.message : '计算失败。'
+      error = e instanceof Error ? e.message : $t('计算失败。')
     }
   }
   function chooseExport (id: string, checked: boolean): void {
@@ -148,7 +149,7 @@
         shortageFilename(exportProducts, new Date())
       )
     } catch (e) {
-      error = e instanceof Error ? e.message : '导出失败。'
+      error = e instanceof Error ? e.message : $t('导出失败。')
     }
   }
 </script>
@@ -160,8 +161,8 @@
   <div class="picker">
     <input
       class="search"
-      placeholder="添加产品：输入关键词搜索，点击结果添加（回车添加第一个）"
-      aria-label="搜索产品"
+      placeholder={$t('添加产品：输入关键词搜索，点击结果添加（回车添加第一个）')}
+      aria-label={$t('搜索产品')}
       bind:value={productSearch}
       disabled={!ready || products.length === 0}
       on:focus={() => (pickerOpen = true)}
@@ -180,7 +181,7 @@
             }}>{p.name}<span class="hint">{p.lines ?? 0} 行 BOM</span></button
           >
         {:else}
-          <div class="none">{keyword === '' ? '所有产品都已添加' : '没有匹配的产品'}</div>
+          <div class="none">{keyword === '' ? $t('所有产品都已添加') : $t('没有匹配的产品')}</div>
         {/each}
       </div>
     {/if}
@@ -199,7 +200,7 @@
             }}
           /><button
             class="remove"
-            title="移除"
+            title={$t('移除')}
             on:click={() => {
               remove(p._id)
             }}><Label label={materials.string.PageRemove} /></button
@@ -210,16 +211,16 @@
   {/if}
   <div class="actions">
     <button disabled={!ready || selected.length === 0} on:click={calculate}
-      >{results === undefined ? '计算' : '重新计算'}</button
+      >{results === undefined ? $t('计算') : $t('重新计算')}</button
     >
     <button disabled={results === undefined || stale} on:click={() => (issuing = true)}><Label label={materials.string.PageIssue} /></button>
     <button disabled={results === undefined || stale || exportProducts.length === 0} on:click={download}
       >{calculatedProducts.length > 1 && results !== undefined && !stale
         ? `导出选中的 ${exportProducts.length} 个产品`
-        : '导出 Excel'}</button
+        : $t('导出 Excel')}</button
     >
     <label
-      >状态筛选 <select bind:value={filter}
+      >{$t('状态筛选')} <select bind:value={filter}
         ><option value="all"><Label label={materials.string.PageAll} /></option><option value="shortage"><Label label={materials.string.PageShortage} /></option><option value="problem"><Label label={materials.string.PageProblem} /></option
         ><option value="enough"><Label label={materials.string.PageEnough} /></option></select
       ></label
@@ -227,7 +228,7 @@
   </div>
   {#if results !== undefined && !stale && calculatedProducts.length > 1}
     <div class="export-choice">
-      <span>导出哪些产品（选中的会合并成一份，用量相加）：</span>
+      <span>{$t('导出哪些产品（选中的会合并成一份，用量相加）：')}</span>
       {#each calculatedProducts as p (p.id)}
         <label
           ><input
@@ -242,7 +243,7 @@
     </div>
   {/if}
   {#if error !== ''}<p role="alert" class="error">{error}</p>{/if}
-  {#if stale}<p role="status" class="error">产品、BOM、库存或选择已改变，请点击“重新计算”后查看和导出最新结果。</p>{/if}
+  {#if stale}<p role="status" class="error">{$t('产品、BOM、库存或选择已改变，请点击“重新计算”后查看和导出最新结果。')}</p>{/if}
   {#if results !== undefined && !stale}
     <p>
       缺料 {results.filter((r) => r.status === 'shortage').length} 项 · 有问题 {results.filter(
@@ -264,16 +265,16 @@
             >
               <td>{label[row.status]}</td><td>{row.code !== '' ? row.code : '—'}</td><td
                 >{row.name !== '' ? row.name : '—'}</td
-              ><td>{row.required ?? '未知'}</td><td>{row.assumedZero ? '未知（按 0 估算）' : (row.stock ?? '未知')}</td
-              ><td>{row.shortage ?? '未知'}</td>
+              ><td>{row.required ?? $t('未知')}</td><td>{row.assumedZero ? $t('未知（按 0 估算）') : (row.stock ?? $t('未知'))}</td
+              ><td>{row.shortage ?? $t('未知')}</td>
               <td
                 >{[row.rack, row.level].filter(Boolean).join(' / ') !== ''
                   ? [row.rack, row.level].filter(Boolean).join(' / ')
                   : '—'}</td
               ><td
                 >{#each row.uses as use}<div>
-                    {use.product} × {use.count} / {use.section !== '' ? use.section : '未指定装配段'}：{use.required ??
-                      '未知'}
+                    {use.product} × {use.count} / {use.section !== '' ? use.section : $t('未指定装配段')}：{use.required ??
+                      $t('未知')}
                   </div>{/each}</td
               ><td>{row.issues.join('；')}</td>
               <td

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import contact, { formatName, type Employee } from '@hcengineering/contact'
@@ -24,7 +25,7 @@
       selected = settings?.recipients ?? []
       loaded = true
     } catch {
-      error = '读取设置失败，请重试。'
+      error = $t('读取设置失败，请重试。')
     } finally {
       busy = false
     }
@@ -47,7 +48,7 @@
       }
       dispatch('close')
     } catch {
-      error = '保存失败，请检查权限后重试。'
+      error = $t('保存失败，请检查权限后重试。')
     } finally {
       busy = false
     }

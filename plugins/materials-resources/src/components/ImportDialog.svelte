@@ -4,6 +4,7 @@
 // https://www.eclipse.org/legal/epl-2.0
 -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
@@ -44,7 +45,7 @@
   let elapsed = 0
   // Off by default: stock is kept in Huly. On during the Excel period: Excel stock wins, as a stocktake record.
   let overrideStock = false
-  const OVERRIDE_REASON = 'Excel 导入覆盖'
+  const OVERRIDE_REASON = $t('Excel 导入覆盖')
   interface StockDiff {
     material: Material
     excel: number
@@ -63,7 +64,7 @@
   }
   function stockNote (item: { preserveStock: boolean, existing?: Material, stock?: number }, override: boolean): string {
     if (!item.preserveStock || item.existing === undefined || item.stock === undefined) return ''
-    if (item.stock === item.existing.stock) return ' 已有流水，库存与 Excel 相同'
+    if (item.stock === item.existing.stock) return $t(' 已有流水，库存与 Excel 相同')
     const from = formatQuantity(item.existing.stock)
     const to = formatQuantity(item.stock)
     return override
@@ -85,20 +86,20 @@
       m.name,
       location(m),
       m.stock,
-      formatDateTime(m.lastImportedOn) ?? '从未导入'
+      formatDateTime(m.lastImportedOn) ?? $t('从未导入')
     ])
     downloadWorkbook(
       createWorkbook([
         {
-          name: '库存不一致',
-          rows: [['编号', '名称', '位置（货架 / 层）', '系统库存', 'Excel 库存', '差（Excel − 系统）'], ...diffRows]
+          name: $t('库存不一致'),
+          rows: [[$t('编号'), $t('名称'), $t('位置（货架 / 层）'), $t('系统库存'), $t('Excel 库存'), $t('差（Excel − 系统）')], ...diffRows]
         },
         {
-          name: '这次没有更新到',
-          rows: [['编号', '名称', '位置（货架 / 层）', '当前库存', '上次导入时间'], ...missingRows]
+          name: $t('这次没有更新到'),
+          rows: [[$t('编号'), $t('名称'), $t('位置（货架 / 层）'), $t('当前库存'), $t('上次导入时间')], ...missingRows]
         }
       ]),
-      datedFilename('库存核对清单', '', new Date(report.at))
+      datedFilename($t('库存核对清单'), '', new Date(report.at))
     )
   }
   $: preview = previewStockRows(rows, existing, withMovements)
@@ -109,13 +110,13 @@
     (x) => selected.has(x.row.row) && x.issues.length === 0 && x.existing !== undefined
   ).length
   const names: Record<string, string> = {
-    missingCode: '缺少编号',
-    invalidCode: '编号不是文本或包含公式',
-    missingName: '缺少名称',
-    duplicateCode: '编号重复',
-    blankStock: '库存空白',
-    invalidStock: '库存无效',
-    invalidMinimum: '最低库存无效'
+    missingCode: $t('缺少编号'),
+    invalidCode: $t('编号不是文本或包含公式'),
+    missingName: $t('缺少名称'),
+    duplicateCode: $t('编号重复'),
+    blankStock: $t('库存空白'),
+    invalidStock: $t('库存无效'),
+    invalidMinimum: $t('最低库存无效')
   }
 
   async function choose (event: Event): Promise<void> {
@@ -128,14 +129,14 @@
     loaded = false
     busy = true
     started = Date.now()
-    progress = '正在读取 Excel 文件……'
+    progress = $t('正在读取 Excel 文件……')
     await tick()
     try {
       archive = new Uint8Array(await file.arrayBuffer())
-      progress = '正在识别物料及照片，请稍候……'
+      progress = $t('正在识别物料及照片，请稍候……')
       await tick()
       rows = readStockWorkbook(archive)
-      progress = '正在核对照片关联，请稍候……'
+      progress = $t('正在核对照片关联，请稍候……')
       await tick()
       pictures = indexStockPictures(archive)
       picturesByRow = new Map()
@@ -170,7 +171,7 @@
       )
       loaded = true
     } catch (e) {
-      error = e instanceof Error ? e.message : '读取失败'
+      error = e instanceof Error ? e.message : $t('读取失败')
     } finally {
       elapsed = (Date.now() - started) / 1000
       busy = false
@@ -199,7 +200,7 @@
             withMovements = new Set(withMovements)
           })
           .catch(() => {
-            error = '无法读取物料流水，请重新选择文件预览。'
+            error = $t('无法读取物料流水，请重新选择文件预览。')
             loaded = false
           })
       }
@@ -227,7 +228,7 @@
     let overridden = 0
     const chosen = preview.filter((x) => selected.has(x.row.row) && x.issues.length === 0)
     try {
-      if (archive === undefined) throw new Error('请重新选择文件')
+      if (archive === undefined) throw new Error($t('请重新选择文件'))
       for (const entry of chosen) {
         progress = `正在处理物料 ${done + 1} / ${chosen.length}，已保存 ${done} 行，新增照片 ${photosDone} 张`
         await tick()
@@ -358,13 +359,13 @@
 </script>
 
 <div class="overlay" role="presentation">
-  <section class="dialog" role="dialog" aria-modal="true" aria-label="导入库存">
+  <section class="dialog" role="dialog" aria-modal="true" aria-label={$t('导入库存')}>
     <header>
-      <h2>导入库存 Excel（含照片）</h2>
+      <h2>{$t('导入库存 Excel（含照片）')}</h2>
       <button disabled={busy} on:click={() => dispatch('close')}><Label label={materials.string.PageClose} /></button>
     </header>
-    <p>先预览再确认。问题行默认不导入；已有流水的库存默认不覆盖（可在下面勾选用 Excel 覆盖）。</p>
-    <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label="选择库存 Excel" />
+    <p>{$t('先预览再确认。问题行默认不导入；已有流水的库存默认不覆盖（可在下面勾选用 Excel 覆盖）。')}</p>
+    <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label={$t('选择库存 Excel')} />
     {#if busy}<p role="status">{progress}</p>{/if}
     {#if error}<p role="alert" class="error">{error}</p>{/if}
     {#if message}<p>{message}</p>{/if}
@@ -377,12 +378,12 @@
             : ''}。
         </p>
         <p>
-          库存和 Excel 不一致、没有覆盖：<b>{report.diffs.length}</b> 条；系统里有、这次没有更新到的物料：<b
+          {$t('库存和 Excel 不一致、没有覆盖：')}<b>{report.diffs.length}</b> {$t('条；系统里有、这次没有更新到的物料：')}<b
             >{report.missing.length}</b
-          > 条（Excel 里没有，或那一行有问题 / 没勾选）。物料目录里也可以用“导入情况”筛选查看。
+          > {$t('条（Excel 里没有，或那一行有问题 / 没勾选）。物料目录里也可以用“导入情况”筛选查看。')}
         </p>
         <button disabled={report.diffs.length + report.missing.length === 0} on:click={exportReport}
-          >导出核对清单 Excel</button
+          >{$t('导出核对清单 Excel')}</button
         >
       </div>
     {/if}
@@ -398,7 +399,7 @@
         ).length}；关联错误：{pictures.filter((p) => p.problem !== undefined).length}。编号修改后不会猜测照片归属。
       </p>
       {#each pictures.filter((p) => p.problem !== undefined || (originalCodes.get(p.row) ?? '') === '') as picture}
-        <p>第 {picture.row} 行图片：{picture.problem ?? '没有对应物料编号'}</p>
+        <p>第 {picture.row} 行图片：{picture.problem ?? $t('没有对应物料编号')}</p>
       {/each}
       <label class="override"
         ><input type="checkbox" bind:checked={overrideStock} disabled={busy} />
@@ -411,8 +412,8 @@
         <table>
           <thead
             ><tr
-              ><th><Label label={materials.string.PageImport} /></th><th>行</th><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageName} /></th><th>Excel 库存</th><th>现有库存</th><th>最低库存</th
-              ><th><Label label={materials.string.PagePhotos} /></th><th>资料变化</th><th>问题 / 库存差别</th></tr
+              ><th><Label label={materials.string.PageImport} /></th><th>{$t('行')}</th><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageName} /></th><th>{$t('Excel 库存')}</th><th>{$t('现有库存')}</th><th>{$t('最低库存')}</th
+              ><th><Label label={materials.string.PagePhotos} /></th><th>{$t('资料变化')}</th><th>{$t('问题 / 库存差别')}</th></tr
             ></thead
           ><tbody>
             {#each preview as item (item.row.row)}
@@ -429,7 +430,7 @@
                 >
                 <td>{item.row.row}</td><td
                   ><input
-                    aria-label="编号"
+                    aria-label={$t('编号')}
                     disabled={busy}
                     value={item.row.code}
                     on:change={(e) => {
@@ -438,7 +439,7 @@
                   /></td
                 ><td
                   ><input
-                    aria-label="名称"
+                    aria-label={$t('名称')}
                     disabled={busy}
                     value={item.row.name}
                     on:change={(e) => {
@@ -447,7 +448,7 @@
                   /></td
                 ><td
                   ><input
-                    aria-label="库存"
+                    aria-label={$t('库存')}
                     disabled={busy}
                     value={item.row.stock}
                     on:change={(e) => {
@@ -457,7 +458,7 @@
                 ><td>{item.existing?.stock ?? '—'}</td>
                 <td
                   ><input
-                    aria-label="最低库存"
+                    aria-label={$t('最低库存')}
                     disabled={busy}
                     value={item.row.minimum}
                     on:change={(e) => {
@@ -467,7 +468,7 @@
                 ><td
                   >{(picturesByRow.get(item.row.row) ?? []).length} 张{originalCodes.get(item.row.row) !==
                   normalizeCode(item.row.code)
-                    ? '（编号已变，不导入）'
+                    ? $t('（编号已变，不导入）')
                     : ''}</td
                 ><td>
                   {#each importFieldChanges(item.row, item.existing) as change}<div>

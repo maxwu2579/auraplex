@@ -6,6 +6,7 @@ import core, { type Ref, type TxOperations } from '@hcengineering/core'
 import materials, { type Material } from '@hcengineering/materials'
 import { uploadFile } from '@hcengineering/presentation'
 import { extractStockImage } from './photoImport'
+import { tt } from './tr'
 
 /** Adds a content-addressed photo. A concurrent importer cannot attach the same content twice. */
 export async function saveImportedPhoto (
@@ -35,7 +36,7 @@ export async function saveImportedPhoto (
   if (!(await ops.commit()).result) {
     const existing: Photo[] = await client.findAll(attachment.class.Photo, query, { limit: 1 })
     if (existing.length > 0) return false
-    throw new Error('照片保存冲突，请重新预览后重试')
+    throw new Error(tt('照片保存冲突，请重新预览后重试'))
   }
   return true
 }

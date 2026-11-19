@@ -3,6 +3,7 @@
 // https://www.eclipse.org/legal/epl-2.0
 import { strFromU8, unzipSync } from 'fflate'
 import { normalizeCode } from '@hcengineering/materials'
+import { tt } from './tr'
 
 export interface BomImportLine {
   code: string
@@ -22,9 +23,9 @@ export interface BomImportProduct {
 }
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 function xml (data: Uint8Array | undefined): Document {
-  if (data === undefined) throw new Error('Excel 缺少必要文件')
+  if (data === undefined) throw new Error(tt('Excel 缺少必要文件'))
   const result = new DOMParser().parseFromString(strFromU8(data), 'application/xml')
-  if (result.getElementsByTagName('parsererror').length > 0) throw new Error('Excel 文件格式无效')
+  if (result.getElementsByTagName('parsererror').length > 0) throw new Error(tt('Excel 文件格式无效'))
   return result
 }
 function elements (node: Document | Element, tag: string): Element[] {
@@ -34,7 +35,7 @@ function path (target: string): string {
   const stack: string[] = []
   for (const p of (target.startsWith('/') ? target : `xl/${target}`).split('/')) {
     if (p === '..') {
-      if (stack.length === 0) throw new Error('Excel 工作表路径无效')
+      if (stack.length === 0) throw new Error(tt('Excel 工作表路径无效'))
       stack.pop()
     } else if (p !== '' && p !== '.') stack.push(p)
   }
@@ -67,7 +68,7 @@ export function readBomWorkbook (data: Uint8Array): BomImportProduct[] {
     if (normalizedName.includes('TEMPLATE') || name.includes('模板')) continue
     const id = sheet.getAttributeNS(REL, 'id')
     const target = id === null ? undefined : rels.get(id)
-    if (target === undefined) throw new Error('BOM 工作表链接无效')
+    if (target === undefined) throw new Error(tt('BOM 工作表链接无效'))
     const parts = unzipSync(data, { filter: (entry) => entry.name === target })
     const sheetDoc = xml(parts[target])
     let header = false
@@ -135,10 +136,10 @@ export function readBomWorkbook (data: Uint8Array): BomImportProduct[] {
       })
     }
     if (!header || lines.length === 0) continue
-    if (normalizedName === '' || names.has(normalizedName)) throw new Error('产品名称重复或为空，不能安全导入')
+    if (normalizedName === '' || names.has(normalizedName)) throw new Error(tt('产品名称重复或为空，不能安全导入'))
     names.add(normalizedName)
     result.push({ name, normalizedName, lines })
   }
-  if (result.length === 0) throw new Error('未找到包含 BOM 明细的工作表')
+  if (result.length === 0) throw new Error(tt('未找到包含 BOM 明细的工作表'))
   return result
 }

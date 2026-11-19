@@ -5,13 +5,14 @@
 import { unzipSync, strFromU8 } from 'fflate'
 import { normalizeCode } from '@hcengineering/materials'
 import type { StockImportRow } from '@hcengineering/materials'
+import { tt } from './tr'
 
 const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 
 function xml (bytes: Uint8Array | undefined): Document {
-  if (bytes === undefined) throw new Error('Excel 文件缺少必要部分')
+  if (bytes === undefined) throw new Error(tt('Excel 文件缺少必要部分'))
   const doc = new DOMParser().parseFromString(strFromU8(bytes), 'application/xml')
-  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error('Excel 文件格式有误')
+  if (doc.getElementsByTagName('parsererror').length > 0) throw new Error(tt('Excel 文件格式有误'))
   return doc
 }
 function elements (node: Document | Element, name: string): Element[] {
@@ -44,10 +45,10 @@ export function readStockWorkbook (data: Uint8Array): StockImportRow[] {
   const workbook = xml(parts['xl/workbook.xml'])
   const links = relationships(xml(parts['xl/_rels/workbook.xml.rels']))
   const sheet = elements(workbook, 'sheet').find((item) => item.getAttribute('name') === 'AURA STOCK MAP-V2-K')
-  if (sheet === undefined) throw new Error('未找到 AURA STOCK MAP-V2-K 工作表')
+  if (sheet === undefined) throw new Error(tt('未找到 AURA STOCK MAP-V2-K 工作表'))
   const id = sheet.getAttributeNS(rel, 'id')
   const target = id === null ? undefined : links.get(id)
-  if (target === undefined) throw new Error('工作表链接无效')
+  if (target === undefined) throw new Error(tt('工作表链接无效'))
   const worksheet = xml(unzipSync(data, { filter: (file) => file.name === target })[target])
   const shared =
     parts['xl/sharedStrings.xml'] === undefined
@@ -93,12 +94,12 @@ export function readStockWorkbook (data: Uint8Array): StockImportRow[] {
         ['O', 'LIVE STOCK']
       ].every(([column, label]) => normalizeCode(value(row.cells, column)) === label)
   )
-  if (header < 0) throw new Error('前 100 行找不到库存表头')
+  if (header < 0) throw new Error(tt('前 100 行找不到库存表头'))
   const headerCells = parsed[header].cells
   const minimumColumns = Object.keys(headerCells).filter((key) =>
     ['MIN QTY', 'MIIN QTY'].includes(normalizeCode(value(headerCells, key)))
   )
-  if (minimumColumns.length > 1) throw new Error('发现多个最低库存列，请先整理表头')
+  if (minimumColumns.length > 1) throw new Error(tt('发现多个最低库存列，请先整理表头'))
   const minColumn = minimumColumns[0]
   const result: StockImportRow[] = []
   for (const row of parsed.slice(header + 1)) {

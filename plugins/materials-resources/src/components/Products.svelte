@@ -1,5 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
+  import { t } from '../trStore'
   import { Label } from '@hcengineering/ui'
 
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
@@ -64,7 +65,7 @@
     busy = true
     error = ''
     message = ''
-    progress = '正在读取 BOM，请稍候……'
+    progress = $t('正在读取 BOM，请稍候……')
     candidates = []
     await tick()
     try {
@@ -76,7 +77,7 @@
       candidates = parsed
       checked = new Set(parsed.map((item) => item.normalizedName))
     } catch (e) {
-      error = e instanceof Error ? e.message : '读取失败'
+      error = e instanceof Error ? e.message : $t('读取失败')
     } finally {
       busy = false
       progress = ''
@@ -180,9 +181,9 @@
           {#each lines as line (line._id)}<tr
               ><td>{line.code !== '' ? line.code : '—'}</td><td>{line.description}</td><td
                 class:problem={line.quantityProblem}
-                >{line.quantityRaw !== '' ? line.quantityRaw : '—'}{line.quantityProblem ? '（有问题）' : ''}</td
+                >{line.quantityRaw !== '' ? line.quantityRaw : '—'}{line.quantityProblem ? $t('（有问题）') : ''}</td
               ><td>{line.section}</td><td
-                >{line.codeProblem ? '编号有问题' : (stock.get(line.code)?.stock ?? '库存中找不到')}</td
+                >{line.codeProblem ? $t('编号有问题') : (stock.get(line.code)?.stock ?? $t('库存中找不到'))}</td
               ><td>{line.sourceSheet} / {line.sourceRow}</td></tr
             >{:else}<tr><td colspan="6"><Label label={materials.string.PageNoBOM} /></td></tr>{/each}
         </tbody>
@@ -192,7 +193,7 @@
 </div>
 {#if importing}
   <div class="overlay" role="presentation">
-    <section class="dialog" role="dialog" aria-modal="true" aria-label="导入 BOM">
+    <section class="dialog" role="dialog" aria-modal="true" aria-label={$t('导入 BOM')}>
       <header>
         <h2><Label label={materials.string.PageImportBOM} /></h2>
         <button
@@ -204,10 +205,9 @@
         >
       </header>
       <p>
-        先预览，再确认。每张工作表是一个产品；再次导入会替换该产品全部
-        BOM，不会新建库存物料。变化按编号和装配段比较，重复行按顺序匹配。
+        {$t('先预览，再确认。每张工作表是一个产品；再次导入会替换该产品全部\n        BOM，不会新建库存物料。变化按编号和装配段比较，重复行按顺序匹配。')}
       </p>
-      <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label="选择 BOM Excel" />
+      <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label={$t('选择 BOM Excel')} />
       {#if busy}<p role="status">{progress}</p>{/if}
       {#if error !== ''}<p class="problem" role="alert">{error}</p>{/if}{#if message !== ''}<p>{message}</p>{/if}
       {#if candidates.length > 0}
@@ -243,12 +243,12 @@
                 {#each item.lines.filter((line) => line.quantityProblem || line.codeProblem || !stock.has(line.code)) as line}
                   <tr
                     ><td></td><td colspan="5"
-                      >第 {line.sourceRow} 行 · {line.code !== '' ? line.code : '编号空白'} · {line.description} · 数量 {line.quantityRaw !==
+                      >第 {line.sourceRow} 行 · {line.code !== '' ? line.code : $t('编号空白')} · {line.description} · 数量 {line.quantityRaw !==
                       ''
                         ? line.quantityRaw
-                        : '空白'}
-                      {line.quantityProblem ? '（数量有问题）' : ''}
-                      {line.codeProblem ? '（编号有问题）' : !stock.has(line.code) ? '（库存中找不到）' : ''}</td
+                        : $t('空白')}
+                      {line.quantityProblem ? $t('（数量有问题）') : ''}
+                      {line.codeProblem ? $t('（编号有问题）') : !stock.has(line.code) ? $t('（库存中找不到）') : ''}</td
                     ></tr
                   >
                 {/each}
