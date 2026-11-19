@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+
   import materials, {
     calculateShortages,
     normalizeCode,
@@ -152,9 +154,9 @@
 </script>
 
 <div class="page">
-  <h1>缺料计算</h1>
-  <p>在下面搜索并添加一个或多个产品，填写要生产的台数，再点击计算。使用的库存来自当前工作区。</p>
-  {#if !ready}<p>正在加载产品、BOM 和库存……</p>{:else if products.length === 0}<p>还没有产品，请先导入 BOM。</p>{/if}
+  <h1><Label label={materials.string.PageShortages} /></h1>
+  <p><Label label={materials.string.PageSearchProductsHint} /></p>
+  {#if !ready}<p><Label label={materials.string.PageLoadingProducts} /></p>{:else if products.length === 0}<p><Label label={materials.string.PageNoBomProducts} /></p>{/if}
   <div class="picker">
     <input
       class="search"
@@ -188,7 +190,7 @@
       {#each chosenProducts as p (p._id)}
         <div class="chosen-row">
           <span class="chosen-name" title={p.name}>{p.name}</span>
-          <span>台数</span><input
+          <span><Label label={materials.string.PageQuantity} /></span><input
             aria-label={`${p.name} 台数`}
             inputmode="numeric"
             value={counts[p._id] ?? '1'}
@@ -200,7 +202,7 @@
             title="移除"
             on:click={() => {
               remove(p._id)
-            }}>移除</button
+            }}><Label label={materials.string.PageRemove} /></button
           >
         </div>
       {/each}
@@ -210,7 +212,7 @@
     <button disabled={!ready || selected.length === 0} on:click={calculate}
       >{results === undefined ? '计算' : '重新计算'}</button
     >
-    <button disabled={results === undefined || stale} on:click={() => (issuing = true)}>一键领料出库</button>
+    <button disabled={results === undefined || stale} on:click={() => (issuing = true)}><Label label={materials.string.PageIssue} /></button>
     <button disabled={results === undefined || stale || exportProducts.length === 0} on:click={download}
       >{calculatedProducts.length > 1 && results !== undefined && !stale
         ? `导出选中的 ${exportProducts.length} 个产品`
@@ -218,8 +220,8 @@
     >
     <label
       >状态筛选 <select bind:value={filter}
-        ><option value="all">全部</option><option value="shortage">缺料</option><option value="problem">有问题</option
-        ><option value="enough">够用</option></select
+        ><option value="all"><Label label={materials.string.PageAll} /></option><option value="shortage"><Label label={materials.string.PageShortage} /></option><option value="problem"><Label label={materials.string.PageProblem} /></option
+        ><option value="enough"><Label label={materials.string.PageEnough} /></option></select
       ></label
     >
   </div>
@@ -251,8 +253,8 @@
       <table>
         <thead
           ><tr
-            ><th>状态</th><th>编号</th><th>名称</th><th>需要</th><th>库存</th><th>缺多少</th><th>位置（货架 / 层）</th
-            ><th>用于产品和装配段</th><th>问题</th><th>照片</th></tr
+            ><th><Label label={materials.string.PageStatus} /></th><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageName} /></th><th><Label label={materials.string.PageRequired} /></th><th><Label label={materials.string.PageStock} /></th><th><Label label={materials.string.PageMissing} /></th><th><Label label={materials.string.PageLocation} /></th
+            ><th><Label label={materials.string.PageUsedBy} /></th><th><Label label={materials.string.PageIssueColumn} /></th><th><Label label={materials.string.PagePhotos} /></th></tr
           ></thead
         ><tbody>
           {#each visible as row, index (`${row.code}-${index}`)}<tr
@@ -277,10 +279,10 @@
               <td
                 >{#if byCode.get(normalizeCode(row.code)) !== undefined}<button
                     class="view"
-                    on:click={() => (photoTarget = byCode.get(normalizeCode(row.code)))}>查看</button
+                    on:click={() => (photoTarget = byCode.get(normalizeCode(row.code)))}><Label label={materials.string.PageView} /></button
                   >{:else}—{/if}</td
               >
-            </tr>{:else}<tr><td colspan="10">当前筛选没有结果。</td></tr>{/each}
+            </tr>{:else}<tr><td colspan="10"><Label label={materials.string.PageNoResults} /></td></tr>{/each}
         </tbody>
       </table>
     </div>

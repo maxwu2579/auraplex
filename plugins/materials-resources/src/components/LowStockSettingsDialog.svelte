@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+
   import contact, { formatName, type Employee } from '@hcengineering/contact'
   import core, { isOwnerOrMaintainer, type AccountUuid } from '@hcengineering/core'
   import materials from '@hcengineering/materials'
@@ -54,8 +56,8 @@
 
 <div class="overlay" role="presentation">
   <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="recipients-title">
-    <h2 id="recipients-title">低库存提醒接收人</h2>
-    <p>可以选择多个人。不选择时，提醒发给工作区所有者。</p>
+    <h2 id="recipients-title"><Label label={materials.string.PageRecipients} /></h2>
+    <p><Label label={materials.string.PageRecipientHint} /></p>
     <div class="members">
       {#each employees as employee (employee._id)}
         {#if employee.personUuid != null}
@@ -68,10 +70,10 @@
     </div>
     {#if error}<p class="error">{error}</p>{/if}
     <div class="actions">
-      <button on:click={() => dispatch('close')} disabled={busy}>取消</button><button
+      <button on:click={() => dispatch('close')} disabled={busy}><Label label={materials.string.PageCancel} /></button><button
         class="primary"
         on:click={save}
-        disabled={busy || !loaded}>保存</button
+        disabled={busy || !loaded}><Label label={materials.string.PageSave} /></button
       >
     </div>
   </section>

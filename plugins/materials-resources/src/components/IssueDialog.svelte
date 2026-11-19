@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0. -->
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+
   import { generateId } from '@hcengineering/core'
   import materials, {
     formatQuantity,
@@ -95,7 +97,7 @@
 <div class="overlay" role="presentation">
   <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="issue-title">
     <div class="head">
-      <h2 id="issue-title">一键领料出库</h2>
+      <h2 id="issue-title"><Label label={materials.string.PageIssue} /></h2>
       <button on:click={close} disabled={busy} aria-label="关闭">×</button>
     </div>
     {#if completed}
@@ -104,18 +106,18 @@
       <p>用途：{purpose}</p>
       {#if plan.blocked.length > 0}
         <div class="error" role="alert">
-          <strong>以下物料缺料，不能领料，请先补货或减少台数：</strong>
+          <strong><Label label={materials.string.PageCantIssue} /></strong>
           {#each plan.blocked as row}<p>
               {row.code}：需要 {row.required ?? '未知'}，库存 {row.stock ?? '未知'}，缺 {row.shortage ?? '未知'}
             </p>{/each}
         </div>
       {/if}
-      <h3>将出库的物料</h3>
-      {#if plan.items.length === 0}<p>没有可以出库的物料。</p>{:else}
+      <h3><Label label={materials.string.PageWillIssue} /></h3>
+      {#if plan.items.length === 0}<p><Label label={materials.string.PageNoIssue} /></p>{:else}
         <div class="table-wrap">
           <table>
             <thead
-              ><tr><th>编号</th><th>名称</th><th>位置</th><th>出库数量</th><th>当前库存</th><th>出库后库存</th></tr
+              ><tr><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageName} /></th><th><Label label={materials.string.PageShortLocation} /></th><th><Label label={materials.string.PageIssueQuantity} /></th><th><Label label={materials.string.PageCurrentStock} /></th><th><Label label={materials.string.PageStockAfter} /></th></tr
               ></thead
             ><tbody>
               {#each plan.items as item}<tr
@@ -131,7 +133,7 @@
           </table>
         </div>
       {/if}
-      {#if plan.skipped.length > 0}<h3>以下物料不会出库</h3>
+      {#if plan.skipped.length > 0}<h3><Label label={materials.string.PageSkipped} /></h3>
         <ul>
           {#each plan.skipped as item}<li>
               {item.row.code !== '' ? item.row.code : '无编号'} · {item.row.name}：{item.reasons.join('；')}
@@ -140,7 +142,7 @@
       {#if error !== ''}<p class="error" role="alert">{error}</p>{/if}
     {/if}
     <div class="actions">
-      <button on:click={close} disabled={busy}>关闭</button>{#if !completed}<button
+      <button on:click={close} disabled={busy}><Label label={materials.string.PageClose} /></button>{#if !completed}<button
           class="primary"
           on:click={submit}
           disabled={busy || locked || plan.blocked.length > 0 || plan.items.length === 0}

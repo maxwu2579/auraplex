@@ -4,6 +4,8 @@
 // https://www.eclipse.org/legal/epl-2.0
 -->
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
   import materials, {
     formatQuantity,
@@ -359,7 +361,7 @@
   <section class="dialog" role="dialog" aria-modal="true" aria-label="导入库存">
     <header>
       <h2>导入库存 Excel（含照片）</h2>
-      <button disabled={busy} on:click={() => dispatch('close')}>关闭</button>
+      <button disabled={busy} on:click={() => dispatch('close')}><Label label={materials.string.PageClose} /></button>
     </header>
     <p>先预览再确认。问题行默认不导入；已有流水的库存默认不覆盖（可在下面勾选用 Excel 覆盖）。</p>
     <input type="file" accept=".xlsx,.xlsm" on:change={choose} disabled={busy} aria-label="选择库存 Excel" />
@@ -409,8 +411,8 @@
         <table>
           <thead
             ><tr
-              ><th>导入</th><th>行</th><th>编号</th><th>名称</th><th>Excel 库存</th><th>现有库存</th><th>最低库存</th
-              ><th>照片</th><th>资料变化</th><th>问题 / 库存差别</th></tr
+              ><th><Label label={materials.string.PageImport} /></th><th>行</th><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageName} /></th><th>Excel 库存</th><th>现有库存</th><th>最低库存</th
+              ><th><Label label={materials.string.PagePhotos} /></th><th>资料变化</th><th>问题 / 库存差别</th></tr
             ></thead
           ><tbody>
             {#each preview as item (item.row.row)}

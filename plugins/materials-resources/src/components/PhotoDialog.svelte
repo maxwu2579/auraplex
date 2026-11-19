@@ -1,5 +1,8 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+  import materials from '@hcengineering/materials'
+
   import attachment, { type Photo } from '@hcengineering/attachment'
   import { SortingOrder } from '@hcengineering/core'
   import { createQuery, getBlobRef } from '@hcengineering/presentation'
@@ -61,20 +64,20 @@
           {#await getBlobRef(current.file, current.name) then image}
             <img src={image.src} alt={current.name} />
           {:catch}
-            <p class="note">这张照片打不开。</p>
+            <p class="note"><Label label={materials.string.PagePhotoFailed} /></p>
           {/await}
         {/key}
       {:else if loaded}
-        <p class="note">这个物料还没有照片。可以在物料目录里点“编辑”上传。</p>
+        <p class="note"><Label label={materials.string.PageNoPhotos} /></p>
       {:else}
-        <p class="note">正在加载…</p>
+        <p class="note"><Label label={materials.string.PageLoading} /></p>
       {/if}
     </div>
     {#if photos.length > 1}
       <div class="nav">
-        <button on:click={() => { step(-1) }}>‹ 上一张</button>
+        <button on:click={() => { step(-1) }}><Label label={materials.string.PagePrevious} /></button>
         <span>{index + 1} / {photos.length}</span>
-        <button on:click={() => { step(1) }}>下一张 ›</button>
+        <button on:click={() => { step(1) }}><Label label={materials.string.PageNext} /></button>
       </div>
     {/if}
   </section>

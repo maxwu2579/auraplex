@@ -372,10 +372,10 @@
     <h1><Label label={materials.string.Directory} /></h1>
     <div class="header-actions">
       {#if isOwnerOrMaintainer()}
-        <button on:click={() => (importing = true)}>导入 Excel</button>
-        <button on:click={() => (editingRecipients = true)}>低库存提醒接收人</button>
+        <button on:click={() => (importing = true)}><Label label={materials.string.PageImportExcel} /></button>
+        <button on:click={() => (editingRecipients = true)}><Label label={materials.string.PageRecipients} /></button>
       {/if}
-      <button disabled={filtered.length === 0} on:click={exportList}>导出 Excel</button>
+      <button disabled={filtered.length === 0} on:click={exportList}><Label label={materials.string.PageExportExcel} /></button>
       <button
         class="primary"
         on:click={() => {
@@ -401,8 +401,8 @@
     {#if latestImport !== undefined}
       <label
         ><span>导入情况（最近一次：{formatDateTime(latestImport)}）</span><select bind:value={importFilter}>
-          <option value="">全部</option>
-          <option value="missed">最近一次导入没有更新到的</option>
+          <option value=""><Label label={materials.string.PageAll} /></option>
+          <option value="missed"><Label label={materials.string.PageMissedImport} /></option>
         </select></label
       >
     {/if}
@@ -483,7 +483,7 @@
             <td class="time">{formatTime(item.modifiedOn)}</td>
             <td class="actions-col"
               ><div class="row-actions">
-                <button on:click={() => (photoTarget = item)}>查看</button>
+                <button on:click={() => (photoTarget = item)}><Label label={materials.string.PageView} /></button>
                 <button on:click={() => (stockTarget = { material: item, kind: 'in' })}
                   ><Label label={materials.string.StockIn} /></button
                 >

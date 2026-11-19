@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under EPL-2.0: https://www.eclipse.org/legal/epl-2.0 -->
 <script lang="ts">
+  import { Label } from '@hcengineering/ui'
+
   import core, { generateId, isOwnerOrMaintainer, type Ref } from '@hcengineering/core'
   import materials, { type Material, type Product, type BomLine } from '@hcengineering/materials'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -150,17 +152,17 @@
 
 <div class="page">
   <header>
-    <h1>产品 / BOM</h1>
+    <h1><Label label={materials.string.PageProducts} /></h1>
     {#if isOwnerOrMaintainer()}<button
         on:click={() => {
           importing = true
           error = ''
           message = ''
-        }}>导入 BOM Excel</button
+        }}><Label label={materials.string.PageImportBOM} /></button
       >{/if}
   </header>
   {#if selected === undefined}
-    <p>点击产品查看 BOM，每台数量为生产一台产品的用量。</p>
+    <p><Label label={materials.string.PageProductsHint} /></p>
     {#each products as product (product._id)}<p>
         <button
           on:click={() => {
@@ -168,12 +170,12 @@
           }}>{product.name}</button
         >
         {product.description}
-      </p>{:else}<p>还没有产品，请由管理员导入 BOM。</p>{/each}
+      </p>{:else}<p><Label label={materials.string.PageNoProducts} /></p>{/each}
   {:else}
-    <p><button on:click={back}>返回产品列表</button> <strong>{selected.name}</strong></p>
+    <p><button on:click={back}><Label label={materials.string.PageBackProducts} /></button> <strong>{selected.name}</strong></p>
     <div class="table">
       <table>
-        <thead><tr><th>编号</th><th>描述</th><th>每台数量</th><th>装配段</th><th>当前库存</th><th>来源</th></tr></thead
+        <thead><tr><th><Label label={materials.string.PageCode} /></th><th><Label label={materials.string.PageDescription} /></th><th><Label label={materials.string.PagePerUnit} /></th><th><Label label={materials.string.PageAssembly} /></th><th><Label label={materials.string.PageCurrentStock} /></th><th><Label label={materials.string.PageSource} /></th></tr></thead
         ><tbody>
           {#each lines as line (line._id)}<tr
               ><td>{line.code !== '' ? line.code : '—'}</td><td>{line.description}</td><td
@@ -182,7 +184,7 @@
               ><td>{line.section}</td><td
                 >{line.codeProblem ? '编号有问题' : (stock.get(line.code)?.stock ?? '库存中找不到')}</td
               ><td>{line.sourceSheet} / {line.sourceRow}</td></tr
-            >{:else}<tr><td colspan="6">没有 BOM 明细</td></tr>{/each}
+            >{:else}<tr><td colspan="6"><Label label={materials.string.PageNoBOM} /></td></tr>{/each}
         </tbody>
       </table>
     </div>
@@ -192,13 +194,13 @@
   <div class="overlay" role="presentation">
     <section class="dialog" role="dialog" aria-modal="true" aria-label="导入 BOM">
       <header>
-        <h2>导入 BOM Excel</h2>
+        <h2><Label label={materials.string.PageImportBOM} /></h2>
         <button
           disabled={busy}
           on:click={() => {
             importing = false
             candidates = []
-          }}>关闭</button
+          }}><Label label={materials.string.PageClose} /></button
         >
       </header>
       <p>
@@ -213,8 +215,8 @@
           <table>
             <thead
               ><tr
-                ><th>导入</th><th>产品</th><th>行数</th><th>库存找不到的不同编号</th><th>数量为零或无效</th><th
-                  >新增 / 删除 / 数量变化</th
+                ><th><Label label={materials.string.PageImport} /></th><th><Label label={materials.string.PageProduct} /></th><th><Label label={materials.string.PageLines} /></th><th><Label label={materials.string.PageUnknownCodes} /></th><th><Label label={materials.string.PageInvalidQuantities} /></th><th
+                  ><Label label={materials.string.PageChangeTypes} /></th
                 ></tr
               ></thead
             ><tbody>
@@ -255,7 +257,7 @@
           </table>
         </div>
         <div class="footer">
-          <button class="primary" disabled={busy || checked.size === 0} on:click={submit}>确认替换选中的产品 BOM</button>
+          <button class="primary" disabled={busy || checked.size === 0} on:click={submit}><Label label={materials.string.PageReplaceBom} /></button>
         </div>
       {/if}
     </section>
