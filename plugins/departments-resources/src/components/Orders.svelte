@@ -1,6 +1,6 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
-  import { Breadcrumb, Button, DropdownLabels, EditBox, Header, Label, Toggle, languageStore } from '@hcengineering/ui'
+  import { Breadcrumb, Button, Component, DropdownLabels, EditBox, Header, Label, Toggle, languageStore, type AnyComponent } from '@hcengineering/ui'
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('orders') === 'edit'
   import chunter from '@hcengineering/chunter'
@@ -46,6 +46,8 @@
   let depts: DepartmentAccess[] = []
   let phones = new Map<string, string>()
   let actions: OrderAction[] = []
+  // Files on an order (drawings, contracts, photos); loaded by id so this plugin does not depend on attachments.
+  const attachmentsComponent = 'attachment:component:Attachments' as AnyComponent
   /** Opened from the inbox or a link: show just this order. */
   export let focusId: Ref<Order> | undefined = undefined
   let selectedId: Ref<Order> | undefined = focusId
@@ -520,6 +522,12 @@
           {/each}
         </ul>
 
+        <div class="order-files">
+          {#key selected._id}
+            <Component is={attachmentsComponent} props={{ objectId: selected._id, _class: departments.class.Order, space: selected.space, readonly: !moduleCanEdit }} />
+          {/key}
+        </div>
+
         <h4><Label label={departments.string.OrderPage25} /></h4>
         <ul class="history">
           {#each (showAllHistory ? history : history.slice(0, 3)) as a (a._id)}
@@ -543,6 +551,7 @@
 </section>
 
 <style>
+  .order-files { margin: 0.75rem 0; }
   .edit-btn { margin-left: 0.75rem; font-size: 0.75rem; font-weight: 400; }
   .edit-info { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.75rem; }
   .edit-info label { display: flex; gap: 0.5rem; align-items: center; }
