@@ -40,6 +40,8 @@
   let returnPerson = ''
   let openStage = ''
   let adjusting = false
+  let showAllHistory = false
+  $: history = actions.filter((item) => item.kind !== 'step')
   let busy = false
   let error = ''
   let notice = ''
@@ -126,7 +128,10 @@
   }
 
   function open (it: Order): void {
-    if (selectedId !== it._id) actions = []
+    if (selectedId !== it._id) {
+      actions = []
+      showAllHistory = false
+    }
     selectedId = it._id
     adjusting = false
     openStage = ''
@@ -425,7 +430,7 @@
 
         <h4>经过记录</h4>
         <ul class="history">
-          {#each actions.filter((a) => a.kind !== 'step') as a (a._id)}
+          {#each (showAllHistory ? history : history.slice(0, 3)) as a (a._id)}
             <li>
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
               {name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? '提交审批' : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
@@ -433,8 +438,13 @@
                 : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>
           {/each}
-          {#if actions.length === 0}<li class="hint">还没有记录。</li>{/if}
+          {#if history.length === 0}<li class="hint">还没有记录。</li>{/if}
         </ul>
+        {#if history.length > 3}
+          <div><button type="button" aria-expanded={showAllHistory} on:click={() => { showAllHistory = !showAllHistory }}>
+            {showAllHistory ? '收起' : `显示全部（${history.length}）`}
+          </button></div>
+        {/if}
       </div>
     {/if}
   </div>
