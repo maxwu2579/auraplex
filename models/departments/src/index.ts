@@ -70,6 +70,9 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean
 }
 
+// Icons of other plugins, by id, so this model does not depend on their packages.
+const icon = (id: string): any => id as any
+
 @Model(departments.class.OrderFlow, core.class.Doc, DOMAIN_ORDERS)
 export class TOrderFlow extends TDoc implements OrderFlow {
   @Hidden() stages!: OrderFlow['stages']
@@ -148,8 +151,6 @@ class TDepartmentAutoMembers extends TSpace implements DepartmentAutoMembers {
 }
 
 export function createModel (builder: Builder): void {
-  // Icons of other plugins, by id, so this model does not depend on their packages.
-  const icon = (id: string): any => id as any
   builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
   // Inbox: show orders by number and title, and open them on the orders page.
   // Mixin ids are written out so this model does not need the view model package.
