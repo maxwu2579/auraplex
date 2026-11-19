@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Breadcrumb, Button, Header, Label, languageStore } from '@hcengineering/ui'
+  import { translate } from '@hcengineering/platform'
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('orders') === 'edit'
   import contact, { formatName, type Employee } from '@hcengineering/contact'
@@ -77,8 +79,8 @@
   function remove (i: number): void {
     stages = stages.filter((_, k) => k !== i)
   }
-  function addStage (): void {
-    const stage = { id: generateId(), name: '新阶段', steps: [] }
+  async function addStage (): Promise<void> {
+    const stage = { id: generateId(), name: await translate(departments.string.FlowNewStage, {}, $languageStore), steps: [] }
     stages = [...stages, stage]
     openStage = stage.id
   }
@@ -100,7 +102,7 @@
       steps: it.steps.map((s) => s.trim()).filter((s) => s !== '')
     }))
     try {
-      if (clean.some((it) => it.name === '')) throw new Error('每个阶段都要有名字。')
+      if (clean.some((it) => it.name === '')) throw new Error('stage-name')
       const ops = client.apply('edit-order-flow')
       if (flow === undefined) {
         ops.notMatch(departments.class.OrderFlow, { _id: departments.ids.OrderFlow })
@@ -110,9 +112,9 @@
         await ops.update(flow, { stages: clean })
       }
       if (!(await ops.commit()).result) throw new Error('Could not save order flow')
-      notice = '已保存。以后新建的订单按这个流程走，正在进行的订单不变。'
+      notice = await translate(departments.string.FlowSaved, {}, $languageStore)
     } catch (e) {
-      error = e instanceof Error && e.message.startsWith('每个') ? e.message : '保存失败：没有权限改这里，或者流程已被别人改过，请刷新。'
+      error = await translate(e instanceof Error && e.message === 'stage-name' ? departments.string.FlowStageNameRequired : departments.string.FlowSaveFailed, {}, $languageStore)
     } finally {
       busy = false
     }
@@ -120,13 +122,13 @@
 </script>
 
 <section class="flow">
-  <h2>订单流程</h2>
+  <Header adaptive="disabled"><Breadcrumb label={departments.string.OrderFlow} size="large" isCurrent /></Header>
   <p class="hint">
-    {owner ? '你可以调整阶段：改名、换顺序、加减阶段、指定由哪个部门负责。' : '你可以给自己部门负责的阶段加小步骤。'}
-    改动只影响以后新建的订单。
+    <Label label={owner ? departments.string.FlowOwnerHint : departments.string.FlowAdminHint} />
+    <Label label={departments.string.FlowNewOrdersOnly} />
   </p>
   <OrderFlowChart
-    cards={stages.map((item) => ({ ...item, department: depts.find((dept) => dept._id === item.department)?.name ?? '未指定部门' }))}
+    cards={stages.map((item) => ({ ...item, department: depts.find((dept) => dept._id === item.department)?.name ?? '' }))}
     departments={depts.map((dept) => ({ id: dept._id, name: dept.name }))}
     editable={owner && !busy && moduleCanEdit}
     selected={openStage}
@@ -142,24 +144,24 @@
         {#if owner && moduleCanEdit}
           <input bind:value={stage.name} maxlength="40" />
           <select bind:value={stage.department}>
-            <option value={undefined}>（未指定部门）</option>
+            <option value={undefined}><Label label={departments.string.OrderUnassignedDepartment} /></option>
             {#each depts as d (d._id)}<option value={d._id}>{d.name}</option>{/each}
           </select>
           <button disabled={i === 0} on:click={() => move(i, -1)}>↑</button>
           <button disabled={i === stages.length - 1} on:click={() => move(i, 1)}>↓</button>
-          <button disabled={stages.length <= 1} on:click={() => remove(i)}>删除阶段</button>
+          <Button kind="regular" label={departments.string.FlowDeleteStage} disabled={stages.length <= 1} on:click={() => remove(i)} />
         {:else}
           <span>{stage.name}</span>
-          <span class="hint">（{depts.find((d) => d._id === stage.department)?.name ?? '未指定部门'}）</span>
+          <span class="hint">（{depts.find((d) => d._id === stage.department)?.name ?? ''}）</span>
         {/if}
       </div>
       {#if owner && moduleCanEdit}
-        <label>限时（天） <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
-        <label>审批人
+        <label><Label label={departments.string.FlowTimeLimit} /> <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
+        <label><Label label={departments.string.FlowApprover} />
           <select value={stage.approval?.by === 'person' ? stage.approval.person : stage.approval ? 'admins' : ''}
             on:change={(event) => chooseApprover(stage, event.currentTarget.value)}>
-            <option value="">无需审批</option>
-            <option value="admins">这段部门的管理员</option>
+            <option value=""><Label label={departments.string.FlowNoApproval} /></option>
+            <option value="admins"><Label label={departments.string.FlowDepartmentAdmins} /></option>
             {#each staff as person (person._id)}
               {#if person.personUuid}<option value={person.personUuid}>{formatName(person.name)}</option>{/if}
             {/each}
@@ -169,19 +171,19 @@
       <div class="steps">
         {#each stage.steps as _, j (j)}
           <div class="row">
-            <span class="hint">小步骤</span>
+            <span class="hint"><Label label={departments.string.FlowStep} /></span>
             <input bind:value={stage.steps[j]} maxlength="60" disabled={!moduleCanEdit || !adminOf(stage.department)} />
             {#if moduleCanEdit && adminOf(stage.department)}<button on:click={() => removeStep(i, j)}>×</button>{/if}
           </div>
         {/each}
-        {#if moduleCanEdit && adminOf(stage.department)}<button class="small" on:click={() => addStep(i)}>+ 加小步骤</button>{/if}
+        {#if moduleCanEdit && adminOf(stage.department)}<Button kind="regular" label={departments.string.FlowAddStep} on:click={() => addStep(i)} />{/if}
       </div>
     </div>
     {/if}
   {/each}
   <div class="row">
-    {#if owner && moduleCanEdit}<button on:click={addStage}>+ 加阶段</button>{/if}
-    <button class="primary" disabled={busy || !moduleCanEdit} on:click={save}>{busy ? '正在保存…' : '保存'}</button>
+    {#if owner && moduleCanEdit}<Button kind="regular" label={departments.string.FlowAddStage} on:click={addStage} />{/if}
+    <Button kind="primary" disabled={busy || !moduleCanEdit} on:click={save} label={busy ? departments.string.FlowSaving : departments.string.OrderPage15} />
   </div>
   {#if error}<p class="err" role="alert">{error}</p>{/if}{#if notice}<p class="ok">{notice}</p>{/if}
 </section>
