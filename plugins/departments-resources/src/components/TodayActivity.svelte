@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Label, languageStore } from '@hcengineering/ui'
+  import { translate as translateTracking, translateCB, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Employee, type SocialIdentity } from '@hcengineering/contact'
   import core, {
     AccountRole,
@@ -55,7 +57,7 @@
   $: bySocial = new Map(socials.map((it) => [it._id as string, staff.find((p) => p._id === it.attachedTo)?.personUuid as AccountUuid | undefined]))
   $: name = (id: AccountUuid | undefined): string => {
     const p = staff.find((it) => it.personUuid === id)
-    return p === undefined ? '系统' : formatName(p.name)
+    return p === undefined ? trackingText(departments.string.TrackingPageSystem) : formatName(p.name)
   }
 
   // Which documents belong to a module, by class name prefix.
@@ -68,10 +70,10 @@
   const inModule = (alias: string, _class: string): boolean =>
     (prefixes[alias] ?? [alias + ':']).some((prefix) => _class.startsWith(prefix))
   const noise = ['notification:', 'activity:', 'preference:', 'view:', 'core:class:', 'contact:class:SocialIdentity', 'chunter:class:ChatSyncInfo']
-  const auditText: Record<string, string> = { view: '打开', export: '导出', search: '搜索', whatsapp: 'WhatsApp 往来' }
-  const orderKinds: Record<string, string> = {
-    assign: '指定负责人', step: '勾选步骤', complete: '本段完成', escalate: '上报主管', return: '退回',
-    insert: '插入一段', reorder: '调整顺序', approve: '批准', reject: '拒绝'
+  const auditText: Record<string, IntlString> = { view: departments.string.TrackingPageOpen, export: departments.string.TrackingPageExport, search: departments.string.TrackingPageSearch, whatsapp: departments.string.TrackingPageWhatsapp }
+  const orderKinds: Record<string, IntlString> = {
+    assign: departments.string.OrderAssign, step: departments.string.OrderCheckStep, complete: departments.string.OrderCompleteStage, escalate: departments.string.OrderEscalate, return: departments.string.OrderReturn,
+    insert: departments.string.OrderInsert, reorder: departments.string.OrderReorder, approve: departments.string.OrderApprove, reject: departments.string.OrderReject
   }
   const labels = new Map<string, string>()
   async function classLabel (_class: Ref<Class<Doc>>): Promise<string> {
@@ -80,7 +82,7 @@
     let text: string = _class.split(':').pop() ?? _class
     try {
       const label = hierarchy.getClass(_class).label
-      if (label !== undefined) text = await translate(label, {}, 'zh')
+      if (label !== undefined) text = await translate(label, {}, $languageStore)
     } catch {}
     labels.set(_class, text)
     return text
@@ -93,6 +95,7 @@
   }
 
   async function load (): Promise<void> {
+    await translateTracking(departments.string.TrackingPageActivity, {}, $languageStore)
     if (!allowed || shownApp === undefined) { rows = []; return }
     const alias = shownApp
     const start = new Date(new Date().setHours(0, 0, 0, 0)).getTime()
@@ -139,8 +142,8 @@
         const isOrderAction = tx.objectClass === departments.class.OrderAction
         const attrs = tx._class === core.class.TxCreateDoc ? (tx as TxCreateDoc<Doc>).attributes as unknown as Record<string, unknown> : {}
         const kind = isOrderAction
-          ? orderKinds[attrs.kind as string] ?? '订单操作'
-          : tx._class === core.class.TxCreateDoc ? '新建' : tx._class === core.class.TxRemoveDoc ? '删除' : '修改'
+          ? trackingText(orderKinds[attrs.kind as string] ?? departments.string.TrackingPageOrderAction)
+          : tx._class === core.class.TxCreateDoc ? trackingText(departments.string.TrackingPageCreate) : tx._class === core.class.TxRemoveDoc ? trackingText(departments.string.TrackingPageRemove) : trackingText(departments.string.TrackingPageUpdate)
         const target = isOrderAction ? attrs.order as string : tx.objectId
         const title = titles.get(target) ?? titles.get(tx.objectId) ?? ''
         next.push({
@@ -148,7 +151,7 @@
           at: tx.modifiedOn,
           who: bySocial.get(tx.modifiedBy),
           kind,
-          what: isOrderAction ? (title !== '' ? title : '订单') : `${await classLabel(tx.objectClass)}${title !== '' ? '：' + title : ''}`,
+          what: isOrderAction ? (title !== '' ? title : trackingText(departments.string.Orders)) : `${await classLabel(tx.objectClass)}${title !== '' ? '：' + title : ''}`,
           objectId: target
         })
       }
@@ -158,7 +161,7 @@
           id: ev._id,
           at: ev.lastOn,
           who: ev.actor,
-          kind: auditText[ev.kind],
+          kind: trackingText(auditText[ev.kind]),
           what: ev.count > 1 ? `${ev.label}（${ev.count} 次）` : ev.label,
           objectId: ev.objectId
         })
@@ -188,29 +191,34 @@
     open = false
     navigate({ path: [loc.path[0], loc.path[1], 'tracking'] })
   }
+  function trackingText (id: IntlString, params: Record<string, string | number> = {}): string {
+    let result: string = id
+    translateCB(id, params, $languageStore, (value) => { result = value })
+    return result
+  }
 </script>
 
 {#if allowed && shownApp !== undefined}
-  <button class="today-ball" type="button" title="今天动态" aria-label="今天动态" on:click={() => { open = !open; if (open) void load() }}>
-    {rows.length > 0 ? (rows.length > 99 ? '99+' : rows.length) : '今'}
+  <button class="today-ball" type="button" title={trackingText(departments.string.TrackingPageToday)} aria-label={trackingText(departments.string.TrackingPageToday)} on:click={() => { open = !open; if (open) void load() }}>
+    {rows.length > 0 ? (rows.length > 99 ? '99+' : rows.length) : trackingText(departments.string.TrackingPageTodayBadge)}
   </button>
   {#if open}
-    <aside class="today-panel" aria-label="今天动态">
+    <aside class="today-panel" aria-label={trackingText(departments.string.TrackingPageToday)}>
       <header>
-        <strong>今天 · 动态</strong>
+        <strong><Label label={departments.string.TrackingPageTodayTitle} /></strong>
         {#if panelDoc !== undefined}
           <label><input type="checkbox" bind:checked={onlyThis} /> 只看这一个</label>
         {/if}
-        <button type="button" class="close" on:click={() => { open = false }}>关闭</button>
+        <button type="button" class="close" on:click={() => { open = false }}><Label label={departments.string.TrackingPageClose} /></button>
       </header>
       <ul>
         {#each filtered.slice(0, LIMIT) as row (row.id)}
           <li><span class="at">{time(row.at)}</span><b>{name(row.who)}</b><span class="kind">{row.kind}</span><span class="what">{row.what}</span></li>
         {/each}
-        {#if filtered.length === 0}<li class="hint">今天还没有记录。</li>{/if}
+        {#if filtered.length === 0}<li class="hint"><Label label={departments.string.TrackingPageNoToday} /></li>{/if}
       </ul>
-      {#if filtered.length > LIMIT}<p class="hint">还有 {filtered.length - LIMIT} 条，请到追踪页查看。</p>{/if}
-      <button type="button" class="more" on:click={openTracking}>在追踪页看全部 →</button>
+      {#if filtered.length > LIMIT}<p class="hint"><Label label={departments.string.TrackingPageMoreRecords} params={{ count: filtered.length - LIMIT }} /></p>{/if}
+      <button type="button" class="more" on:click={openTracking}><Label label={departments.string.TrackingPageOpenTracking} /></button>
     </aside>
   {/if}
 {/if}

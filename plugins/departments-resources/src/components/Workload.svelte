@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Breadcrumb, Header, Label, languageStore } from '@hcengineering/ui'
+  import { translateCB, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Employee } from '@hcengineering/contact'
   import core, { AccountRole, getCurrentAccount, type AccountUuid, type Ref, type Status } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type Order } from '@hcengineering/departments'
@@ -103,48 +105,53 @@
   })
 
   function exportExcel (): void {
-    const head = ['人', '部门', '完成订单阶段', '平均用时（天）', '进行中的订单阶段', '完成任务', '逾期任务']
+    const head = [trackingText(departments.string.TrackingPagePerson), trackingText(departments.string.TrackingPageDepartment), trackingText(departments.string.TrackingPageStagesDone), trackingText(departments.string.TrackingPageAverageDays), trackingText(departments.string.TrackingPageStagesOpen), trackingText(departments.string.TrackingPageTasksDone), trackingText(departments.string.TrackingPageOverdueTasks)]
     downloadWorkbook(
       createWorkbook([
-        { name: '每人', rows: [head, ...lines.map((it) => [it.name, it.depts, it.stagesDone, it.avgDays, it.stagesOpen, it.tasksDone, it.overdue])] },
+        { name: trackingText(departments.string.TrackingPagePerPerson), rows: [head, ...lines.map((it) => [it.name, it.depts, it.stagesDone, it.avgDays, it.stagesOpen, it.tasksDone, it.overdue])] },
         {
-          name: '每个部门',
+          name: trackingText(departments.string.TrackingPagePerDepartment),
           rows: [
-            ['部门', '完成订单阶段', '进行中的订单阶段', '完成任务', '逾期任务'],
+            [trackingText(departments.string.TrackingPageDepartment), trackingText(departments.string.TrackingPageStagesDone), trackingText(departments.string.TrackingPageStagesOpen), trackingText(departments.string.TrackingPageTasksDone), trackingText(departments.string.TrackingPageOverdueTasks)],
             ...totals.map((it) => [it.name, it.stagesDone, it.stagesOpen, it.tasksDone, it.overdue])
           ]
         }
       ]),
       `工作量_${new Date().toISOString().slice(0, 10)}.xlsx`
     )
-    void recordAudit('export', `导出工作量（${lines.length} 人）`)
+    void recordAudit('export', trackingText(departments.string.TrackingPageExportWorkload, { count: lines.length }))
+  }
+  function trackingText (id: IntlString, params: Record<string, string | number> = {}): string {
+    let result: string = id
+    translateCB(id, params, $languageStore, (value) => { result = value })
+    return result
   }
 </script>
 
 <section class="workload">
-  <h2>工作量</h2>
+  <Header adaptive="disabled"><Breadcrumb label={departments.string.TrackingPageWorkload} size="large" isCurrent /></Header>
   {#if !owner && visible.length === 0}
-    <p class="hint">你没有看追踪的权限。</p>
+    <p class="hint"><Label label={departments.string.TrackingPageWorkloadDenied} /></p>
   {:else}
     <div class="row">
-      <button class:on={period === 'week'} on:click={() => (period = 'week')}>本周</button>
-      <button class:on={period === 'lastweek'} on:click={() => (period = 'lastweek')}>上周</button>
-      <button class:on={period === 'month'} on:click={() => (period = 'month')}>最近 30 天</button>
-      <button on:click={exportExcel}>导出 Excel</button>
+      <button class:on={period === 'week'} on:click={() => (period = 'week')}><Label label={departments.string.TrackingPageThisWeek} /></button>
+      <button class:on={period === 'lastweek'} on:click={() => (period = 'lastweek')}><Label label={departments.string.TrackingPageLastWeek} /></button>
+      <button class:on={period === 'month'} on:click={() => (period = 'month')}><Label label={departments.string.TrackingPageLastMonth} /></button>
+      <button on:click={exportExcel}><Label label={departments.string.TrackingPageExportExcel} /></button>
     </div>
-    <h3>每个部门</h3>
+    <h3><Label label={departments.string.TrackingPagePerDepartment} /></h3>
     <table>
-      <thead><tr><th>部门</th><th>完成订单阶段</th><th>进行中</th><th>完成任务</th><th>逾期任务</th></tr></thead>
+      <thead><tr><th><Label label={departments.string.TrackingPageDepartment} /></th><th><Label label={departments.string.TrackingPageStagesDone} /></th><th><Label label={departments.string.TrackingPageInProgress} /></th><th><Label label={departments.string.TrackingPageTasksDone} /></th><th><Label label={departments.string.TrackingPageOverdueTasks} /></th></tr></thead>
       <tbody>
         {#each totals as it (it.name)}
           <tr><td>{it.name}</td><td>{it.stagesDone}</td><td>{it.stagesOpen}</td><td>{it.tasksDone}</td><td class:late={it.overdue > 0}>{it.overdue}</td></tr>
         {/each}
       </tbody>
     </table>
-    <h3>每个人</h3>
+    <h3><Label label={departments.string.TrackingPageEachPerson} /></h3>
     <table>
       <thead
-        ><tr><th>人</th><th>部门</th><th>完成订单阶段</th><th>平均用时（天）</th><th>进行中</th><th>完成任务</th><th>逾期任务</th></tr></thead
+        ><tr><th><Label label={departments.string.TrackingPagePerson} /></th><th><Label label={departments.string.TrackingPageDepartment} /></th><th><Label label={departments.string.TrackingPageStagesDone} /></th><th><Label label={departments.string.TrackingPageAverageDays} /></th><th><Label label={departments.string.TrackingPageInProgress} /></th><th><Label label={departments.string.TrackingPageTasksDone} /></th><th><Label label={departments.string.TrackingPageOverdueTasks} /></th></tr></thead
       >
       <tbody>
         {#each lines as it (it.who)}
@@ -155,7 +162,7 @@
         {/each}
       </tbody>
     </table>
-    <p class="hint">完成订单阶段和用时来自订单；完成任务、逾期任务来自任务模块（逾期 = 过了截止日期还没完成）。</p>
+    <p class="hint"><Label label={departments.string.TrackingPageWorkloadHint} /></p>
   {/if}
 </section>
 

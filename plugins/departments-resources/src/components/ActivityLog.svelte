@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Breadcrumb, Header, Label, languageStore } from '@hcengineering/ui'
+  import { translate as translateTracking, translateCB, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Employee, type SocialIdentity } from '@hcengineering/contact'
   import core, {
     AccountRole,
@@ -70,7 +72,7 @@
   $: bySocial = new Map(socials.map((it) => [it._id as string, accountOfPerson(it.attachedTo)]))
   $: name = (id: AccountUuid | undefined): string => {
     const p = staff.find((it) => it.personUuid === id)
-    return p === undefined ? '系统' : formatName(p.name)
+    return p === undefined ? trackingText(departments.string.TrackingPageSystem) : formatName(p.name)
   }
 
   // Bookkeeping that is not someone's work: notifications, read marks, presence, our own records.
@@ -94,16 +96,16 @@
     'tracker:class:ProjectTargetPreference',
     'contact:class:Person'
   ]
-  const orderKinds: Record<string, string> = {
-    assign: '指定负责人',
-    step: '勾选步骤',
-    complete: '本段完成',
-    escalate: '上报主管',
-    return: '退回',
-    insert: '插入一段',
-    reorder: '调整顺序',
-    approve: '批准',
-    reject: '拒绝'
+  const orderKinds: Record<string, IntlString> = {
+    assign: departments.string.OrderAssign,
+    step: departments.string.OrderCheckStep,
+    complete: departments.string.OrderCompleteStage,
+    escalate: departments.string.OrderEscalate,
+    return: departments.string.OrderReturn,
+    insert: departments.string.OrderInsert,
+    reorder: departments.string.OrderReorder,
+    approve: departments.string.OrderApprove,
+    reject: departments.string.OrderReject
   }
   /** Plain text of a rich-text message (comments are stored as a document tree). */
   function plainText (markup: string): string {
@@ -127,13 +129,13 @@
     let text = key
     try {
       const label = hierarchy.findAttribute(_class, key)?.label
-      if (label !== undefined) text = await translate(label, {}, 'zh')
+      if (label !== undefined) text = await translate(label, {}, $languageStore)
     } catch {}
     fieldLabels.set(id, text)
     return text
   }
   const comments = ['chunter:class:ChatMessage', 'chunter:class:ThreadMessage']
-  const auditText: Record<string, string> = { login: '登录', view: '打开', export: '导出', search: '搜索', alert: '异常提醒', whatsapp: 'WhatsApp 往来' }
+  const auditText: Record<string, IntlString> = { login: departments.string.TrackingPageLogin, view: departments.string.TrackingPageOpen, export: departments.string.TrackingPageExport, search: departments.string.TrackingPageSearch, alert: departments.string.TrackingPageAlert, whatsapp: departments.string.TrackingPageWhatsapp }
   const labels = new Map<string, string>()
   async function classLabel (_class: Ref<Class<Doc>>): Promise<string> {
     const cached = labels.get(_class)
@@ -141,7 +143,7 @@
     let text: string = _class.split(':').pop() ?? _class
     try {
       const label = hierarchy.getClass(_class).label
-      if (label !== undefined) text = await translate(label, {}, 'zh')
+      if (label !== undefined) text = await translate(label, {}, $languageStore)
     } catch {}
     labels.set(_class, text)
     return text
@@ -158,6 +160,7 @@
   }
 
   async function load (): Promise<void> {
+    await translateTracking(departments.string.TrackingPageActivity, {}, $languageStore)
     loading = true
     error = ''
     try {
@@ -205,16 +208,16 @@
       }
       const next: Row[] = []
       for (const tx of work) {
-        const cls = tx.objectClass === departments.class.OrderAction ? '订单操作' : await classLabel(tx.objectClass)
+        const cls = tx.objectClass === departments.class.OrderAction ? trackingText(departments.string.TrackingPageOrderAction) : await classLabel(tx.objectClass)
         const isComment = comments.includes(tx.objectClass)
         const k =
           tx._class === core.class.TxCreateDoc
             ? isComment
-              ? '评论'
-              : '新建'
+              ? trackingText(departments.string.TrackingPageComment)
+              : trackingText(departments.string.TrackingPageCreate)
             : tx._class === core.class.TxRemoveDoc
-              ? '删除'
-              : '修改'
+              ? trackingText(departments.string.TrackingPageRemove)
+              : trackingText(departments.string.TrackingPageUpdate)
         let detail = ''
         if (tx._class === core.class.TxUpdateDoc || tx._class === core.class.TxMixin) {
           const ops =
@@ -231,12 +234,12 @@
           detail = short(plainText(message))
         } else if (tx.objectClass === departments.class.OrderAction && tx._class === core.class.TxCreateDoc) {
           const a = (tx as TxCreateDoc<Doc>).attributes as unknown as { kind: string, reason?: string }
-          detail = `${orderKinds[a.kind] ?? a.kind}${a.reason !== undefined && a.reason !== '' ? '：' + a.reason : ''}`
+          detail = `${orderKinds[a.kind] === undefined ? a.kind : trackingText(orderKinds[a.kind])}${a.reason !== undefined && a.reason !== '' ? '：' + a.reason : ''}`
         }
         next.push({
           at: tx.modifiedOn,
           who: bySocial.get(tx.modifiedBy),
-          kind: tx.objectClass === departments.class.OrderAction ? '订单操作' : k,
+          kind: tx.objectClass === departments.class.OrderAction ? trackingText(departments.string.TrackingPageOrderAction) : k,
           what: `${cls}${titles.get(tx.objectId) !== undefined && titles.get(tx.objectId) !== '' ? '：' + titles.get(tx.objectId) : ''}`,
           detail
         })
@@ -245,14 +248,14 @@
         next.push({
           at: ev.lastOn,
           who: ev.actor,
-          kind: auditText[ev.kind] ?? ev.kind,
+          kind: auditText[ev.kind] === undefined ? ev.kind : trackingText(auditText[ev.kind]),
           what: ev.label,
-          detail: ev.count > 1 ? `${ev.count} 次（${new Date(ev.firstOn).toLocaleTimeString()} 起）` : ''
+          detail: ev.count > 1 ? trackingText(departments.string.TrackingPageRepeat, { count: ev.count, first: new Date(ev.firstOn).toLocaleTimeString() }) : ''
         })
       }
       rows = next.sort((a, b) => b.at - a.at)
     } catch (e) {
-      error = '读取失败，请缩小日期范围后再试。'
+      error = trackingText(departments.string.TrackingPageLoadFailed)
     } finally {
       loading = false
     }
@@ -265,46 +268,51 @@
 
   function exportExcel (): void {
     const sheet = [
-      ['时间', '谁', '做了什么', '对象', '改动内容'],
+      [trackingText(departments.string.TrackingPageWhen), trackingText(departments.string.TrackingPageWho), trackingText(departments.string.TrackingPageAction), trackingText(departments.string.TrackingPageObject), trackingText(departments.string.TrackingPageChanges)],
       ...shown.map((it) => [new Date(it.at).toLocaleString(), name(it.who), it.kind, it.what, it.detail])
     ]
-    downloadWorkbook(createWorkbook([{ name: '操作记录', rows: sheet }]), `操作记录_${from}_${to}.xlsx`)
-    void recordAudit('export', `导出操作记录（${shown.length} 条）`)
+    downloadWorkbook(createWorkbook([{ name: trackingText(departments.string.TrackingPageActivity), rows: sheet }]), `操作记录_${from}_${to}.xlsx`)
+    void recordAudit('export', trackingText(departments.string.TrackingPageExportActivity, { count: shown.length }))
+  }
+  function trackingText (id: IntlString, params: Record<string, string | number> = {}): string {
+    let result: string = id
+    translateCB(id, params, $languageStore, (value) => { result = value })
+    return result
   }
 </script>
 
 <section class="log">
-  <h2>操作记录</h2>
+  <Header adaptive="disabled"><Breadcrumb label={departments.string.TrackingPageActivity} size="large" isCurrent /></Header>
   {#if !owner && visible.length === 0}
-    <p class="hint">你没有看追踪的权限。部门管理员可以看本部门；主管要超级管理员开，员工要部门管理员开。</p>
+    <p class="hint"><Label label={departments.string.TrackingPageNoAccess} /></p>
   {:else}
     <div class="filters">
-      <label>部门<select bind:value={dept}>
-          <option value="">{owner ? '全部' : '我能看的全部'}</option>
+      <label><Label label={departments.string.TrackingPageDepartment} /><select bind:value={dept}>
+          <option value="">{owner ? trackingText(departments.string.TrackingPageAll) : trackingText(departments.string.TrackingPageAllVisible)}</option>
           {#each visible as d (d._id)}<option value={d._id}>{d.name}</option>{/each}
         </select></label>
-      <label>人<select bind:value={person}>
-          <option value="">全部</option>
+      <label><Label label={departments.string.TrackingPagePerson} /><select bind:value={person}>
+          <option value=""><Label label={departments.string.TrackingPageAll} /></option>
           {#each choosable as p (p._id)}<option value={p.personUuid}>{formatName(p.name)}</option>{/each}
         </select></label>
-      <label>从<input type="date" bind:value={from} /></label>
-      <label>到<input type="date" bind:value={to} /></label>
-      <label>类型<select bind:value={kind}>
-          <option value="">全部</option>
-          {#each ['新建', '修改', '删除', '评论', '订单操作', '登录', '打开', '导出', '异常提醒'] as k}<option value={k}>{k}</option>{/each}
+      <label><Label label={departments.string.TrackingPageFrom} /><input type="date" bind:value={from} /></label>
+      <label><Label label={departments.string.TrackingPageTo} /><input type="date" bind:value={to} /></label>
+      <label><Label label={departments.string.TrackingPageType} /><select bind:value={kind}>
+          <option value=""><Label label={departments.string.TrackingPageAll} /></option>
+          {#each [trackingText(departments.string.TrackingPageCreate), trackingText(departments.string.TrackingPageUpdate), trackingText(departments.string.TrackingPageRemove), trackingText(departments.string.TrackingPageComment), trackingText(departments.string.TrackingPageOrderAction), trackingText(departments.string.TrackingPageLogin), trackingText(departments.string.TrackingPageOpen), trackingText(departments.string.TrackingPageExport), trackingText(departments.string.TrackingPageAlert)] as k}<option value={k}>{k}</option>{/each}
         </select></label>
-      <label>搜索<input type="search" placeholder="人名、订单号、文件名…" bind:value={search} /></label>
-      <button disabled={loading} on:click={load}>{loading ? '正在读取…' : '查询'}</button>
-      <button disabled={shown.length === 0} on:click={exportExcel}>导出 Excel</button>
+      <label><Label label={departments.string.TrackingPageSearch} /><input type="search" placeholder={trackingText(departments.string.TrackingPageSearchPlaceholder)} bind:value={search} /></label>
+      <button disabled={loading} on:click={load}>{loading ? trackingText(departments.string.TrackingPageLoading) : trackingText(departments.string.TrackingPageQuery)}</button>
+      <button disabled={shown.length === 0} on:click={exportExcel}><Label label={departments.string.TrackingPageExportExcel} /></button>
     </div>
     {#if error}<p class="err">{error}</p>{/if}
-    <p class="hint">共 {shown.length} 条{rows.length >= 1000 ? '（太多了，只显示最近的，请缩小范围）' : ''}</p>
+    <p class="hint"><Label label={departments.string.TrackingPageResultCount} params={{ count: shown.length }} />{rows.length >= 1000 ? trackingText(departments.string.TrackingPageLimitHint) : ''}</p>
     <div class="table">
       <table>
-        <thead><tr><th>时间</th><th>谁</th><th>做了什么</th><th>对象</th><th>改动内容</th></tr></thead>
+        <thead><tr><th><Label label={departments.string.TrackingPageWhen} /></th><th><Label label={departments.string.TrackingPageWho} /></th><th><Label label={departments.string.TrackingPageAction} /></th><th><Label label={departments.string.TrackingPageObject} /></th><th><Label label={departments.string.TrackingPageChanges} /></th></tr></thead>
         <tbody>
           {#each shown as it, i (i)}
-            <tr class:alert={it.kind === '异常提醒'}>
+            <tr class:alert={it.kind === trackingText(departments.string.TrackingPageAlert)}>
               <td>{new Date(it.at).toLocaleString()}</td>
               <td>{name(it.who)}</td>
               <td>{it.kind}</td>

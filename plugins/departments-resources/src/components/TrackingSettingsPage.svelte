@@ -1,5 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import { Breadcrumb, Button, Header, Label, languageStore } from '@hcengineering/ui'
+  import { translateCB, type IntlString } from '@hcengineering/platform'
   import core, { AccountRole, getCurrentAccount } from '@hcengineering/core'
   import departments, { defaultTrackingSettings, type TrackingSettings } from '@hcengineering/departments'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -41,29 +43,34 @@
       } else {
         await client.update(settings, values)
       }
-      message = '已保存。'
+      message = trackingText(departments.string.TrackingPageSettingsSaved)
     } catch {
       failed = true
-      message = '保存失败：只有超级管理员能改。'
+      message = trackingText(departments.string.TrackingPageSettingsSaveError)
     } finally {
       busy = false
     }
   }
+  function trackingText (id: IntlString, params: Record<string, string | number> = {}): string {
+    let result: string = id
+    translateCB(id, params, $languageStore, (value) => { result = value })
+    return result
+  }
 </script>
 
 <section class="settings">
-  <h2>追踪设置</h2>
+  <Header adaptive="disabled"><Breadcrumb label={departments.string.TrackingPageTrackingSettings} size="large" isCurrent /></Header>
   {#if !owner}
-    <p class="hint">只有超级管理员能改这里。</p>
+    <p class="hint"><Label label={departments.string.TrackingPageOwnerOnly} /></p>
   {/if}
-  <label>"打开页面"的记录保留多少天<input type="number" min="1" bind:value={retention} disabled={!owner} /></label>
-  <p class="hint">过期的自动删除。新建、修改、删除、评论这些改动记录永久保存，不受这里影响。</p>
+  <label><Label label={departments.string.TrackingPageRetentionDays} /><input type="number" min="1" bind:value={retention} disabled={!owner} /></label>
+  <p class="hint"><Label label={departments.string.TrackingPageRetentionHint} /></p>
   <div class="row">
-    <label>多少分钟内<input type="number" min="1" bind:value={minutes} disabled={!owner} /></label>
-    <label>打开超过多少个页面就提醒<input type="number" min="1" bind:value={count} disabled={!owner} /></label>
+    <label><Label label={departments.string.TrackingPageMinutes} /><input type="number" min="1" bind:value={minutes} disabled={!owner} /></label>
+    <label><Label label={departments.string.TrackingPageMaxViews} /><input type="number" min="1" bind:value={count} disabled={!owner} /></label>
   </div>
-  <p class="hint">超过时，所有超级管理员会在收件箱收到提醒，操作记录里也会有一条红色的"异常提醒"。</p>
-  {#if owner}<button disabled={busy} on:click={save}>{busy ? '正在保存…' : '保存'}</button>{/if}
+  <p class="hint"><Label label={departments.string.TrackingPageAlertHint} /></p>
+  {#if owner}<Button kind="primary" disabled={busy} on:click={save} label={busy ? departments.string.TrackingPageSaving : departments.string.TrackingPageSave} />{/if}
   {#if message}<p class:err={failed} class:ok={!failed}>{message}</p>{/if}
 </section>
 
