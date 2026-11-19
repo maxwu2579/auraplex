@@ -222,6 +222,8 @@
     moduleDefaults(departmentDocs), moduleGrant, companyModuleDefault(moduleSettings?.companyDefaults, account.role))
   $: if (moduleReady) departmentModuleLevel.set(available)
   // A permission refresh must not restart navigation while the current application remains available.
+  // Auraplex tracking widget, loaded by id so the workbench does not depend on the departments plugin.
+  const todayActivity = 'departments:component:TodayActivity' as AnyComponent
   $: currentModuleAllowed = $location.path[2] === undefined || available($location.path[2]) !== 'none'
   $: if (moduleReady) refreshModuleRoute(currentModuleAllowed)
 
@@ -1200,6 +1202,10 @@
   <Dock />
   <div bind:this={cover} class="cover" />
   <TooltipInstance />
+  {#if moduleReady && available('tracking') !== 'none'}
+    <!-- Auraplex tracking: what happened today in this module -->
+    <Component is={todayActivity} props={{ app: $location.path[2], panelDoc }} />
+  {/if}
   <PanelInstance bind:this={panelInstance} contentPanel={elementPanel} readonly={$printModeStore}>
     <svelte:fragment slot="panel-header">
       <ActionContext context={{ mode: 'panel' }} />

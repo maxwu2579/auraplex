@@ -168,7 +168,8 @@ export default plugin(departmentsId, {
     OrderFlowSettings: '' as AnyComponent,
     ActivityLog: '' as AnyComponent,
     Workload: '' as AnyComponent,
-    TrackingSettingsPage: '' as AnyComponent
+    TrackingSettingsPage: '' as AnyComponent,
+    TodayActivity: '' as AnyComponent
   },
   string: {
     Departments: '' as IntlString,

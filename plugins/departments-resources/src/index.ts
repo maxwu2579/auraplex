@@ -6,7 +6,8 @@ import OrderFlowSettings from './components/OrderFlowSettings.svelte'
 import ActivityLog from './components/ActivityLog.svelte'
 import Workload from './components/Workload.svelte'
 import TrackingSettingsPage from './components/TrackingSettingsPage.svelte'
+import TodayActivity from './components/TodayActivity.svelte'
 
 export default async (): Promise<Resources> => ({
-  component: { Directory, Orders, OrderFlowSettings, ActivityLog, Workload, TrackingSettingsPage }
+  component: { Directory, Orders, OrderFlowSettings, ActivityLog, Workload, TrackingSettingsPage, TodayActivity }
 })
