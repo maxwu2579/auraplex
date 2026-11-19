@@ -1,5 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import type { AccountUuid, Class, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
+import type { CompanyModuleDefaults, AccountUuid, Class, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
 import { plugin, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
@@ -128,6 +128,7 @@ export interface TrackingSettings extends Doc {
 export const defaultTrackingSettings = { viewRetentionDays: 365, alertCount: 100, alertMinutes: 60 }
 
 export interface ModuleSettings extends Doc {
+  companyDefaults?: CompanyModuleDefaults
   enabled: boolean
 }
 export interface ModuleGrant extends Doc {

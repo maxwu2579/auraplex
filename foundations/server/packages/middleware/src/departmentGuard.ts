@@ -8,6 +8,8 @@ import core, {
   departmentModuleSettingsClass,
   departmentModuleSettingsId,
   effectiveDepartmentModules,
+  companyModuleDefault,
+  type CompanyModuleDefaults,
   toFindResult,
   moduleRoles,
   type ModuleAccess,
@@ -135,7 +137,8 @@ function forbidden (): never {
   throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
 }
 
-const moduleSettings = departmentModuleSettingsClass as Ref<Class<Doc & { enabled: boolean }>>
+type ModuleSettingsDoc = Doc & { enabled: boolean, companyDefaults?: CompanyModuleDefaults }
+const moduleSettings = departmentModuleSettingsClass as Ref<Class<ModuleSettingsDoc>>
 const moduleGrant = departmentModuleGrantClass as Ref<Class<Doc & DepartmentModuleException & { person: string }>>
 const settingsId = departmentModuleSettingsId as Ref<Doc>
 const grantId = (person: string): Ref<Doc> => ('departments:module-grant:' + person) as Ref<Doc>
@@ -145,7 +148,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   private departments: DepartmentRecord[] = []
   private bySpace = new Map<Ref<Space>, DepartmentRecord>()
   private dirty = true
-  private moduleEnabled?: Promise<boolean>
+  private moduleConfiguration?: Promise<ModuleSettingsDoc | undefined>
   private readonly grants = new Map<string, Promise<DepartmentModuleException | undefined>>()
 
   static async create (
@@ -174,17 +177,17 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }))
   }
 
-  private readModuleEnabled (ctx: MeasureContext<SessionData>): Promise<boolean> {
-    if (this.moduleEnabled === undefined) {
+  private readModuleSettings (ctx: MeasureContext<SessionData>): Promise<ModuleSettingsDoc | undefined> {
+    if (this.moduleConfiguration === undefined) {
       const pending = this.findOne(ctx, moduleSettings, settingsId)
-        .then((settings) => (settings as { enabled?: boolean } | undefined)?.enabled === true)
+        .then((settings) => settings as ModuleSettingsDoc | undefined)
         .catch((err) => {
-          if (this.moduleEnabled === pending) this.moduleEnabled = undefined
+          if (this.moduleConfiguration === pending) this.moduleConfiguration = undefined
           throw err
         })
-      this.moduleEnabled = pending
+      this.moduleConfiguration = pending
     }
-    return this.moduleEnabled
+    return this.moduleConfiguration
   }
 
   private readGrant (ctx: MeasureContext<SessionData>, person: string): Promise<DepartmentModuleException | undefined> {
@@ -203,10 +206,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   private async moduleAccess (ctx: MeasureContext<SessionData>, enforceCeiling = false) {
     const account = ctx.contextData.account
     if (isOwner(account, ctx) || !this.context.hierarchy.hasClass(moduleSettings)) return undefined
-    if (!enforceCeiling && !(await this.readModuleEnabled(ctx))) return undefined
+    const settings = await this.readModuleSettings(ctx)
+    if (!enforceCeiling && settings?.enabled !== true) return undefined
     await this.load(ctx)
     const grant = await this.readGrant(ctx, account.uuid)
-    return effectiveDepartmentModules(account.uuid, false, true, this.moduleDefaults(), grant)
+    return effectiveDepartmentModules(account.uuid, false, true, this.moduleDefaults(), grant,
+      companyModuleDefault(settings?.companyDefaults, account.role))
   }
 
   private protectedModule (_class: Ref<Class<Doc>>): string | undefined {
@@ -311,8 +316,18 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (!creating && tx._class !== core.class.TxUpdateDoc) forbidden()
     const fields = (creating ? (tx as TxCreateDoc<Doc>).attributes : (tx as TxUpdateDoc<Doc>).operations) as Record<string, unknown>
     if (tx.objectClass === moduleSettings) {
-      if (!owner || tx.objectId !== settingsId || typeof fields.enabled !== 'boolean' ||
-        Object.keys(fields).some((key) => key !== 'enabled')) forbidden()
+      if (!owner || tx.objectId !== settingsId || Object.keys(fields).length === 0 ||
+        Object.keys(fields).some((key) => key !== 'enabled' && key !== 'companyDefaults') ||
+        ((creating || 'enabled' in fields) && typeof fields.enabled !== 'boolean')) forbidden()
+      if ('companyDefaults' in fields) {
+        const defaults = fields.companyDefaults
+        if (defaults === null || typeof defaults !== 'object' || Array.isArray(defaults)) forbidden()
+        for (const [role, levels] of Object.entries(defaults)) {
+          if ((role !== 'employee' && role !== 'maintainer') || levels === null || typeof levels !== 'object' ||
+            Array.isArray(levels) || Object.entries(levels).some(([alias, level]) =>
+              alias.trim() === '' || (level !== 'none' && level !== 'view' && level !== 'edit'))) forbidden()
+        }
+      }
       return
     }
     const existing = creating ? undefined : await this.findOne(ctx, moduleGrant, tx.objectId)
@@ -342,7 +357,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     if (!TxProcessor.isExtendsCUD(tx._class)) return
     const cud = tx as TxCUD<Doc>
-    if (cud.objectClass === moduleSettings) this.moduleEnabled = undefined
+    if (cud.objectClass === moduleSettings) this.moduleConfiguration = undefined
     if (cud.objectClass === moduleGrant) this.grants.clear()
   }
 

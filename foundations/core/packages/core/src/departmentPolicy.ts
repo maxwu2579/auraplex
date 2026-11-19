@@ -16,6 +16,17 @@ export const moduleRoles = ['admin', 'supervisor', 'employee', 'reader'] as cons
 export type ModuleRole = typeof moduleRoles[number]
 export type ModuleLevel = 'none' | 'view' | 'edit'
 export type ModuleAccess = Record<string, Record<ModuleRole, ModuleLevel>>
+export type CompanyModuleDefaults = Partial<Record<'employee' | 'maintainer', Record<string, ModuleLevel>>>
+
+export function companyModuleRole (role: string): keyof CompanyModuleDefaults | undefined {
+  return role === 'USER' ? 'employee' : role === 'MAINTAINER' ? 'maintainer' : undefined
+}
+
+export function companyModuleDefault (defaults: CompanyModuleDefaults | undefined, role: string): Record<string, ModuleLevel> | undefined {
+  const key = companyModuleRole(role)
+  return key === undefined ? undefined : defaults?.[key]
+}
+
 export type ModuleExtra = Record<string, Exclude<ModuleLevel, 'none'>>
 export const moduleLevelRank: Record<ModuleLevel, number> = { none: 0, view: 1, edit: 2 }
 
@@ -45,7 +56,8 @@ export function effectiveDepartmentModules (
   owner: boolean,
   enabled: boolean,
   departments: readonly DepartmentModuleDefaults[],
-  grant?: DepartmentModuleException
+  grant?: DepartmentModuleException,
+  companyDefault?: Record<string, ModuleLevel>
 ): (alias: string) => ModuleLevel {
   if (owner || !enabled) return () => 'edit'
   const membership = departments.flatMap((dept) => dept.archived ? [] :
@@ -56,7 +68,14 @@ export function effectiveDepartmentModules (
     if (alwaysAvailable.includes(alias)) return 'edit'
     if (blocked.has(alias)) return 'none'
     let level: ModuleLevel = Object.prototype.hasOwnProperty.call(extra, alias) ? extra[alias] : 'none'
-    if (alias === 'whatsapp' && membership.length === 0 && level === 'none') return 'edit'
+    if (membership.length === 0) {
+      if (alias === 'whatsapp') {
+        if (level === 'none') return 'edit'
+      } else if (!Object.prototype.hasOwnProperty.call(extra, alias) &&
+        companyDefault !== undefined && Object.prototype.hasOwnProperty.call(companyDefault, alias)) {
+        level = companyDefault[alias]
+      }
+    }
     for (const { dept, role } of membership) {
       const candidate = dept.moduleAccess === undefined ? defaultModuleLevel(alias, role, dept.modules) :
         dept.moduleAccess[alias]?.[role] ?? (alias === 'whatsapp' ? 'edit' : 'none')

@@ -129,6 +129,7 @@ const DOMAIN_MODULE_ACCESS = 'department_module_access' as Domain
 
 @Model(departments.class.ModuleSettings, core.class.Doc, DOMAIN_MODULE_ACCESS)
 export class TModuleSettings extends TDoc implements ModuleSettings {
+  @Hidden() companyDefaults?: ModuleSettings['companyDefaults']
   @Hidden() enabled!: boolean
 }
 

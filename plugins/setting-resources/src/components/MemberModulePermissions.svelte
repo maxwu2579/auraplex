@@ -1,7 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import core, {
-    AccountRole, type AccountUuid, type Class, type Doc, type Ref,
+    AccountRole, companyModuleDefault, companyModuleRole, type CompanyModuleDefaults, type AccountUuid, type Class, type Doc, type Ref,
     type DepartmentModuleDefaults, type DepartmentModuleException, type ModuleExtra, type ModuleLevel,
     canChangeDepartmentModuleException, departmentModuleGrantClass, departmentModuleSettingsClass,
     departmentModuleSettingsId, effectiveDepartmentModules, normalizeModuleExtra, getCurrentAccount
@@ -17,7 +17,7 @@
   export let departments: Array<DepartmentModuleDefaults & { name: string }>
 
   type Grant = Doc & { person: AccountUuid, extra: ModuleExtra, blocked: string[] }
-  type Settings = Doc & { enabled: boolean }
+  type Settings = Doc & { enabled: boolean, companyDefaults?: CompanyModuleDefaults }
   type Application = Doc & { alias: string, label: IntlString, hidden: boolean }
   const client = getClient()
   const actor = getCurrentAccount()
@@ -36,6 +36,7 @@
   let extra: ModuleExtra = {}
   let blocked: string[] = []
   let enabled = false
+  let defaults: CompanyModuleDefaults | undefined
   let loaded = false
   let busy = false
   let error = ''
@@ -46,6 +47,7 @@
   if (isConfigured) {
     createQuery().query(settingsClass, { _id: departmentModuleSettingsId as Ref<Settings> }, (rows) => {
       enabled = rows[0]?.enabled === true
+      defaults = rows[0]?.companyDefaults
     })
     createQuery().query(grantClass, { _id: grantId }, (rows) => {
       if (!loaded) {
@@ -62,8 +64,8 @@
   $: selectedDepartments = departments.filter((dept) => !dept.archived &&
     Object.values(dept.members).some((members) => members.includes(person)))
   $: editable = isConfigured && (owner || selectedDepartments.some((dept) => dept.members.admin.includes(actor.uuid)))
-  $: final = effectiveDepartmentModules(person, role === AccountRole.Owner, enabled, departments, { extra, blocked })
-  $: ceiling = effectiveDepartmentModules(actor.uuid, owner, true, departments, actorGrant)
+  $: final = effectiveDepartmentModules(person, role === AccountRole.Owner, enabled, departments, { extra, blocked }, companyModuleDefault(defaults, role))
+  $: ceiling = effectiveDepartmentModules(actor.uuid, owner, true, departments, actorGrant, companyModuleDefault(defaults, actor.role))
   const roleOptions = [
     { key: 'admin', label: '管理员' }, { key: 'supervisor', label: '主管' },
     { key: 'employee', label: '员工' }, { key: 'reader', label: '访客' }
@@ -146,7 +148,8 @@
           {:else}<li>没有可用模块</li>{/each}
         </ul>
       </details>
-    {:else}<p>未加入部门</p>{/each}
+    {:else}<p>{companyModuleDefault(defaults, role) === undefined ? '未加入部门' :
+      companyModuleRole(role) === 'maintainer' ? '来自公司默认（管理员）' : '来自公司默认（员工）'}</p>{/each}
   </details>
   <details>
     <summary>个人额外 / 屏蔽（{exceptionCount}）</summary>

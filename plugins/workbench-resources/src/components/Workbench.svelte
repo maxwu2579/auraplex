@@ -23,6 +23,8 @@
     departmentModuleSettingsClass,
     departmentModuleSettingsId,
     effectiveDepartmentModules,
+    companyModuleDefault,
+    type CompanyModuleDefaults,
     type DepartmentModuleException,
     type DepartmentModuleDefaults,
     Class,
@@ -172,12 +174,12 @@
     .findAllSync<Application>(workbench.class.Application, { hidden: false, _id: { $nin: excludedApps } })
     .filter((it) => isAllowedToRole(it.accessLevel, account))
 
-  const settingsClass = departmentModuleSettingsClass as Ref<Class<Doc & { enabled: boolean }>>
+  const settingsClass = departmentModuleSettingsClass as Ref<Class<Doc & { enabled: boolean, companyDefaults?: CompanyModuleDefaults }>>
   const grantClass = departmentModuleGrantClass as Ref<Class<Doc & DepartmentModuleException>>
   const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
   const departmentMixin = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
   let blockedModule = false
-  let moduleSettings: (Doc & { enabled: boolean }) | undefined
+  let moduleSettings: (Doc & { enabled: boolean, companyDefaults?: CompanyModuleDefaults }) | undefined
   let moduleGrant: (Doc & DepartmentModuleException) | undefined
   let departmentDocs: Doc[] = []
   let settingsLoaded = false
@@ -217,7 +219,7 @@
 
   $: moduleReady = !moduleControl || (settingsLoaded && (moduleSettings?.enabled !== true || (defaultsLoaded && grantLoaded)))
   $: available = effectiveDepartmentModules(account.uuid, !moduleControl, moduleSettings?.enabled === true,
-    moduleDefaults(departmentDocs), moduleGrant)
+    moduleDefaults(departmentDocs), moduleGrant, companyModuleDefault(moduleSettings?.companyDefaults, account.role))
   $: if (moduleReady) departmentModuleLevel.set(available)
   // A permission refresh must not restart navigation while the current application remains available.
   $: currentModuleAllowed = $location.path[2] === undefined || available($location.path[2]) !== 'none'

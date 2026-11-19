@@ -201,3 +201,16 @@ test('workspace administrators can create departments with themselves as the onl
   await expect(guard.tx(ctx(AccountRole.User), [batch(create, mixin('creator'))])).rejects.toThrow()
   await expect(guard.tx(ctx(AccountRole.Owner), [batch(create, mixin('other'))])).resolves.toBeDefined()
 })
+
+test('only owners can save validated company module defaults', async () => {
+  const cls = 'departments:class:ModuleSettings' as Ref<Class<Doc>>
+  const ctx = (role: AccountRole) => ({ contextData: { account: { uuid: 'tester', role }, broadcast: { txes: [] } } }) as unknown as MeasureContext<SessionData>
+  const next = { findAll: jest.fn(async () => []), tx: jest.fn(async () => []) } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx(AccountRole.Owner), { hierarchy: { hasClass: () => true } } as unknown as PipelineContext, next)
+  const change = (companyDefaults: unknown) => ({ ...update({ companyDefaults }),
+    objectClass: cls, objectId: 'departments:ids:ModuleSettings' as Ref<Doc>, objectSpace: core.space.Workspace })
+  await expect(guard.tx(ctx(AccountRole.Owner), [change({ employee: { document: 'edit' } })])).resolves.toBeDefined()
+  await expect(guard.tx(ctx(AccountRole.Maintainer), [change({ employee: { document: 'edit' } })])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.Owner), [change({ guest: { document: 'edit' } })])).rejects.toThrow()
+  await expect(guard.tx(ctx(AccountRole.Owner), [change({ employee: { document: 'all' } })])).rejects.toThrow()
+})

@@ -3,7 +3,7 @@
   import chunter from '@hcengineering/chunter'
   import { getResource, type Asset, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type CompanyModuleDefaults, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -91,6 +91,52 @@
   createQuery().query(departments.class.ModuleSettings, { _id: settingsId }, (items) => {
     moduleSettings = items[0]
   })
+
+  const companyRoles = [{ id: 'employee', label: '员工' }, { id: 'maintainer', label: '管理员' }] as const
+  let companyDraft: CompanyModuleDefaults | undefined
+  let companySaved = false
+
+  function changeCompanyDefault (role: keyof CompanyModuleDefaults, alias: string, value: string): void {
+    if (!owner || busy || (value !== 'none' && value !== 'view' && value !== 'edit')) return
+    const current = companyDraft ?? moduleSettings?.companyDefaults ?? {}
+    companyDraft = { ...current, [role]: { ...current[role], [alias]: value } }
+    companySaved = false
+  }
+
+  async function saveCompanyDefaults (): Promise<void> {
+    if (!owner || busy || companyDraft === undefined) return
+    const companyDefaults = companyDraft
+    busy = true
+    error = false
+    companySaved = false
+    try {
+      const ops = client.apply('company-module-defaults')
+      if (moduleSettings === undefined) {
+        ops.notMatch(departments.class.ModuleSettings, { _id: settingsId })
+        await ops.createDoc(departments.class.ModuleSettings, core.space.Workspace, { enabled: false, companyDefaults }, settingsId)
+      } else {
+        ops.match(departments.class.ModuleSettings, { _id: settingsId, modifiedOn: moduleSettings.modifiedOn })
+        await ops.update(moduleSettings, { companyDefaults })
+      }
+      if (!(await ops.commit()).result) throw new Error('Company defaults were not saved')
+      companyDraft = undefined
+      companySaved = true
+    } catch {
+      error = true
+    } finally {
+      busy = false
+    }
+  }
+
+  function openGuestPermissions (): void {
+    const loc = getCurrentLocation()
+    navigate({ path: [...loc.path.slice(0, 2), 'setting', 'setting', 'guestPermissions'] })
+  }
+
+  function companyPrefill (alias: string, role: ModuleRole): ModuleLevel {
+    const level = moduleSettings?.companyDefaults?.employee?.[alias] ?? (alias === 'whatsapp' ? 'edit' : 'none')
+    return role === 'reader' && level === 'edit' ? 'view' : level
+  }
 
   const grantId = (person: AccountUuid): Ref<ModuleGrant> => ('departments:module-grant:' + person) as Ref<ModuleGrant>
 
@@ -329,7 +375,8 @@
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
     return Object.fromEntries(applications.map(({ alias }) => [alias,
       access?.moduleAccess?.[alias] ?? Object.fromEntries(moduleRoles.map((role) => [role,
-        alias === 'whatsapp' ? 'edit' :
+        access === undefined && moduleSettings?.companyDefaults?.employee !== undefined ? companyPrefill(alias, role) :
+          alias === 'whatsapp' ? 'edit' :
           access?.moduleAccess !== undefined ? 'none' :
           access !== undefined ? defaultModuleLevel(alias, role, access.modules) :
           alias === 'materials' ? (role === 'reader' ? 'none' : 'view') :
@@ -519,6 +566,37 @@
   {/if}
     </svelte:fragment>
   </Header>
+  {#if selected === undefined}
+    <details class="company-defaults">
+      <summary>公司默认</summary>
+      <p>不在任何部门的人用这里的默认；新建部门时按这里预填；已在部门的人以部门设置为准。</p>
+      <button type="button" on:click={openGuestPermissions}>访客能用什么在 设置 → 访客 → 应用权限 里设</button>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>模块</th>{#each companyRoles as role}<th>{role.label}</th>{/each}</tr></thead>
+          <tbody>
+            {#each applications as app (app.alias)}
+              <tr>
+                <th><Label label={app.label} /></th>
+                {#each companyRoles as role}
+                  {@const level = (companyDraft ?? moduleSettings?.companyDefaults)?.[role.id]?.[app.alias] ??
+                    (app.alias === 'whatsapp' ? 'edit' : 'none')}
+                  <td><select aria-label={role.label + ' ' + app.alias} value={level} disabled={!owner || busy}
+                    on:change={(event) => changeCompanyDefault(role.id, app.alias, event.currentTarget.value)}>
+                    <option value="none">不能用</option>
+                    <option value="view">只能看</option>
+                    <option value="edit">能编辑</option>
+                  </select></td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {#if owner}<button type="button" disabled={busy || companyDraft === undefined} on:click={saveCompanyDefaults}>保存公司默认</button>{/if}
+      {#if companySaved}<p role="status">公司默认已保存</p>{/if}
+    </details>
+  {/if}
   {#if canCreateDepartment && selected === undefined && showCreate}
     <div class="create">
       <input bind:value={newName} aria-label="Department name" />
@@ -788,6 +866,15 @@
     margin: 1rem 0;
   }
   .layout { width: 100%; min-width: 0; }
+  .company-defaults {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--theme-divider-color);
+    border-radius: 0.5rem;
+    color: var(--theme-content-color);
+    background: var(--theme-panel-color);
+  }
+  .company-defaults summary { cursor: pointer; color: var(--theme-caption-color); font-weight: 600; }
+  .company-defaults table { width: 100%; }
   nav {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));

@@ -45,3 +45,11 @@ test('WhatsApp defaults to usable and supports an explicit deny', () => {
   expect(effectiveDepartmentModules('reader', false, true, [disabled, team])('whatsapp')).toBe('edit')
   expect(effectiveDepartmentModules('reader', false, true, [team], { extra: {}, blocked: ['whatsapp'] })('whatsapp')).toBe('none')
 })
+
+test('company defaults only apply outside departments and personal exceptions override them', () => {
+  const defaults = { orders: 'edit', inventory: 'view' } as const
+  expect(effectiveDepartmentModules('outsider', false, true, [team], undefined, defaults)('orders')).toBe('edit')
+  expect(effectiveDepartmentModules('reader', false, true, [team], undefined, defaults)('inventory')).toBe('none')
+  expect(effectiveDepartmentModules('outsider', false, true, [], { extra: {}, blocked: ['orders'] }, defaults)('orders')).toBe('none')
+  expect(effectiveDepartmentModules('outsider', false, true, [])('orders')).toBe('none')
+})
