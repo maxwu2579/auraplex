@@ -1,13 +1,27 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import chunter from '@hcengineering/chunter'
-  import { getResource, type Asset, type IntlString } from '@hcengineering/platform'
+  import { getResource, translate, translateCB, type Asset, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
   import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type CompanyModuleDefaults, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, getCurrentLocation, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
+  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, getCurrentLocation, languageStore, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
+
+  function localize (language: string) {
+    return (id: IntlString): string => {
+      let result = ''
+      translateCB(id, {}, language, (value) => { result = value })
+      return result
+    }
+  }
+  let local = localize('en')
+  async function refreshLanguage (language: string): Promise<void> {
+    await translate(departments.string.DirectoryCompanyDefaults, {}, language)
+    if ($languageStore === language) local = localize(language)
+  }
+  $: void refreshLanguage($languageStore)
 
   type RoleField = 'administrators' | 'supervisors' | 'employees' | 'readers'
   type PermissionField = 'adminPermissions' | 'supervisorPermissions' | 'employeePermissions' | 'readerPermissions'
@@ -92,7 +106,7 @@
     moduleSettings = items[0]
   })
 
-  const companyRoles = [{ id: 'maintainer', label: '管理员' }, { id: 'supervisor', label: '主管' }, { id: 'employee', label: '员工' }] as const
+  $: companyRoles = [{ id: 'maintainer', label: local(departments.string.DirectoryAdministrator) }, { id: 'supervisor', label: local(departments.string.DirectorySupervisor) }, { id: 'employee', label: local(departments.string.DirectoryEmployee) }] as const
   let companyDraft: CompanyModuleDefaults | undefined
   let companySaved = false
 
@@ -380,7 +394,7 @@
     }
   }
   const ownModules = new Set(['orders', 'tracking', 'materials', 'prospects'])
-  const roleLabels: Record<ModuleRole, string> = { admin: '管理员', supervisor: '主管', employee: '员工', reader: '访客' }
+  $: roleLabels = { admin: local(departments.string.DirectoryAdministrator), supervisor: local(departments.string.DirectorySupervisor), employee: local(departments.string.DirectoryEmployee), reader: local(departments.string.DirectoryGuest) }
 
   function initialMatrix (access?: DepartmentAccess): ModuleAccess {
     return Object.fromEntries(applications.map(({ alias }) => [alias,
@@ -409,7 +423,7 @@
   function spaceItems (spaces: Space[], selected: Ref<Space>[]) {
     return [
       ...spaces.map((space) => ({ id: space._id, label: space.name })).sort((a, b) => a.label.localeCompare(b.label)),
-      ...selected.filter((id) => !spaces.some((space) => space._id === id)).map((id) => ({ id, label: '已配置的空间' }))
+      ...selected.filter((id) => !spaces.some((space) => space._id === id)).map((id) => ({ id, label: local(departments.string.DirectoryConfiguredSpace) }))
     ]
   }
 
@@ -429,10 +443,10 @@
     }
   }
 
-  const moduleFilters = [
-    { id: 'all', label: '全部' },
-    { id: 'available', label: '可用模块' },
-    { id: 'unavailable', label: '不可用模块' }
+  $: moduleFilters = [
+    { id: 'all', label: local(departments.string.DirectoryAll) },
+    { id: 'available', label: local(departments.string.DirectoryEnabledModules) },
+    { id: 'unavailable', label: local(departments.string.DirectoryDisabledModules) }
   ] as const
 
   $: moduleCards = applications.map((app) => {
@@ -448,11 +462,11 @@
     expandedModules = next
   }
 
-  function moduleSummary (alias: string, row: ModuleAccess[string] | undefined): string {
-    if (row === undefined) return '不能用'
+  $: moduleSummary = (alias: string, row: ModuleAccess[string] | undefined): string => {
+    if (row === undefined) return local(departments.string.DirectoryNone)
     return moduleRoles.map((role) => {
       const level = row[role]
-      const text = level === 'none' ? '不能用' : !ownModules.has(alias) ? '能用' : level === 'edit' ? '编辑' : '只能看'
+      const text = level === 'none' ? local(departments.string.DirectoryNone) : !ownModules.has(alias) ? local(departments.string.DirectoryEnabled) : level === 'edit' ? local(departments.string.DirectoryEdit) : local(departments.string.DirectoryView)
       return roleLabels[role] + ' ' + text
     }).join(' · ')
   }
@@ -567,8 +581,8 @@
           event.currentTarget.checked = moduleSettings?.enabled === true
           void toggleModuleSettings(enabled)
         }} />
-      按部门控制模块
-      <small>启用后按部门角色和个人例外分配模块。</small>
+      <Label label={departments.string.DirectoryControlModules} />
+      <small><Label label={departments.string.DirectoryControlHint} /></small>
     </label>
   {/if}
   {#if canCreateDepartment && selected === undefined}
@@ -578,12 +592,12 @@
   </Header>
   {#if selected === undefined}
     <details class="company-defaults">
-      <summary>公司默认</summary>
-      <p>不在任何部门的人按公司角色（员工 / 管理员）用这里的默认；新建部门时管理员、主管、员工三列按这里预填（访客列按员工、最多只能看）；已在部门的人以部门设置为准。“主管”只用于预填部门。</p>
-      <button type="button" on:click={openGuestPermissions}>访客能用什么在 设置 → 访客 → 应用权限 里设</button>
+      <summary><Label label={departments.string.DirectoryCompanyDefaults} /></summary>
+      <p><Label label={departments.string.DirectoryCompanyHint} /></p>
+      <button type="button" on:click={openGuestPermissions}><Label label={departments.string.DirectoryGuestLink} /></button>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>模块</th>{#each companyRoles as role}<th>{role.label}</th>{/each}</tr></thead>
+          <thead><tr><th><Label label={departments.string.DirectoryModule} /></th>{#each companyRoles as role}<th>{role.label}</th>{/each}</tr></thead>
           <tbody>
             {#each applications as app (app.alias)}
               <tr>
@@ -593,9 +607,9 @@
                     (app.alias === 'whatsapp' ? 'edit' : 'none')}
                   <td><select aria-label={role.label + ' ' + app.alias} value={level} disabled={!owner || busy}
                     on:change={(event) => changeCompanyDefault(role.id, app.alias, event.currentTarget.value)}>
-                    <option value="none">不能用</option>
-                    <option value="view">只能看</option>
-                    <option value="edit">能编辑</option>
+                    <option value="none"><Label label={departments.string.DirectoryNone} /></option>
+                    <option value="view"><Label label={departments.string.DirectoryView} /></option>
+                    <option value="edit"><Label label={departments.string.DirectoryCanEdit} /></option>
                   </select></td>
                 {/each}
               </tr>
@@ -603,8 +617,8 @@
           </tbody>
         </table>
       </div>
-      {#if owner}<button type="button" disabled={busy || companyDraft === undefined} on:click={saveCompanyDefaults}>保存公司默认</button>{/if}
-      {#if companySaved}<p role="status">公司默认已保存</p>{/if}
+      {#if owner}<button type="button" disabled={busy || companyDraft === undefined} on:click={saveCompanyDefaults}><Label label={departments.string.DirectorySaveDefaults} /></button>{/if}
+      {#if companySaved}<p role="status"><Label label={departments.string.DirectoryDefaultsSaved} /></p>{/if}
     </details>
   {/if}
   {#if canCreateDepartment && selected === undefined && showCreate}
@@ -630,14 +644,14 @@
   {#if saved}<p><Label label={departments.string.Saved} /></p>{/if}
   <div class="layout">
     {#if selected === undefined}
-      <nav aria-label="部门">
+      <nav aria-label={local(departments.string.Departments)}>
         {#each orderedRows as row (row._id)}
           <button class="department-card" class:archived={row.archived} on:click={() => choose(row)}>
             <span class="department-icon" aria-hidden="true"><Icon icon={hr.icon.Department} size="medium" /></span>
             <span class="department-summary">
               <strong>{row.name}</strong>
-              <span>管理员 {names(row.administrators) || '—'}</span>
-              <span>{new Set(roles.flatMap((role) => row[role.field])).size} 人{row.archived ? ' · 已归档' : ''}</span>
+              <span><Label label={departments.string.DirectoryAdminName} params={{ name: names(row.administrators) || '—' }} /></span>
+              <span><Label label={departments.string.DirectoryCount} params={{ count: new Set(roles.flatMap((role) => row[role.field])).size }} />{#if row.archived} · <Label label={departments.string.DirectoryArchived} />{/if}</span>
             </span>
           </button>
         {/each}
@@ -645,16 +659,16 @@
     {:else if live !== undefined && draft !== undefined}
       <div class="editor">
         <div class="tabs">
-          <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}>成员</button>
-          <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}>模块权限</button>
-          {#if canEdit}<button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}>设置</button>{/if}
+          <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}><Label label={departments.string.DirectoryMembers} /></button>
+          <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}><Label label={departments.string.DirectoryModuleAccess} /></button>
+          {#if canEdit}<button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}><Label label={departments.string.DirectorySettings} /></button>{/if}
         </div>
         {#if tab === 'members'}
           <div class="member-toolbar">
             <SearchInput bind:value={memberSearch} />
             {#if canEdit}
               <Button kind="regular" disabled={!canAssignRole('employees')} on:click={openAddMembers}>
-                <span slot="content">添加成员</span>
+                <span slot="content"><Label label={departments.string.DirectoryAddMembers} /></span>
               </Button>
             {/if}
           </div>
@@ -669,8 +683,8 @@
                   {#if account != null}
                     <div class="member">
                       <strong>{formatName(person.name)}</strong>
-                      <span>{live.administrators.includes(account) || canSeeContacts ? details(person) || '—' : '（不公开）'}</span>
-                      <select aria-label="部门角色" value={role.field} disabled={!canMoveMember(draft, account)}
+                      <span>{live.administrators.includes(account) || canSeeContacts ? details(person) || '—' : local(departments.string.DirectoryPrivate)}</span>
+                      <select aria-label={local(departments.string.DirectoryRole)} value={role.field} disabled={!canMoveMember(draft, account)}
                         on:change={(event) => {
                           const field = roles.find((item) => item.field === event.currentTarget.value)?.field
                           if (field !== undefined) setMemberRole(account, field)
@@ -683,11 +697,11 @@
                       </select>
                       {#if canEdit}
                         <button disabled={busy || !roles.some(({ field }) => live?.[field].includes(account))}
-                          on:click={() => editGrant(account)}>模块例外</button>
+                          on:click={() => editGrant(account)}><Label label={departments.string.DirectoryExceptions} /></button>
                       {/if}
-                      {#if account !== me.uuid}<button on:click={() => chat(account)}>私信</button>{/if}
+                      {#if account !== me.uuid}<button on:click={() => chat(account)}><Label label={departments.string.DirectoryMessage} /></button>{/if}
                       {#if canEdit}
-                        <button disabled={!canMoveMember(draft, account)} on:click={() => setMemberRole(account)}>移出</button>
+                        <button disabled={!canMoveMember(draft, account)} on:click={() => setMemberRole(account)}><Label label={departments.string.DirectoryRemove} /></button>
                       {/if}
                     </div>
                   {/if}
@@ -697,34 +711,34 @@
           {/each}
         {#if canEdit && grantPerson !== undefined}
           <fieldset>
-            <legend>{names([grantPerson])} 的模块例外</legend>
+            <legend><Label label={departments.string.DirectoryPersonExceptions} params={{ name: names([grantPerson]) }} /></legend>
             <div class="member">
-              <fieldset><legend>额外给</legend>
+              <fieldset><legend><Label label={departments.string.DirectoryExtra} /></legend>
                 {#each applications as app (app.alias)}
                   <label><Label label={app.label} />
                     <select value={extra[app.alias] ?? ''} disabled={busy}
                       on:change={(event) => changeExtra(app.alias, event.currentTarget.value)}>
-                      <option value="">无额外权限</option>
-                      {#if ownModules.has(app.alias)}<option value="view">只能看</option>{/if}
-                      <option value="edit">{ownModules.has(app.alias) ? '能编辑' : '能用'}</option>
+                      <option value=""><Label label={departments.string.DirectoryNoExtra} /></option>
+                      {#if ownModules.has(app.alias)}<option value="view"><Label label={departments.string.DirectoryView} /></option>{/if}
+                      <option value="edit">{ownModules.has(app.alias) ? local(departments.string.DirectoryCanEdit) : local(departments.string.DirectoryEnabled)}</option>
                     </select>
                   </label>
                 {/each}
               </fieldset>
-              <fieldset><legend>单独关掉</legend>
+              <fieldset><legend><Label label={departments.string.DirectoryBlocked} /></legend>
                 {#each applications as app (app.alias)}
                   <label><input type="checkbox" bind:group={blocked} value={app.alias} disabled={busy} />
                     <Label label={app.label} /></label>
                 {/each}
               </fieldset>
             </div>
-            <button disabled={busy} on:click={saveGrant}>保存例外</button>
-            <button disabled={busy} on:click={() => { grantPerson = undefined }}>取消</button>
+            <button disabled={busy} on:click={saveGrant}><Label label={departments.string.DirectorySaveExceptions} /></button>
+            <button disabled={busy} on:click={() => { grantPerson = undefined }}><Label label={departments.string.DirectoryCancel} /></button>
           </fieldset>
         {/if}
         {/if}
         {#if tab === 'modules'}
-          <div class="tabs" aria-label="筛选模块权限">
+          <div class="tabs" aria-label={local(departments.string.DirectoryFilter)}>
             {#each moduleFilters as filter (filter.id)}
               <button type="button" aria-pressed={moduleFilter === filter.id}
                 on:click={() => { moduleFilter = filter.id }}>{filter.label}</button>
@@ -754,21 +768,21 @@
                           <span>{roleLabels[role]}</span>
                           <select value={row?.[role] ?? 'none'} disabled={!owner || busy}
                             on:change={(event) => changeModule(app.alias, role, event.currentTarget.value)}>
-                            {#if row?.[role] === 'none'}<option value="none" disabled>不能用</option>{/if}
-                            <option value="view">只能看</option>
-                            <option value="edit">能编辑</option>
+                            {#if row?.[role] === 'none'}<option value="none" disabled><Label label={departments.string.DirectoryNone} /></option>{/if}
+                            <option value="view"><Label label={departments.string.DirectoryView} /></option>
+                            <option value="edit"><Label label={departments.string.DirectoryCanEdit} /></option>
                           </select>
                         </label>
                       {/each}
                     {:else if app.alias === 'whatsapp'}
-                      <div class="permissionRow"><small>{enabled ? '能用' : '不能用'}</small></div>
+                      <div class="permissionRow"><small>{enabled ? local(departments.string.DirectoryEnabled) : local(departments.string.DirectoryNone)}</small></div>
                     {:else}
-                      <div class="permissionRow"><small>{enabled ? '由部门空间权限决定' : '不能用'}</small></div>
+                      <div class="permissionRow"><small>{enabled ? local(departments.string.DirectorySpacePermissions) : local(departments.string.DirectoryNone)}</small></div>
                     {/if}
                     {#if hasSpaces}
                       {@const selectedSpaces = draft.autoJoin?.[app.alias] ?? []}
                       <div class="permissionRow">
-                        <span>自动加入空间</span>
+                        <span><Label label={departments.string.DirectoryAutoJoin} /></span>
                         <AvailableSpacesInput
                           items={spaceItems(spaceOptions(app.alias), selectedSpaces)}
                           selected={selectedSpaces}
@@ -785,13 +799,13 @@
           </div>
         {/if}
         {#if canEdit && tab === 'settings'}
-          <label>成员联系方式给谁看
+          <label><Label label={departments.string.DirectoryContactVisibility} />
             <select bind:value={draft.contactVisibility} disabled={busy}>
-              <option value="company">全公司</option>
-              <option value="department">只给本部门</option>
-              <option value="admins">只给管理员</option>
+              <option value="company"><Label label={departments.string.DirectoryCompany} /></option>
+              <option value="department"><Label label={departments.string.DirectoryDepartment} /></option>
+              <option value="admins"><Label label={departments.string.DirectoryAdmins} /></option>
             </select>
-            <small>只控制部门页里显示与否</small>
+            <small><Label label={departments.string.DirectoryContactHint} /></small>
           </label>
 
         <label
@@ -817,10 +831,10 @@
             disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
           /><Label label={departments.string.EmployeesSeeTracking} /></label
         >
-        <label class="order-assignee">订单默认负责人
+        <label class="order-assignee"><Label label={departments.string.DirectoryDefaultOwner} />
           <select value={draft.orderAssignee ?? ''} disabled={busy || !(owner || selected?.administrators.includes(me.uuid))}
             on:change={(event) => { setOrderAssignee(event.currentTarget.value) }}>
-            <option value="">不设（自动选第一个主管，没有主管选管理员）</option>
+            <option value=""><Label label={departments.string.DirectoryAutomaticOwner} /></option>
             {#each members([...draft.administrators, ...draft.supervisors, ...draft.employees]) as person (person._id)}
               <option value={person.personUuid}>{formatName(person.name)}</option>
             {/each}
