@@ -149,6 +149,17 @@ class TDepartmentAutoMembers extends TSpace implements DepartmentAutoMembers {
 
 export function createModel (builder: Builder): void {
   builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
+  // Inbox: show orders by number and title, and open them on the orders page.
+  // Mixin ids are written out so this model does not need the view model package.
+  builder.mixin(departments.class.Order, core.class.Class, 'view:mixin:ObjectTitle' as any, {
+    titleProvider: departments.function.OrderTitle
+  })
+  builder.mixin(departments.class.Order, core.class.Class, 'view:mixin:ObjectIdentifier' as any, {
+    provider: departments.function.OrderTitle
+  })
+  builder.mixin(departments.class.Order, core.class.Class, 'view:mixin:ObjectPanel' as any, {
+    component: departments.component.OrderPanel
+  })
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Tracking,
     icon: hr.icon.Department,

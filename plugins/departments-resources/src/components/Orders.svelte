@@ -30,7 +30,9 @@
   let depts: DepartmentAccess[] = []
   let phones = new Map<string, string>()
   let actions: OrderAction[] = []
-  let selectedId: Ref<Order> | undefined
+  /** Opened from the inbox or a link: show just this order. */
+  export let focusId: Ref<Order> | undefined = undefined
+  let selectedId: Ref<Order> | undefined = focusId
   type OrderFilter = 'todo' | 'mine' | 'late' | 'all'
   const filterKey = 'auraplex.orders.filter'
   let filter: OrderFilter = 'mine'
@@ -127,7 +129,7 @@
   }
   $: isLate = (it: Order): boolean => it.state === 'active' && countdown(it.stages[it.current])?.late === true
   $: todoCount = orders.filter(waitingOnMe).length
-  $: shown = orders.filter((it) =>
+  $: shown = focusId !== undefined ? orders.filter((it) => it._id === focusId) : orders.filter((it) =>
     filter === 'all' ? true : filter === 'todo' ? waitingOnMe(it) : filter === 'late' ? isLate(it) && (owner || related(it)) : related(it))
 
   const days = (from: number | undefined): string =>
@@ -284,15 +286,15 @@
 <section class="orders">
   <div class="head">
     <h2>订单</h2>
-    <div class="tabs">
+    {#if focusId === undefined}<div class="tabs">
       <button class:on={filter === 'todo'} on:click={() => setFilter('todo')}>等我处理{todoCount > 0 ? ` (${todoCount})` : ''}</button>
       <button class:on={filter === 'mine'} on:click={() => setFilter('mine')}>和我有关</button>
       <button class:on={filter === 'late'} on:click={() => setFilter('late')}>超时</button>
       <button class:on={filter === 'all'} on:click={() => setFilter('all')}>全部订单</button>
-    </div>
+    </div>{/if}
   </div>
 
-  {#if moduleCanEdit}<div class="create">
+  {#if moduleCanEdit && focusId === undefined}<div class="create">
     <input placeholder="订单名称，例如：贴标机 ×2" bind:value={title} maxlength="120" />
     <input placeholder="客户" bind:value={customer} maxlength="120" />
     <input placeholder="备注（可不填）" bind:value={note} maxlength="500" />

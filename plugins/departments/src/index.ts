@@ -1,7 +1,7 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import type { CompanyModuleDefaults, AccountUuid, Class, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
+import type { CompanyModuleDefaults, AccountUuid, Class, Client, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
-import { plugin, type IntlString, type Plugin } from '@hcengineering/platform'
+import { plugin, type IntlString, type Plugin, type Resource } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
 
 export type DepartmentPermission = 'create' | 'update' | 'delete' | 'comment' | 'invite' | 'manageMembers'
@@ -169,7 +169,11 @@ export default plugin(departmentsId, {
     ActivityLog: '' as AnyComponent,
     Workload: '' as AnyComponent,
     TrackingSettingsPage: '' as AnyComponent,
-    TodayActivity: '' as AnyComponent
+    TodayActivity: '' as AnyComponent,
+    OrderPanel: '' as AnyComponent
+  },
+  function: {
+    OrderTitle: '' as Resource<(client: Client, ref: Ref<Doc>, doc?: Doc) => Promise<string>>
   },
   string: {
     Departments: '' as IntlString,
