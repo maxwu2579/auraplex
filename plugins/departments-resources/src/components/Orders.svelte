@@ -39,6 +39,7 @@
   let returnTarget = ''
   let returnPerson = ''
   let openStage = ''
+  let adjusting = false
   let busy = false
   let error = ''
   let notice = ''
@@ -125,7 +126,10 @@
   }
 
   function open (it: Order): void {
+    if (selectedId !== it._id) actions = []
     selectedId = it._id
+    adjusting = false
+    openStage = ''
     void recordAudit('view', `${it.number} ${it.title}`, it)
   }
 
@@ -212,7 +216,11 @@
     await act('reorder', { stageOrder: waiting })
   }
 
-  $: inspected = selected?.stages.find((item) => item.id === openStage)
+  $: if (!active || !canInsert) adjusting = false
+  $: inspected = adjusting ? selected?.stages.find((item) => item.id === openStage) : stage
+  $: returned = stage !== undefined && actions.find((item) =>
+    item.kind === 'return' || item.kind === 'complete' || item.kind === 'approve')?.target === stage.id
+
   $: inspectedRole = inspected === undefined ? undefined : roleOf(inspected.department, me.uuid)
 
   async function chat (id: AccountUuid | undefined): Promise<void> {
@@ -283,6 +291,30 @@
       <div class="detail">
         <h3>{selected.number} {selected.title}</h3>
         <p class="hint">客户：{selected.customer}　接单销售：{name(selected.salesOwner)}{selected.note ? `　备注：${selected.note}` : ''}</p>
+        <div class="progress-header">
+          {#if !adjusting}
+            <div class="order-progress">
+              <progress aria-label="订单进度" max={Math.max(1, selected.stages.length)}
+                value={selected.stages.filter((item) => item.status === 'done').length}></progress>
+              {#if stage}
+                <div>第 {selected.current + 1}/{selected.stages.length} 段 · {stage.name} · 负责人 {name(stage.assignee)}
+                  {#if stage.startedOn !== undefined} · 已用 {days(stage.startedOn)}{/if}
+                  {#if stage.status === 'approval'} · 等待审批{:else} · 进行中{/if}
+                  {#if returned} · 已退回{/if}
+                </div>
+              {:else if selected.state === 'done'}
+                <div>全部 {selected.stages.length} 段已完成</div>
+              {/if}
+            </div>
+          {/if}
+          {#if active && canInsert}
+            <button type="button" on:click={() => {
+              adjusting = !adjusting
+              openStage = ''
+            }}>{adjusting ? '完成调整' : '调整流程'}</button>
+          {/if}
+        </div>
+        {#if adjusting}
         <OrderFlowChart
           cards={selected.stages.map((item) => ({ ...item, department: deptName(item.department), assignee: name(item.assignee) }))}
           departments={liveDepts.map((dept) => ({ id: dept._id, name: dept.name }))}
@@ -294,6 +326,15 @@
           on:dropStage={(event) => reorder(event.detail.id, event.detail.position)}
         />
 
+        {:else}
+          <ul class="progress-stages">
+            {#each selected.stages.slice(0, selected.current) as item (item.id)}
+              <li>✓ {item.name} · {deptName(item.department)} · {name(item.assignee)}
+                {#if item.doneOn !== undefined} · {new Date(item.doneOn).toLocaleDateString()}{/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
         {#if active && inspected !== undefined}
           <div class="card">
             <div><b>{inspected.name}</b>（{deptName(inspected.department)}）　已用 {days(inspected.startedOn)}</div>
@@ -363,6 +404,13 @@
           <p class="ok">这个订单已经全部完成。</p>
         {/if}
 
+        {#if !adjusting && active}
+          <ul class="progress-stages waiting-stages">
+            {#each selected.stages.slice(selected.current + 1) as item (item.id)}
+              <li>{item.name} · {deptName(item.department)} · {name(item.assignee)}</li>
+            {/each}
+          </ul>
+        {/if}
         <h4>联系相关的人</h4>
         <ul class="people">
           {#each contacts(selected) as c (c.stage.id)}
@@ -394,6 +442,12 @@
 
 <style>
   .orders { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.25rem; overflow: auto; height: 100%; }
+  .progress-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+  .progress-header button { margin-inline-start: auto; white-space: nowrap; }
+  .order-progress { flex: 1; min-width: 0; color: var(--theme-caption-color); }
+  .order-progress progress { width: 100%; accent-color: var(--theme-link-color); }
+  .progress-stages { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; color: var(--theme-content-color); }
+  .waiting-stages { color: var(--theme-dark-color); }
   .head { display: flex; justify-content: space-between; align-items: center; }
   h2, h3, h4 { margin: 0; }
   .tabs { display: flex; gap: 0.25rem; }
