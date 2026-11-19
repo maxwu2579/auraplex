@@ -109,7 +109,8 @@
   $: if (pendingScan !== undefined && orders.length > 0) {
     const number = pendingScan
     pendingScan = undefined
-    void handleScan(number)
+    // Run after this update so the opened order shows its details.
+    setTimeout(() => { void handleScan(number) }, 0)
   }
   function onDetected (event: CustomEvent<string>): void {
     scanning = false
@@ -454,7 +455,7 @@
             <td>{it.customer}</td>
             <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
-            <td>{#if it.state !== 'done'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
+            <td>{#if it.state === 'active'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
         {/each}
