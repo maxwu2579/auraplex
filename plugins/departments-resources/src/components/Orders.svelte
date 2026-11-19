@@ -103,7 +103,13 @@
       await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
         order: found._id, kind: 'scan', stage: found.stages[Math.min(found.current, found.stages.length - 1)]?.id ?? '', actor: me.uuid
       })
-      await ops.commit()
+      // B: scanning a pending order starts its flow straight away.
+      if (found.state === 'pending' && found.stages[0] !== undefined) {
+        await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
+          order: found._id, kind: 'start', stage: found.stages[0].id, actor: me.uuid
+        })
+      }
+      if ((await ops.commit()).result && found.state === 'pending') notice = L('扫码成功，流程已开始。', 'Scanned - the order has started.')
     } catch {}
   }
   $: if (pendingScan !== undefined && orders.length > 0) {
