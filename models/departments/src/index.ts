@@ -76,7 +76,7 @@ export class TOrderFlow extends TDoc implements OrderFlow {
 }
 
 @Model(departments.class.Order, core.class.Doc, DOMAIN_ORDERS)
-@UX(departments.string.Order, hr.icon.Department, undefined, 'number', undefined, departments.string.Orders)
+@UX(departments.string.Order, icon('view:icon:TodoList'), undefined, 'number', undefined, departments.string.Orders)
 export class TOrder extends TDoc implements Order {
   @Prop(TypeString(), departments.string.OrderNumber) number!: string
   @Prop(TypeString(), departments.string.OrderTitle) title!: string
@@ -148,6 +148,8 @@ class TDepartmentAutoMembers extends TSpace implements DepartmentAutoMembers {
 }
 
 export function createModel (builder: Builder): void {
+  // Icons of other plugins, by id, so this model does not depend on their packages.
+  const icon = (id: string): any => id as any
   builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
   // Inbox: show orders by number and title, and open them on the orders page.
   // Mixin ids are written out so this model does not need the view model package.
@@ -162,27 +164,27 @@ export function createModel (builder: Builder): void {
   })
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Tracking,
-    icon: hr.icon.Department,
+    icon: icon('view:icon:Eye'),
     alias: 'tracking',
     hidden: false,
     navigatorModel: {
       specials: [
-        { id: 'log', label: departments.string.ActivityLog, icon: hr.icon.Department, component: departments.component.ActivityLog },
-        { id: 'workload', label: departments.string.Workload, icon: hr.icon.Department, component: departments.component.Workload },
-        { id: 'settings', label: departments.string.TrackingSettings, icon: hr.icon.Department, component: departments.component.TrackingSettingsPage }
+        { id: 'log', label: departments.string.ActivityLog, icon: icon('activity:icon:Activity'), component: departments.component.ActivityLog },
+        { id: 'workload', label: departments.string.Workload, icon: icon('tracker:icon:TimeReport'), component: departments.component.Workload },
+        { id: 'settings', label: departments.string.TrackingSettings, icon: icon('setting:icon:Setting'), component: departments.component.TrackingSettingsPage }
       ],
       spaces: []
     }
   }, departments.app.Tracking)
   builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Orders,
-    icon: hr.icon.Department,
+    icon: icon('view:icon:TodoList'),
     alias: 'orders',
     hidden: false,
     navigatorModel: {
       specials: [
-        { id: 'orders', label: departments.string.Orders, icon: hr.icon.Department, component: departments.component.Orders },
-        { id: 'flow', label: departments.string.OrderFlow, icon: hr.icon.Department, component: departments.component.OrderFlowSettings }
+        { id: 'orders', label: departments.string.Orders, icon: icon('view:icon:List'), component: departments.component.Orders },
+        { id: 'flow', label: departments.string.OrderFlow, icon: icon('view:icon:Tree'), component: departments.component.OrderFlowSettings }
       ],
       spaces: []
     }
