@@ -93,7 +93,7 @@
         <span>已用 {Math.max(0, Math.floor((Date.now() - card.startedOn) / 86400000))} 天</span>
       {/if}
       {#if card.approval}<span>要审批</span>{/if}
-      {#if card.limitDays}<span>超时 {card.limitDays} 天</span>{/if}
+      {#if card.limitDays}<span>限时 {card.limitDays} 天</span>{/if}
     </button>
   {/each}
   {#if editable}

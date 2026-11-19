@@ -154,7 +154,7 @@
         {/if}
       </div>
       {#if owner && moduleCanEdit}
-        <label>超时天数 <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
+        <label>限时（天） <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
         <label>审批人
           <select value={stage.approval?.by === 'person' ? stage.approval.person : stage.approval ? 'admins' : ''}
             on:change={(event) => chooseApprover(stage, event.currentTarget.value)}>

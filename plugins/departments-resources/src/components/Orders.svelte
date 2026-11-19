@@ -115,6 +115,14 @@
   const days = (from: number | undefined): string =>
     from === undefined ? '' : `${Math.max(0, Math.floor((Date.now() - from) / 86400000))} 天`
   const time = (t: number): string => new Date(t).toLocaleString()
+  const dayMs = 86400000
+  // Countdown for a stage with a time limit: 还剩 N 天 / 不到 1 天 / 超时 N 天.
+  const countdown = (s: { startedOn?: number, limitDays?: number } | undefined): { text: string, late: boolean } | undefined => {
+    if (s?.startedOn === undefined || s.limitDays === undefined || s.limitDays <= 0) return undefined
+    const left = s.startedOn + s.limitDays * dayMs - Date.now()
+    if (left < 0) return { text: `超时 ${Math.ceil(-left / dayMs)} 天`, late: true }
+    return { text: left < dayMs ? '不到 1 天' : `还剩 ${Math.floor(left / dayMs)} 天`, late: false }
+  }
   const kindText: Record<OrderActionKind, string> = {
     assign: '指定负责人',
     step: '勾选步骤',
@@ -274,7 +282,7 @@
 
   <div class="body">
     <table>
-      <thead><tr><th>编号</th><th>订单</th><th>客户</th><th>当前阶段</th><th>负责人</th><th>已用</th><th>接单销售</th></tr></thead>
+      <thead><tr><th>编号</th><th>订单</th><th>客户</th><th>当前阶段</th><th>负责人</th><th>剩余 / 已用</th><th>接单销售</th></tr></thead>
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
@@ -284,7 +292,8 @@
             <td>{it.customer}</td>
             <td>{it.state === 'done' ? '✅ 已完成' : cur?.name ?? ''}</td>
             <td>{name(cur?.assignee)}</td>
-            <td>{it.state === 'done' ? '' : days(cur?.startedOn)}</td>
+            {@const left = it.state === 'done' ? undefined : countdown(cur)}
+            <td class:late={left?.late === true}>{it.state === 'done' ? '' : left?.text ?? `已用 ${days(cur?.startedOn)}`}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
         {/each}
@@ -304,6 +313,8 @@
               {#if stage}
                 <div>第 {selected.current + 1}/{selected.stages.length} 段 · {stage.name} · 负责人 {name(stage.assignee)}
                   {#if stage.startedOn !== undefined} · 已用 {days(stage.startedOn)}{/if}
+                  {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
+                    · <span class:late={left?.late === true}>{left?.text}</span>{/if}
                   {#if stage.status === 'approval'} · 等待审批{:else} · 进行中{/if}
                   {#if returned} · 已退回{/if}
                 </div>
@@ -451,6 +462,7 @@
 </section>
 
 <style>
+  .late { color: var(--theme-error-color); font-weight: 500; }
   .orders { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem 1.25rem; overflow: auto; height: 100%; }
   .progress-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
   .progress-header button { margin-inline-start: auto; white-space: nowrap; }
