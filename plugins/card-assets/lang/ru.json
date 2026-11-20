@@ -88,6 +88,8 @@
     "TwoColumns": "Два столбца",
     "Grid": "Сетка",
     "RichtextProperties": "Текстовые поля",
-    "ShowAllVersions": "Показывать все версии"
+    "ShowAllVersions": "Показывать все версии",
+    "AddEditorSection": "Add section",
+    "HideEditorSection": "Hide"
   }
 }

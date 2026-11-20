@@ -13,17 +13,22 @@
 // limitations under the License.
 -->
 <script lang="ts">
-  import { MasterTag } from '@hcengineering/card'
+  import { MasterTag, MasterTagEditorSection } from '@hcengineering/card'
   import { getClient } from '@hcengineering/presentation'
   import {
+    Button,
     ButtonIcon,
     Component,
+    IconAdd,
     IconDescription,
     NavItem,
     Scroller,
+    SelectPopup,
     Separator,
     defineSeparators,
-    secondNavSeparators
+    eventToHTMLElement,
+    secondNavSeparators,
+    showPopup
   } from '@hcengineering/ui'
   import card from '../../plugin'
 
@@ -34,9 +39,37 @@
   const client = getClient()
 
   $: isMasterTag = masterTag._class === card.class.MasterTag
-  $: sections = client
+  $: allSections = client
     .getModel()
     .findAllSync(card.class.MasterTagEditorSection, !isMasterTag ? { masterOnly: { $ne: true } } : {})
+
+  // Auraplex: optional blocks are added or hidden per type; hiding keeps the data.
+  const optionalSectionIds = new Set(['tags', 'childs', 'relations', 'roles', 'views'])
+  interface AuraplexEditorSections {
+    auraplexEditorSections?: string[]
+  }
+  $: shownOptional = (masterTag as MasterTag & AuraplexEditorSections).auraplexEditorSections ?? []
+  $: sections = allSections.filter((it) => !optionalSectionIds.has(it.id) || shownOptional.includes(it.id))
+  $: hiddenSections = allSections.filter((it) => optionalSectionIds.has(it.id) && !shownOptional.includes(it.id))
+
+  async function setShownOptional (ids: string[]): Promise<void> {
+    await client.update(masterTag, { auraplexEditorSections: ids } as any)
+  }
+
+  function addSection (ev: MouseEvent): void {
+    showPopup(
+      SelectPopup,
+      { value: hiddenSections.map((it) => ({ id: it.id, label: it.label })) },
+      eventToHTMLElement(ev),
+      (id: string | undefined) => {
+        if (id !== undefined) void setShownOptional([...shownOptional, id])
+      }
+    )
+  }
+
+  function hideSection (section: MasterTagEditorSection): void {
+    void setShownOptional(shownOptional.filter((it) => it !== section.id))
+  }
 
   const sectionRefs: Record<string, HTMLElement | undefined> = {}
 
@@ -68,6 +101,18 @@
       <div class="hulyComponent-content gap">
         {#each sections as section, i}
           <div bind:this={sectionRefs[section.id]} class:hulyTableAttr-container={i}>
+            {#if optionalSectionIds.has(section.id)}
+              <div class="auraplex-hideSection">
+                <Button
+                  kind="ghost"
+                  size="small"
+                  label={card.string.HideEditorSection}
+                  on:click={() => {
+                    hideSection(section)
+                  }}
+                />
+              </div>
+            {/if}
             <Component
               is={section.component}
               disabled={readonly}
@@ -77,7 +122,26 @@
             />
           </div>
         {/each}
+        {#if hiddenSections.length > 0}
+          <div class="auraplex-addSection">
+            <Button kind="regular" icon={IconAdd} label={card.string.AddEditorSection} on:click={addSection} />
+          </div>
+        {/if}
       </div>
     </Scroller>
   </div>
 </div>
+
+<style lang="scss">
+  /* Auraplex: small "Hide" button above each optional block, "Add section" below the list */
+  .auraplex-hideSection {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.25rem;
+  }
+  .auraplex-addSection {
+    display: flex;
+    justify-content: center;
+    padding: 0.5rem 0;
+  }
+</style>

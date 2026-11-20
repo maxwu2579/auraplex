@@ -88,6 +88,8 @@
     "TwoColumns": "Duas colunas",
     "Grid": "Grade",
     "RichtextProperties": "Campo de texto",
-    "ShowAllVersions": "Todas as versões"
+    "ShowAllVersions": "Todas as versões",
+    "AddEditorSection": "Add section",
+    "HideEditorSection": "Hide"
   }
 }

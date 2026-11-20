@@ -107,6 +107,9 @@ export default mergeIds(cardId, card, {
   },
   string: {
     OnlyOwnerCanEditRoles: '' as IntlString,
+    // Auraplex: per-type optional blocks in the type settings page
+    AddEditorSection: '' as IntlString,
+    HideEditorSection: '' as IntlString,
     CreateMasterTag: '' as IntlString,
     CreateTag: '' as IntlString,
     Content: '' as IntlString,

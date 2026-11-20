@@ -88,6 +88,8 @@
     "TwoColumns": "İki sütun",
     "Grid": "Izgara",
     "RichtextProperties": "Zengin metin alanları",
-    "ShowAllVersions": "Tüm sürümleri göster"
+    "ShowAllVersions": "Tüm sürümleri göster",
+    "AddEditorSection": "Add section",
+    "HideEditorSection": "Hide"
   }
 }

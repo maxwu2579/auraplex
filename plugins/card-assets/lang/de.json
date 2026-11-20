@@ -88,6 +88,8 @@
     "TwoColumns": "Zwei spaltig",
     "Grid": "Gitter",
     "RichtextProperties": "Textfelder",
-    "ShowAllVersions": "Alle Versionen anzeigen"
+    "ShowAllVersions": "Alle Versionen anzeigen",
+    "AddEditorSection": "Add section",
+    "HideEditorSection": "Hide"
   }
 }
