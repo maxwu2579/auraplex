@@ -34,6 +34,7 @@
   import workbench, { type Application } from '@hcengineering/workbench'
   import {
     Breadcrumb,
+    Button,
     Component,
     defineSeparators,
     Header,
@@ -135,7 +136,17 @@
     (group) => applicationsMap.has(group.application) && group.role === modulePermissionsRole
   )
 
-  $: sortedVisibleModuleGroups = [...visibleModuleGroups].sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+  // Auraplex: card grid with an all / on / off filter, like the Configure page.
+  let moduleFilter: 'all' | 'on' | 'off' = 'all'
+  const moduleFilters: Array<{ id: 'all' | 'on' | 'off', label: IntlString }> = [
+    { id: 'all', label: settingsRes.string.MemberPageAll },
+    { id: 'on', label: settingsRes.string.MemberPageEnabled },
+    { id: 'off', label: settingsRes.string.MemberPageDisabled }
+  ]
+
+  $: sortedVisibleModuleGroups = [...visibleModuleGroups]
+    .filter((group) => moduleFilter === 'all' || (moduleFilter === 'on') === isModuleEnabled(group))
+    .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
 
   /** Anonymous (read-only guest) module rows are view-only until workspace allows anonymous guests. */
   $: anonymousModulePermissionsReadOnly = guestPermissionsTab === 'anonymous' && !allowReadOnlyGuests
@@ -389,6 +400,18 @@
                 {/if}
               </div>
 
+              <div class="moduleFilters">
+                {#each moduleFilters as it}
+                  <Button
+                    label={it.label}
+                    kind={moduleFilter === it.id ? 'primary' : 'regular'}
+                    on:click={() => {
+                      moduleFilter = it.id
+                    }}
+                  />
+                {/each}
+              </div>
+
               <div class="cardStack" class:cardStack-readonly={anonymousModulePermissionsReadOnly}>
                 {#each sortedVisibleModuleGroups as group}
                   {@const app = getApplication(group.application)}
@@ -479,7 +502,7 @@
                     {/if}
                   </div>
                 {/each}
-                {#if visibleModuleGroups.length === 0}
+                {#if sortedVisibleModuleGroups.length === 0}
                   <div class="emptyState emptyState-block">—</div>
                 {/if}
               </div>
@@ -496,13 +519,14 @@
   $toggleTrackWidth: 2.25rem;
 
   .guestPermissionsRoot {
-    max-width: 40rem;
+    max-width: 80rem;
     width: 100%;
     margin: 0 auto;
     gap: 2rem;
   }
 
   .guestAccessBlock {
+    max-width: 40rem;
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -584,11 +608,21 @@
     color: var(--theme-halfcontent-color);
   }
 
-  .cardStack {
+  .moduleFilters {
     display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
+    gap: 0.5rem;
+  }
+
+  .cardStack {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    align-items: start;
+    gap: 0.75rem;
     padding-top: 0.5rem;
+  }
+
+  .emptyState-block {
+    grid-column: 1 / -1;
   }
 
   .cardStack-readonly {
