@@ -24,6 +24,7 @@ IMAGES=(
   "hardcoreeng/collaborator         collaborator          @hcengineering/pod-collaborator      no"
   "hardcoreeng/preview              preview               @hcengineering/pod-preview           no"
   "hardcoreeng/whatsapp             whatsapp              @hcengineering/pod-whatsapp          no"
+  "hardcoreeng/love                 love                  @hcengineering/pod-love              no"
   "hardcoreeng/prospects-recognizer prospects-recognizer  @hcengineering/prospects-recognizer  no"
   "hardcoreeng/prospect-mail        prospect-mail         @hcengineering/prospect-mail         no"
 )
