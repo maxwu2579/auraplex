@@ -137,6 +137,8 @@
   .auraplex-hideSection {
     display: flex;
     justify-content: flex-end;
+    align-self: stretch;
+    width: 100%;
     margin-bottom: 0.25rem;
   }
   .auraplex-addSection {
