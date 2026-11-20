@@ -15,11 +15,13 @@
 <script lang="ts">
   import { getCurrentAccount, hasAccountRole, type Class, type Doc, type Ref } from '@hcengineering/core'
   import { createQuery, getClient, isAdminUser, isDisabled } from '@hcengineering/presentation'
-  import setting, { SettingsCategory } from '@hcengineering/setting'
+  import { SettingsCategory } from '@hcengineering/setting'
+  import setting from '../plugin'
   import {
     Component,
     Location,
     NavItem,
+    Label,
     getCurrentResolvedLocation,
     navigate,
     resolvedLocationStore,
@@ -53,6 +55,27 @@
   $: categories = availableCategories.filter((item) =>
     (hasAccountRole(account, item.role) || (item.name === 'owners' && departmentAdmin)) &&
     !isDisabled(item.feature ?? '') && (admin || !(item.adminOnly ?? false)))
+  // Auraplex: group the visible workspace settings without changing model metadata.
+  const companyCategories = new Set(['owners', 'departments', 'guestPermissions', 'allSpaces', 'invites'])
+  const systemCategories = new Set([
+    'general', 'configuration', 'integrations', 'mailboxes', 'office', 'message-templates', 'export', 'backup'
+  ])
+
+  function navigationGroup (name: string): 'company' | 'system' | 'advanced' {
+    if (companyCategories.has(name)) return 'company'
+    if (systemCategories.has(name)) return 'system'
+    return 'advanced'
+  }
+
+  const groupLabels = {
+    company: setting.string.WorkspaceSettingsCompany,
+    system: setting.string.WorkspaceSettingsSystem,
+    advanced: setting.string.WorkspaceSettingsAdvanced
+  }
+  $: navigationGroups = (['company', 'system', 'advanced'] as const).map((group) => ({
+    label: groupLabels[group],
+    items: categories.filter(({ name }) => navigationGroup(name) === group)
+  }))
   $: category = categories.find((item) => item.name === categoryId)
   const settingsQuery = createQuery()
   settingsQuery.query(
@@ -92,17 +115,24 @@
 </script>
 
 {#if kind === 'navigation'}
-  {#each categories as category}
-    <NavItem
-      icon={category.icon}
-      label={category.label}
-      selected={category.name === categoryId}
-      on:click={() => {
-        selectCategory(category.name)
-      }}
-    />
-    {#if category.name === categoryId && category.extraComponents?.navigation}
-      <Component is={category.extraComponents?.navigation} props={{ kind: 'navigation', categoryName: categoryId }} />
+  {#each navigationGroups as group (group.label)}
+    {#if group.items.length > 0}
+      <div class="workspace-settings-group">
+        <h2 class="caption-color font-medium-12 px-3 py-2"><Label label={group.label} /></h2>
+        {#each group.items as category (category.name)}
+          <NavItem
+            icon={category.icon}
+            label={category.label}
+            selected={category.name === categoryId}
+            on:click={() => {
+              selectCategory(category.name)
+            }}
+          />
+          {#if category.name === categoryId && category.extraComponents?.navigation}
+            <Component is={category.extraComponents?.navigation} props={{ kind: 'navigation', categoryName: categoryId }} />
+          {/if}
+        {/each}
+      </div>
     {/if}
   {/each}
 {:else if kind === 'content' && category === undefined}

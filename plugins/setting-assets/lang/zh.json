@@ -1,5 +1,8 @@
 {
   "string": {
+    "WorkspaceSettingsCompany": "公司管理",
+    "WorkspaceSettingsSystem": "系统设置",
+    "WorkspaceSettingsAdvanced": "高级",
     "ClassDirectoryHint": "给系统里的东西加自定义字段，比如给客户加“客户等级”。左边选一种，右边点 + 添加字段。",
     "ClassDirectorySearch": "搜索类别",
     "ClassDirectoryCommon": "常用",

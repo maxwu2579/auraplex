@@ -106,6 +106,10 @@ export default mergeIds(settingId, setting, {
     ClassDirectoryHint: '' as IntlString,
     ClassDirectorySearch: '' as IntlString,
     ClassDirectoryCommon: '' as IntlString,
+    // Auraplex: localized settings page text.
+    WorkspaceSettingsCompany: '' as IntlString,
+    WorkspaceSettingsSystem: '' as IntlString,
+    WorkspaceSettingsAdvanced: '' as IntlString,
     ClassSettingHint: '' as IntlString,
     ClassProperties: '' as IntlString,
     ClassColon: '' as IntlString,
