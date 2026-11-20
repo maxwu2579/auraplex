@@ -335,7 +335,7 @@ services:
       - PREVIEW_URL=http://huly.local:4040
       - GMAIL_URL=http://huly.local:8093
       - WHATSAPP_URL=http://huly.local:8098
-      - LOVE_ENDPOINT=http://huly.local:8099
+      - LOVE_ENDPOINT=http://huly.local:8100
       - LIVEKIT_WS=ws://localhost:7880
       - CALENDAR_URL=http://huly.local:8095
       - TELEGRAM_URL=http://huly.local:8086
@@ -497,7 +497,7 @@ services:
     extra_hosts:
       - 'huly.local:host-gateway'
     ports:
-      - '127.0.0.1:8099:8096'
+      - '127.0.0.1:8100:8096'
     environment:
       - PORT=8096
       - SECRET=secret
