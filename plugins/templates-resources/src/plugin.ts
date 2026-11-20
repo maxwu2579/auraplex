@@ -20,6 +20,11 @@ import templates, { templatesId } from '@hcengineering/templates'
 
 export default mergeIds(templatesId, templates, {
   string: {
+    // Auraplex: localized settings page text.
+    TemplateSettingsHint: '' as IntlString,
+    TemplateSettingsSearch: '' as IntlString,
+    TemplateSettingsEmpty: '' as IntlString,
+    TemplateSettingsNoResults: '' as IntlString,
     Cancel: '' as IntlString,
     Templates: '' as IntlString,
     TemplatesHeader: '' as IntlString,

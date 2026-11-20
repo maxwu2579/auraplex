@@ -1,5 +1,9 @@
 {
   "string": {
+    "TemplateSettingsHint": "Save replies you use often. When writing a message or comment, use the template button in the editor to insert one. Create a group first, then add templates to it.",
+    "TemplateSettingsSearch": "Search titles and content",
+    "TemplateSettingsEmpty": "There are no text templates yet.",
+    "TemplateSettingsNoResults": "No templates match your search.",
     "Cancel": "Cancel",
     "Templates": "Text Templates",
     "TemplatesHeader": "TEXT TEMPLATES",

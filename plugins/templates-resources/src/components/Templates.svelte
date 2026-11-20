@@ -1,8 +1,9 @@
 <script lang="ts">
-  import core, { Data, Ref } from '@hcengineering/core'
+  import core, { Ref } from '@hcengineering/core'
   import { getEmbeddedLabel, getResource } from '@hcengineering/platform'
   import { createQuery, getClient, MessageViewer, SpaceSelector } from '@hcengineering/presentation'
   import { MessageTemplate, TemplateCategory } from '@hcengineering/templates'
+  import { markupToText } from '@hcengineering/text-core'
   import { StyledTextEditor } from '@hcengineering/text-editor-resources'
   import {
     Action,
@@ -18,7 +19,8 @@
     Separator,
     defineSeparators,
     twoPanelsSeparators,
-    Scroller
+    Scroller,
+    SearchInput
   } from '@hcengineering/ui'
   import { getActions as getContributedActions, TreeItem, TreeNode } from '@hcengineering/view-resources'
   import templatesPlugin from '../plugin'
@@ -29,6 +31,21 @@
   const query = createQuery()
   const spaceQ = createQuery()
   let templates: MessageTemplate[] = []
+  let spaces: TemplateCategory[] = []
+  // Auraplex: filter templates by their title and readable message text.
+  let search: string | undefined
+  let templatesLoaded = false
+  let categoriesLoaded = false
+  $: searchTerm = search?.trim().toLocaleLowerCase() ?? ''
+  $: filteredTemplates = searchTerm === ''
+    ? templates
+    : templates.filter((template) =>
+      template.title.toLocaleLowerCase().includes(searchTerm) ||
+    markupToText(template.message).toLocaleLowerCase().includes(searchTerm))
+  $: visibleSpaces = searchTerm === ''
+    ? spaces
+    : spaces.filter((category) => filteredTemplates.some((template) => template.space === category._id))
+
   let selected: Ref<MessageTemplate> | undefined
 
   let title: string = ''
@@ -38,16 +55,16 @@
 
   query.query(templatesPlugin.class.MessageTemplate, {}, (t) => {
     templates = t
+    templatesLoaded = true
     if (selected !== undefined && templates.findIndex((t) => t._id === selected) === -1) {
       selected = undefined
       newTemplate = false
     }
   })
 
-  let spaces: TemplateCategory[] = []
-
   spaceQ.query(templatesPlugin.class.TemplateCategory, {}, (res) => {
     spaces = res
+    categoriesLoaded = true
     space = res[0]?._id
   })
 
@@ -122,11 +139,15 @@
     return result
   }
 
+  function addCategory (): void {
+    showPopup(CreateTemplateCategory, {}, 'top')
+  }
+
   const addSpace: Action = {
     label: templatesPlugin.string.CreateTemplateCategory,
     icon: IconAdd,
     action: async (): Promise<void> => {
-      showPopup(CreateTemplateCategory, {}, 'top')
+      addCategory()
     }
   }
 
@@ -159,22 +180,28 @@
       isCurrent
     />
   </Header>
+  <p class="caption-color px-4 py-2"><Label label={templatesPlugin.string.TemplateSettingsHint} /></p>
 
   <div class="hulyComponent-content__container columns">
     <div class="hulyComponent-content__column">
       <div id="create-template" class="flex-between trans-title flex-no-shrink bottom-divider p-3">
         <Button
+          kind="primary"
+          disabled={!categoriesLoaded}
           icon={templatesPlugin.icon.Template}
-          label={templatesPlugin.string.CreateTemplate}
+          label={spaces.length === 0 ? templatesPlugin.string.CreateTemplateCategory : templatesPlugin.string.CreateTemplate}
           justify={'left'}
           width={'100%'}
-          on:click={addTemplate}
+          on:click={spaces.length === 0 ? addCategory : addTemplate}
         />
       </div>
 
-      <div class="flex-col overflow-y-auto">
-        {#each spaces as space (space._id)}
-          {@const getTemps = getTemplates(templates, space._id)}
+      <div class="p-3">
+        <SearchInput bind:value={search} placeholder={templatesPlugin.string.TemplateSettingsSearch} />
+      </div>
+      <Scroller>
+        {#each visibleSpaces as space (space._id)}
+          {@const getTemps = getTemplates(filteredTemplates, space._id)}
           <TreeNode
             label={getEmbeddedLabel(space.name)}
             actions={async () => await getSpaceActions(space)}
@@ -199,7 +226,7 @@
             {/each}
           </TreeNode>
         {/each}
-      </div>
+      </Scroller>
     </div>
     <Separator name={'workspaceSettings'} index={0} color={'var(--theme-divider-color)'} />
     <div class="hulyComponent-content__column content">
@@ -275,6 +302,16 @@
                 />
               </div>
             {/if}
+          {:else if templatesLoaded && categoriesLoaded && templates.length === 0}
+            <p class="caption-color"><Label label={templatesPlugin.string.TemplateSettingsEmpty} /></p>
+            <Button
+              kind="primary"
+              icon={IconAdd}
+              label={spaces.length === 0 ? templatesPlugin.string.CreateTemplateCategory : templatesPlugin.string.CreateTemplate}
+              on:click={spaces.length === 0 ? addCategory : addTemplate}
+            />
+          {:else if templatesLoaded && categoriesLoaded && searchTerm !== '' && visibleSpaces.length === 0}
+            <p class="caption-color"><Label label={templatesPlugin.string.TemplateSettingsNoResults} /></p>
           {/if}
         </div>
       </Scroller>

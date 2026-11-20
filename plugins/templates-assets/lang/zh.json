@@ -1,5 +1,9 @@
 {
   "string": {
+    "TemplateSettingsHint": "保存常用的回复文字。写消息或评论时，点输入框里的模板按钮就能插入。先建分组，再在分组里加模板。",
+    "TemplateSettingsSearch": "搜索模板标题和内容",
+    "TemplateSettingsEmpty": "还没有文本模板。",
+    "TemplateSettingsNoResults": "没有符合搜索条件的模板。",
     "Cancel": "取消",
     "Templates": "文本模板",
     "TemplatesHeader": "文本模板",
