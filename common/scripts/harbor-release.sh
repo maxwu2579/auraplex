@@ -25,6 +25,9 @@ IMAGES=(
   "hardcoreeng/preview              preview               @hcengineering/pod-preview           no"
   "hardcoreeng/whatsapp             whatsapp              @hcengineering/pod-whatsapp          no"
   "hardcoreeng/love                 love                  @hcengineering/pod-love              no"
+  "hardcoreeng/fulltext             fulltext              @hcengineering/pod-fulltext          no"
+  "hardcoreeng/link-preview         link-preview          @hcengineering/pod-link-preview      no"
+  "hardcoreeng/print                print                 @hcengineering/pod-print             no"
   "hardcoreeng/prospects-recognizer prospects-recognizer  @hcengineering/prospects-recognizer  no"
   "hardcoreeng/prospect-mail        prospect-mail         @hcengineering/prospect-mail         no"
 )
