@@ -26,8 +26,11 @@
     SearchInput,
     Toggle
   } from '@hcengineering/ui'
+  import { IntlString } from '@hcengineering/platform'
   import core, {
     AccountUuid,
+    Class,
+    Doc,
     Ref,
     Role,
     RolesAssignment,
@@ -55,7 +58,9 @@
   createQuery().query(core.class.Space, { _id: { $nin: systemSpaceIds } }, (res) => {
     spaces = res
       .filter(
-        ({ _class }) =>
+        ({ _class, name }) =>
+          // Auraplex: unnamed spaces are private chats, not workspace spaces.
+          name.trim() !== '' &&
           !hierarchy.isDerived(_class, core.class.SystemSpace) &&
           !hierarchy.isDerived(_class, contact.class.PersonSpace)
       )
@@ -63,11 +68,21 @@
     loading = false
   })
 
+  // Auraplex: some space classes have no label of their own; use the closest parent that has one.
+  function classLabel (_class: Ref<Class<Space>>): IntlString {
+    let current: Class<Doc> | undefined = hierarchy.getClass(_class)
+    while (current !== undefined) {
+      if (current.label !== undefined) return current.label
+      current = current.extends !== undefined ? hierarchy.getClass(current.extends) : undefined
+    }
+    return core.string.Space
+  }
+
   $: types = [
     { id: '', label: setting.string.SpaceDirectoryAllTypes },
     ...Array.from(new Set(spaces.map(({ _class }) => _class)), (id) => ({
       id,
-      label: hierarchy.getClass(id).label
+      label: classLabel(id)
     }))
   ]
   $: if (!types.some(({ id }) => id === selectedType)) selectedType = ''
@@ -207,7 +222,7 @@
                 >
                   <span slot="content" class="space-details">
                     <span class="space-name">{item.name}</span>
-                    <span class="space-type"><Label label={spaceClass.label} /></span>
+                    <span class="space-type"><Label label={classLabel(item._class)} /></span>
                     <span class="space-metadata">
                       <span
                         ><Label
