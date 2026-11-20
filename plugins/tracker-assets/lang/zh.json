@@ -1,5 +1,6 @@
 {
   "string": {
+    "RelatedIssuesSettingsHint": "设置从其他地方（例如客户、文档）新建“相关任务”时，默认放进哪个项目。",
     "TrackerApplication": "追踪器",
     "Projects": "您的项目",
     "More": "更多",

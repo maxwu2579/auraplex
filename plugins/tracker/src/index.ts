@@ -726,6 +726,8 @@ const pluginState = plugin(trackerId, {
     IssueNotificationMessage: '' as IntlString,
     IssueAssignedToYou: '' as IntlString,
     Project: '' as IntlString,
+    // Auraplex: localized settings page text.
+    RelatedIssuesSettingsHint: '' as IntlString,
     RelatedIssues: '' as IntlString,
     Issue: '' as IntlString,
     IssueStartDate: '' as IntlString,

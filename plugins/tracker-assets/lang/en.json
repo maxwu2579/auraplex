@@ -1,5 +1,6 @@
 {
   "string": {
+    "RelatedIssuesSettingsHint": "Choose the default project for related tasks created from other places, such as customers or documents.",
     "TrackerApplication": "Tracker",
     "Projects": "Your projects",
     "More": "More",

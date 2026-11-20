@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Space } from '@hcengineering/core'
-  import { Header, Breadcrumb } from '@hcengineering/ui'
+  import { Header, Breadcrumb, Label } from '@hcengineering/ui'
   import tracker from '../plugin'
   import EditRelatedTargets from './EditRelatedTargets.svelte'
 
@@ -11,6 +11,8 @@
   <Header adaptive={'disabled'}>
     <Breadcrumb icon={tracker.icon.Relations} label={tracker.string.RelatedIssues} size={'large'} isCurrent />
   </Header>
+  <!-- Auraplex: explain where related tasks are created. -->
+  <p class="caption-color px-4 py-2"><Label label={tracker.string.RelatedIssuesSettingsHint} /></p>
   <EditRelatedTargets {value} />
 </div>
 
