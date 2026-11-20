@@ -102,6 +102,10 @@ export default mergeIds(settingId, setting, {
     ConfigDisable: '' as IntlString,
     ConfigEnable: '' as IntlString,
     ConfigBeta: '' as IntlString,
+    // Auraplex: labels for the category directory.
+    ClassDirectoryHint: '' as IntlString,
+    ClassDirectorySearch: '' as IntlString,
+    ClassDirectoryCommon: '' as IntlString,
     ClassSettingHint: '' as IntlString,
     ClassProperties: '' as IntlString,
     ClassColon: '' as IntlString,

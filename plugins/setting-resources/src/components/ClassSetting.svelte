@@ -14,7 +14,7 @@
 -->
 <script lang="ts">
   import core, { Class, Doc, Obj, Ref, isOwnerOrMaintainer } from '@hcengineering/core'
-  import { IntlString } from '@hcengineering/platform'
+  import { IntlString, translate } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import {
     AnySvelteComponent,
@@ -29,7 +29,9 @@
     defineSeparators,
     twoPanelsSeparators,
     Separator,
-    NavGroup
+    NavGroup,
+    SearchInput,
+    languageStore
   } from '@hcengineering/ui'
   import setting from '../plugin'
   import { filterDescendants } from '../utils'
@@ -97,6 +99,43 @@
   $: if (ofClass !== undefined && _class !== undefined && !client.getHierarchy().isDerived(_class, ofClass)) {
     _class = ofClass
   }
+  // Auraplex: search localized class names and surface frequently used categories.
+  const commonIds = [
+    'contact:class:Person',
+    'contact:class:Organization',
+    'tracker:class:Issue',
+    'departments:class:Order',
+    'materials:class:Material'
+  ] as Array<Ref<Class<Doc>>>
+  let search: string | undefined
+  $: commonClasses = ofClass === undefined
+    ? commonIds.filter(id => rawClasses.some(candidate => candidate._id === id && candidate.hidden !== true && candidate.label !== undefined))
+    : []
+  $: commonSet = new Set(commonClasses)
+  $: term = search?.trim().toLocaleLowerCase() ?? ''
+  $: matching = term === '' ? undefined : matchClasses(rawClasses, term, $languageStore)
+
+  async function matchClasses (
+    candidates: Class<Doc>[],
+    term: string,
+    language: string
+  ): Promise<Set<Ref<Class<Doc>>>> {
+    const languages = [...new Set([language, 'en', 'zh'])]
+    const matches = await Promise.all(candidates.map(async (candidate) => {
+      if (candidate.hidden === true || candidate.label === undefined) return undefined
+      const names = await Promise.allSettled(languages.map(language => translate(candidate.label, {}, language)))
+      return names.some(name => name.status === 'fulfilled' && name.value.toLocaleLowerCase().includes(term))
+        ? candidate._id
+        : undefined
+    }))
+    return new Set(matches.filter((id): id is Ref<Class<Doc>> => id !== undefined))
+  }
+
+  function selectClass (id: Ref<Class<Doc>>): void {
+    _class = id
+    clearSettingsStore()
+  }
+
   defineSeparators('workspaceSettings', twoPanelsSeparators)
 </script>
 
@@ -113,27 +152,33 @@
           <ButtonIcon kind={'tertiary'} icon={IconDescription} size={'small'} inheritColor />
         </div>
         <div class="hulyComponent-content__navHeader-hint paragraph-regular-14">
-          <Label label={setting.string.ClassSettingHint} />
+          <Label label={ofClass === undefined ? setting.string.ClassDirectoryHint : setting.string.ClassSettingHint} />
         </div>
       </div>
+      {#if ofClass === undefined}
+        <div class="p-3">
+          <SearchInput bind:value={search} placeholder={setting.string.ClassDirectorySearch} />
+        </div>
+      {/if}
       <Scroller>
-        <NavGroup
-          label={setting.string.Classes}
-          highlighted={_class !== undefined}
-          categoryName={'classes'}
-          noDivider
-          isFold
-        >
-          <ClassHierarchy
-            {classes}
-            {_class}
-            {ofClass}
-            on:select={(e) => {
-              _class = e.detail
-              clearSettingsStore()
-            }}
-          />
-        </NavGroup>
+        {#await matching then matches}
+          {@const commonMatches = commonClasses.filter(id => matches === undefined || matches.has(id))}
+          {#if commonMatches.length > 0}
+            <NavGroup label={setting.string.ClassDirectoryCommon} categoryName="common-classes" noDivider isFold>
+              <ClassHierarchy classes={commonMatches} {_class} flat on:select={(event) => { selectClass(event.detail) }} />
+            </NavGroup>
+          {/if}
+          <NavGroup label={setting.string.Classes} highlighted={_class !== undefined} categoryName="classes" noDivider isFold>
+            <ClassHierarchy
+              {classes}
+              {_class}
+              {ofClass}
+              {matches}
+              excluded={commonSet}
+              on:select={(event) => { selectClass(event.detail) }}
+            />
+          </NavGroup>
+        {/await}
       </Scroller>
     </div>
     <Separator name={'workspaceSettings'} index={0} color={'var(--theme-divider-color)'} />

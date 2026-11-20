@@ -1,5 +1,8 @@
 {
   "string": {
+    "ClassDirectoryHint": "Add custom fields, such as a customer tier. Choose a category on the left, then click + on the right to add a field.",
+    "ClassDirectorySearch": "Search categories",
+    "ClassDirectoryCommon": "Common",
     "IdentificationColor": "Identification color",
     "ColorDefault": "Default",
     "ColorLogoUnavailable": "The icon could not be loaded. The default tab icon is used.",

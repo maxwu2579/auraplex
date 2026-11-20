@@ -22,8 +22,13 @@
 
   export let classes: Ref<Class<Doc>>[] = []
   export let _class: Ref<Class<Doc>> | undefined
-  export let ofClass: Ref<Class<Doc>> | undefined
+  export let ofClass: Ref<Class<Doc>> | undefined = undefined
   export let level: number = 0
+
+  // Auraplex: let the settings sidebar show matching rows and pin common categories once.
+  export let matches: Set<Ref<Class<Doc>>> | undefined = undefined
+  export let excluded = new Set<Ref<Class<Doc>>>()
+  export let flat = false
 
   const client = getClient()
   const dispatch = createEventDispatcher()
@@ -69,21 +74,25 @@
 
 {#each classes as cl}
   {@const clazz = client.getHierarchy().getClass(cl)}
-  <NavItem
-    _id={clazz._id}
-    label={clazz.label}
-    isFold
-    empty
-    {level}
-    selected={cl === _class}
-    on:click={() => {
-      dispatch('select', cl)
-    }}
-    on:contextmenu={(evt) => {
-      showMenu(evt, { object: clazz })
-    }}
-  />
-  {#if (descendants.get(cl)?.length ?? 0) > 0}
-    <svelte:self classes={descendants.get(cl) ?? []} {_class} level={level + 1} on:select />
+  {@const visible = !excluded.has(cl) && (matches === undefined || matches.has(cl))}
+  {#if visible}
+    <NavItem
+      _id={clazz._id}
+      label={clazz.label}
+      isFold
+      empty
+      {level}
+      selected={cl === _class}
+      on:click={() => {
+        dispatch('select', cl)
+      }}
+      on:contextmenu={(evt) => {
+        showMenu(evt, { object: clazz })
+      }}
+    />
+  {/if}
+  {#if !flat && (descendants.get(cl)?.length ?? 0) > 0}
+    <svelte:self classes={descendants.get(cl) ?? []} {_class} {matches} {excluded}
+      level={visible && matches === undefined ? level + 1 : level} on:select />
   {/if}
 {/each}
