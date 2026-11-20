@@ -335,6 +335,8 @@ services:
       - PREVIEW_URL=http://huly.local:4040
       - GMAIL_URL=http://huly.local:8093
       - WHATSAPP_URL=http://huly.local:8098
+      - LOVE_ENDPOINT=http://huly.local:8099
+      - LIVEKIT_WS=ws://localhost:7880
       - CALENDAR_URL=http://huly.local:8095
       - TELEGRAM_URL=http://huly.local:8086
       - REKONI_URL=http://huly.local:4004
@@ -481,6 +483,32 @@ services:
       - BRANDING_PATH=/var/cfg/branding.json
       - STATS_URL=http://huly.local:4900
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318/v1/traces
+  # Auraplex: local Office (video meetings). LiveKit dev mode uses the public dev key pair devkey / secret.
+  livekit:
+    image: livekit/livekit-server:v1.9.1
+    command: ['--dev', '--bind', '0.0.0.0', '--node-ip', '127.0.0.1']
+    ports:
+      - '127.0.0.1:7880:7880'
+      - '127.0.0.1:7881:7881'
+      - '127.0.0.1:7882:7882/udp'
+    restart: unless-stopped
+  love:
+    image: hardcoreeng/love
+    extra_hosts:
+      - 'huly.local:host-gateway'
+    ports:
+      - '127.0.0.1:8099:8096'
+    environment:
+      - PORT=8096
+      - SECRET=secret
+      - ACCOUNTS_URL=http://huly.local:3000
+      - STORAGE_CONFIG=${STORAGE_CONFIG}
+      - LIVEKIT_HOST=http://livekit:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=secret
+    depends_on:
+      - livekit
+    restart: unless-stopped
   # aiBot:
   #   image: hardcoreeng/ai-bot
   #   ports:
@@ -500,7 +528,7 @@ services:
   #     - AVATAR_PATH=./avatar.png
   #     - AVATAR_CONTENT_TYPE=.png
   #     - STATS_URL=http://huly.local:4900
-  # #      - LOVE_ENDPOINT=http://huly.local:8096
+  # #      - LOVE_ENDPOINT=http://huly.local:8099
   # #      - OPENAI_API_KEY=token
   analytics:
     image: hardcoreeng/analytics-collector
