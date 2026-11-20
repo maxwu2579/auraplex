@@ -111,9 +111,18 @@
   $: commonClasses = ofClass === undefined
     ? commonIds.filter(id => rawClasses.some(candidate => candidate._id === id && candidate.hidden !== true && candidate.label !== undefined))
     : []
-  $: commonSet = new Set(commonClasses)
+  $: commonMatches = commonClasses.filter((id) => matches === undefined || matches.has(id))
   $: term = search?.trim().toLocaleLowerCase() ?? ''
-  $: matching = term === '' ? undefined : matchClasses(rawClasses, term, $languageStore)
+  // Auraplex: keep the previous result on screen until the new search finishes, so the list doesn't flash empty.
+  let matches: Set<Ref<Class<Doc>>> | undefined
+  let searchRun = 0
+  $: void updateMatches(rawClasses, term, $languageStore)
+
+  async function updateMatches (candidates: Class<Doc>[], term: string, language: string): Promise<void> {
+    const run = ++searchRun
+    const result = term === '' ? undefined : await matchClasses(candidates, term, language)
+    if (run === searchRun) matches = result
+  }
 
   async function matchClasses (
     candidates: Class<Doc>[],
@@ -161,24 +170,21 @@
         </div>
       {/if}
       <Scroller>
-        {#await matching then matches}
-          {@const commonMatches = commonClasses.filter(id => matches === undefined || matches.has(id))}
-          {#if commonMatches.length > 0}
-            <NavGroup label={setting.string.ClassDirectoryCommon} categoryName="common-classes" noDivider isFold>
-              <ClassHierarchy classes={commonMatches} {_class} flat on:select={(event) => { selectClass(event.detail) }} />
-            </NavGroup>
-          {/if}
-          <NavGroup label={setting.string.Classes} highlighted={_class !== undefined} categoryName="classes" noDivider isFold>
-            <ClassHierarchy
-              {classes}
-              {_class}
-              {ofClass}
-              {matches}
-              excluded={commonSet}
-              on:select={(event) => { selectClass(event.detail) }}
-            />
+        {#if commonMatches.length > 0}
+          <NavGroup label={setting.string.ClassDirectoryCommon} categoryName="common-classes" noDivider isFold>
+            <ClassHierarchy classes={commonMatches} {_class} flat on:select={(event) => { selectClass(event.detail) }} />
           </NavGroup>
-        {/await}
+        {/if}
+        <!-- Auraplex: common types also stay in the full tree, so their sub-types keep their parent -->
+        <NavGroup label={setting.string.Classes} highlighted={_class !== undefined} categoryName="classes" noDivider isFold>
+          <ClassHierarchy
+            {classes}
+            {_class}
+            {ofClass}
+            {matches}
+            on:select={(event) => { selectClass(event.detail) }}
+          />
+        </NavGroup>
       </Scroller>
     </div>
     <Separator name={'workspaceSettings'} index={0} color={'var(--theme-divider-color)'} />
