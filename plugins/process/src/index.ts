@@ -385,6 +385,7 @@ export default plugin(processId, {
     FirstWorkingDayAfter: '' as Ref<ProcessFunction>,
     RoleContext: '' as Ref<ProcessFunction>,
     InitiatorDepartmentSupervisor: '' as Ref<ProcessFunction>,
+    InitiatorDepartmentAdmin: '' as Ref<ProcessFunction>,
     All: '' as Ref<ProcessFunction>,
     Insert: '' as Ref<ProcessFunction>,
     Remove: '' as Ref<ProcessFunction>,

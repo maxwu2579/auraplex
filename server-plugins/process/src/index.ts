@@ -107,6 +107,7 @@ export default plugin(serverProcessId, {
     FirstWorkingDayAfter: '' as Resource<TransformFunc>,
     RoleContext: '' as Resource<TransformFunc>,
     InitiatorDepartmentSupervisor: '' as Resource<TransformFunc>,
+    InitiatorDepartmentAdmin: '' as Resource<TransformFunc>,
     Insert: '' as Resource<TransformFunc>,
     Remove: '' as Resource<TransformFunc>,
     RemoveFirst: '' as Resource<TransformFunc>,

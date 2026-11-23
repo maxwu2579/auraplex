@@ -19,23 +19,26 @@ const sales = {
 }
 
 describe('pickDepartmentApprovers', () => {
-  it('employee and reader go to the first supervisor', () => {
-    expect(pickDepartmentApprovers(a('emp1'), [sales])).toEqual(['sup1'])
-    expect(pickDepartmentApprovers(a('read1'), [sales])).toEqual(['sup1'])
+  it('admin step: everyone but an admin goes to the first department admin', () => {
+    expect(pickDepartmentApprovers(a('emp1'), [sales], 'admin')).toEqual(['admin1'])
+    expect(pickDepartmentApprovers(a('read1'), [sales], 'admin')).toEqual(['admin1'])
+    expect(pickDepartmentApprovers(a('sup2'), [sales], 'admin')).toEqual(['admin1'])
   })
 
-  it('falls back to the first admin when there is no supervisor', () => {
-    expect(pickDepartmentApprovers(a('emp1'), [{ ...sales, supervisors: [] }])).toEqual(['admin1'])
+  it('admin step: an admin gets it back to pass it or hand it on', () => {
+    expect(pickDepartmentApprovers(a('admin1'), [{ ...sales, administrators: [a('admin1'), a('admin2')] }], 'admin')).toEqual(['admin1'])
   })
 
-  it('supervisor goes to the admin, admin needs nobody', () => {
-    expect(pickDepartmentApprovers(a('sup2'), [sales])).toEqual(['admin1'])
-    expect(pickDepartmentApprovers(a('admin1'), [sales])).toEqual([])
+  it('supervisor step: first supervisor that is not the applicant, for admins too', () => {
+    expect(pickDepartmentApprovers(a('emp1'), [sales], 'supervisor')).toEqual(['sup1'])
+    expect(pickDepartmentApprovers(a('admin1'), [sales], 'supervisor')).toEqual(['sup1'])
+    expect(pickDepartmentApprovers(a('sup1'), [sales], 'supervisor')).toEqual(['sup2'])
+    expect(pickDepartmentApprovers(a('emp1'), [{ ...sales, supervisors: [] }], 'supervisor')).toEqual(['emp1'])
   })
 
-  it('skips archived and unrelated departments, one approver per department', () => {
+  it('one per department, skips archived ones, outsiders get it back', () => {
     const prod = { administrators: [a('admin2')], supervisors: [a('sup3')], employees: [a('emp1')] }
-    expect(pickDepartmentApprovers(a('emp1'), [sales, prod, { ...prod, archived: true }])).toEqual(['sup1', 'sup3'])
-    expect(pickDepartmentApprovers(a('nobody'), [sales, prod])).toEqual([])
+    expect(pickDepartmentApprovers(a('emp1'), [sales, prod, { ...prod, archived: true }], 'admin')).toEqual(['admin1', 'admin2'])
+    expect(pickDepartmentApprovers(a('nobody'), [sales, prod], 'admin')).toEqual(['nobody'])
   })
 })

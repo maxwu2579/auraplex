@@ -20,9 +20,10 @@
   import { AccountRole, SortingOrder, getCurrentAccount, type Class, type Doc, type Mixin, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Execution, type Process, type State } from '@hcengineering/process'
-  import { type IntlString } from '@hcengineering/platform'
   import { Header, Icon, Label, Scroller, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
   import { PersonIdPresenter, openDoc } from '@hcengineering/view-resources'
+  import { UserBox } from '@hcengineering/contact-resources'
+  import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
   import ApproveRequestButtons from './ApproveRequestButtons.svelte'
   import plugin from '../plugin'
 
@@ -174,10 +175,32 @@
     if (exec.status === 'done') return { text: state, tone: rejected !== undefined ? 'bad' : 'done', note }
     const waiting = reqs.filter((it) => it.card === doc._id && it.execution === exec._id && it.doneOn == null)
     if (waiting.length > 0) {
+      if (waiting.every((it) => it.user === myPerson)) {
+        return { text: state, tone: 'wait', note: zh ? '等你处理：去「等我审批」' : 'Your turn: see "Waiting for me"' }
+      }
       const names = waiting.map((it) => personName(it.user, people)).join('、')
       return { text: state, tone: 'wait', note: zh ? `等 ${names} 审批` : `Waiting for ${names}` }
     }
     return { text: state, tone: rejected !== undefined ? 'bad' : 'wait', note }
+  }
+
+  // A step that came back to the applicant (an admin's own application, or nobody else fits):
+  // pass it directly (the record keeps who did it) or hand it to someone else.
+  function isOwn (doc: Card): boolean {
+    return doc.createdBy !== undefined && me.socialIds.includes(doc.createdBy)
+  }
+
+  async function passDirectly (req: ApproveRequest): Promise<void> {
+    await client.update(req, {
+      doneOn: Date.now(),
+      approved: true,
+      reason: $languageStore === 'zh' ? '无需审批，直接通过' : 'No approval needed'
+    })
+  }
+
+  async function handTo (req: ApproveRequest, person: Ref<Person> | null): Promise<void> {
+    if (person == null || person === req.user) return
+    await client.update(req, { user: person })
   }
 
   function typeLabel (doc: Card): IntlString {
@@ -287,7 +310,23 @@
                 </div>
               {/if}
               <div class="todo-actions">
-                <ApproveRequestButtons todo={req} card={doc._id} />
+                {#if isOwn(doc)}
+                  <span class="own-hint">{L('这是你自己的申请：', 'This is your own application:')}</span>
+                  <button class="pass" on:click={() => passDirectly(req)}>{L('无需审批，直接通过', 'No approval needed')}</button>
+                  <UserBox
+                    _class={contact.mixin.Employee}
+                    label={getEmbeddedLabel(L('换人审批', 'Hand to someone'))}
+                    placeholder={getEmbeddedLabel(L('选一个人', 'Pick a person'))}
+                    value={null}
+                    excluded={[req.user]}
+                    kind="regular"
+                    size="medium"
+                    showNavigate={false}
+                    on:change={(e) => handTo(req, e.detail)}
+                  />
+                {:else}
+                  <ApproveRequestButtons todo={req} card={doc._id} />
+                {/if}
               </div>
             </div>
           {/if}
@@ -476,8 +515,21 @@
   }
   .todo-actions {
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
     justify-content: flex-end;
+  }
+  .own-hint {
+    font-size: 0.75rem;
+    color: var(--theme-dark-color);
+  }
+  .pass {
+    padding: 0.375rem 0.875rem;
+    border-radius: 0.375rem;
+    background: var(--theme-positive-color, #27ae60);
+    color: #fff;
+    font-weight: 500;
   }
   @media (max-width: 640px) {
     .body {

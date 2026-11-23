@@ -30,34 +30,41 @@ export interface DepartmentRoles {
   readers?: AccountUuid[]
 }
 
+export type ApproverRole = 'admin' | 'supervisor'
+
 /**
- * Who approves for this person: in each of their departments, an employee (or reader)
- * goes to the first supervisor, falling back to the first admin; a supervisor goes to
- * the first admin; an admin needs nobody from that department. One person per department,
- * because an approval request waits for every approver.
+ * Who handles a step for this person, one per department they belong to (an approval request
+ * waits for every approver, so never a whole list):
+ * - 'admin': the first department admin (the boss approves first); an admin gets the step himself.
+ * - 'supervisor': the first department supervisor (e.g. finance records it and does the work).
+ * When nobody else fits, the step goes back to the person, who can pass it directly or hand it
+ * to someone else on the Applications page. A person outside every department also gets it back.
  */
-export function pickDepartmentApprovers (initiator: AccountUuid, departments: DepartmentRoles[]): AccountUuid[] {
+export function pickDepartmentApprovers (
+  initiator: AccountUuid,
+  departments: DepartmentRoles[],
+  role: ApproverRole = 'supervisor'
+): AccountUuid[] {
   const result = new Set<AccountUuid>()
   for (const dep of departments) {
     if (dep.archived === true) continue
-    const admins = (dep.administrators ?? []).filter((it) => it !== initiator)
-    const supervisors = (dep.supervisors ?? []).filter((it) => it !== initiator)
-    let approver: AccountUuid | undefined
-    if (dep.administrators?.includes(initiator) === true) {
-      approver = undefined
-    } else if (dep.supervisors?.includes(initiator) === true) {
-      approver = admins[0]
-    } else if (dep.employees?.includes(initiator) === true || dep.readers?.includes(initiator) === true) {
-      approver = supervisors[0] ?? admins[0]
-    }
-    if (approver !== undefined) result.add(approver)
+    const isAdmin = dep.administrators?.includes(initiator) === true
+    const isMember =
+      isAdmin ||
+      dep.supervisors?.includes(initiator) === true ||
+      dep.employees?.includes(initiator) === true ||
+      dep.readers?.includes(initiator) === true
+    if (!isMember) continue
+    const pool = role === 'admin' ? dep.administrators ?? [] : dep.supervisors ?? []
+    const other = role === 'admin' && isAdmin ? undefined : pool.find((it) => it !== initiator)
+    result.add(other ?? initiator)
   }
+  if (result.size === 0) result.add(initiator)
   return [...result]
 }
 
-export async function InitiatorDepartmentSupervisor (
-  value: null,
-  props: Record<string, any>,
+async function departmentApprovers (
+  role: ApproverRole,
   control: ProcessControl,
   execution: Execution
 ): Promise<Ref<Employee>[]> {
@@ -76,11 +83,29 @@ export async function InitiatorDepartmentSupervisor (
     .filter((doc) => hierarchy.hasMixin(doc, departmentAccess))
     .map((doc) => hierarchy.as(doc, departmentAccess) as unknown as DepartmentRoles)
 
-  const accounts = pickDepartmentApprovers(initiator, roles)
+  const accounts = pickDepartmentApprovers(initiator, roles, role)
   if (accounts.length === 0) return []
   const employees = await control.client.findAll(contact.mixin.Employee, { personUuid: { $in: accounts } })
   // Keep the department order.
   return accounts
     .map((acc) => employees.find((it) => it.personUuid === acc)?._id)
     .filter((it): it is Ref<Employee> => it !== undefined)
+}
+
+export async function InitiatorDepartmentSupervisor (
+  value: null,
+  props: Record<string, any>,
+  control: ProcessControl,
+  execution: Execution
+): Promise<Ref<Employee>[]> {
+  return await departmentApprovers('supervisor', control, execution)
+}
+
+export async function InitiatorDepartmentAdmin (
+  value: null,
+  props: Record<string, any>,
+  control: ProcessControl,
+  execution: Execution
+): Promise<Ref<Employee>[]> {
+  return await departmentApprovers('admin', control, execution)
 }

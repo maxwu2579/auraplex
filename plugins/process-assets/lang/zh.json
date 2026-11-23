@@ -124,6 +124,7 @@
     "EmptyArray": "空数组",
     "ExecutionInitiator": "执行发起者",
     "InitiatorDepartmentSupervisor": "发起人的部门主管",
+    "InitiatorDepartmentAdmin": "发起人的部门管理员",
     "ExecutionStarted": "执行已启动",
     "Filter": "过滤",
     "AllMatchValue": "所有匹配值",

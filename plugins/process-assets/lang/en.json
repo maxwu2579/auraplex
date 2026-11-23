@@ -124,6 +124,7 @@
     "EmptyArray": "Empty array",
     "ExecutionInitiator": "Execution initiator",
     "InitiatorDepartmentSupervisor": "Initiator's department supervisor",
+    "InitiatorDepartmentAdmin": "Initiator's department admin",
     "ExecutionStarted": "Execution started",
     "Filter": "Filter",
     "AllMatchValue": "All matching values",
