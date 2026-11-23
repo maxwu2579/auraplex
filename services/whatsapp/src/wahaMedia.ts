@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from 'crypto'
 import { mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
+import { WahaKeyRejected } from './waha'
 import type { Config } from './config'
 
 /** Media stays on the service volume and is served only after owner authentication. */
@@ -28,6 +29,7 @@ export class WahaMedia {
       const response = await this.request(target, {
         redirect: 'error', signal: AbortSignal.timeout(10000), headers: { 'X-Api-Key': this.config.wahaApiKey }
       })
+      if ([401, 403].includes(response.status)) throw new WahaKeyRejected()
       if (!response.ok || response.body === null) return false
       const reader = response.body.getReader()
       const chunks: Uint8Array[] = []
@@ -49,7 +51,8 @@ export class WahaMedia {
       await writeFile(temporary, Buffer.concat(chunks), { mode: 0o600 })
       await rename(temporary, file)
       return true
-    } catch {
+    } catch (err) {
+      if (err instanceof WahaKeyRejected) throw err
       return false
     } finally {
       await unlink(temporary).catch(() => {})

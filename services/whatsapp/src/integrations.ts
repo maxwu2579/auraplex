@@ -16,6 +16,8 @@
 import type { AccountClient, Integration, IntegrationKey } from '@hcengineering/account-client'
 import { whatsappIntegrationKind } from '@hcengineering/whatsapp'
 import core, { type IntegrationKind, type PersonId, type WorkspaceUuid } from '@hcengineering/core'
+import { sessionName, WahaClient, WahaKeyRejected } from './waha'
+import type { Config } from './config'
 import { changeSettings, type ServiceSettings } from './serviceSettings'
 
 export interface ConnectionIds {
@@ -144,6 +146,55 @@ export class ConnectionStore {
   }
 
   // Auraplex: retain Meta credentials when a WAHA session is added to an existing integration.
+  // Auraplex: only server-side integration secrets contain scoped WAHA credentials.
+  private async scopedWahaKey (
+    entry: Integration, admin: WahaClient, rejected?: string
+  ): Promise<{ id: string, key: string }> {
+    return await this.serialize(async () => {
+      if (entry.workspaceUuid == null) throw new Error('No connection workspace')
+      const latest = await this.get(entry.workspaceUuid, entry.socialId)
+      if (latest?.data?.wahaSession !== sessionName(entry.workspaceUuid, entry.socialId) ||
+        latest.data?.wahaStatus !== 'WORKING') throw new Error('WAHA session is not connected')
+      const secretKey = { ...this.key(entry), key: 'waha-session-key' }
+      const saved = await this.account.getIntegrationSecret(secretKey)
+      const previous = saved == null ? undefined : JSON.parse(saved.secret) as { id: string, key: string }
+      if (previous !== undefined && previous.key !== rejected) return previous
+      const generated = await admin.createSessionKey(latest.data.wahaSession)
+      try {
+        const secret = { ...secretKey, secret: JSON.stringify(generated) }
+        if (saved == null) await this.account.addIntegrationSecret(secret)
+        else await this.account.updateIntegrationSecret(secret)
+      } catch (err) {
+        await admin.removeSessionKey(generated.id)
+        throw err
+      }
+      if (previous !== undefined) await admin.removeSessionKey(previous.id).catch(() => {})
+      return generated
+    })
+  }
+
+  async wahaRequest<T> (
+    entry: Integration, config: Config, request: typeof fetch, call: (scoped: Config) => Promise<T>
+  ): Promise<T> {
+    const admin = new WahaClient(config, request)
+    const current = await this.scopedWahaKey(entry, admin)
+    try {
+      return await call({ ...config, wahaApiKey: current.key })
+    } catch (err) {
+      if (!(err instanceof WahaKeyRejected)) throw err
+      const rotated = await this.scopedWahaKey(entry, admin, current.key)
+      return await call({ ...config, wahaApiKey: rotated.key })
+    }
+  }
+
+  async revokeWahaKey (entry: Integration, admin: WahaClient): Promise<void> {
+    const key = { ...this.key(entry), key: 'waha-session-key' }
+    const saved = await this.account.getIntegrationSecret(key)
+    if (saved == null) return
+    await admin.removeSessionKey((JSON.parse(saved.secret) as { id: string }).id)
+    await this.account.deleteIntegrationSecret(key)
+  }
+
   async findWaha (session: string): Promise<Integration | undefined> {
     return (await this.list()).find((entry) => entry.data?.wahaSession === session)
   }

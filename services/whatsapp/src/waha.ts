@@ -20,18 +20,38 @@ export function verifyWahaSignature (raw: Buffer, signature: string, secret: str
   return timingSafeEqual(expected, Buffer.from(signature, 'hex'))
 }
 
+export class WahaKeyRejected extends Error {}
+
 export class WahaClient implements WhatsAppProvider<string, string, WahaSession | undefined, void> {
   constructor (private readonly config: Config, private readonly request: typeof fetch = fetch) {}
 
   private async call (path: string, method = 'GET', body?: unknown): Promise<Response> {
     if (!this.config.wahaUrl || !this.config.wahaApiKey) throw new SendError('UNCONFIGURED', 'WhatsApp 未配置，请联系管理员。')
-    return await this.request(new URL(path, this.config.wahaUrl), {
+    const response = await this.request(new URL(path, this.config.wahaUrl), {
       method,
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
       headers: { 'X-Api-Key': this.config.wahaApiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body)
     })
+    if ([401, 403].includes(response.status)) throw new WahaKeyRejected()
+    return response
+  }
+
+  async createSessionKey (session: string): Promise<{ id: string, key: string }> {
+    const result = await this.call('/api/keys', 'POST', {
+      session, isAdmin: false, isActive: true,
+      actions: { read: true, send: true, control: false, setting: false, app: false, delete: false }
+    })
+    if (!result.ok) throw new Error('WAHA key creation failed')
+    const key = await result.json() as { id?: unknown, key?: unknown }
+    if (typeof key.id !== 'string' || typeof key.key !== 'string' || key.id === '' || key.key === '') throw new Error('Invalid WAHA key')
+    return { id: key.id, key: key.key }
+  }
+
+  async removeSessionKey (id: string): Promise<void> {
+    const result = await this.call('/api/keys/' + encodeURIComponent(id), 'DELETE')
+    if (!result.ok && result.status !== 404) throw new Error('WAHA key deletion failed')
   }
 
   async status (session: string): Promise<WahaSession | undefined> {

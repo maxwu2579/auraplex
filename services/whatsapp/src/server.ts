@@ -172,7 +172,6 @@ export function createApp (
         return
       }
       const waha = new WahaClient(settings, request)
-      const media = new WahaMedia(settings, request)
       if (body.event === 'session.status') {
         await refreshWaha(body.session, waha)
         accepted()
@@ -181,12 +180,16 @@ export function createApp (
       const phone = integration.data?.wahaPhone
       if (integration.data?.wahaStatus !== 'WORKING' || typeof phone !== 'string') { res.sendStatus(200); return }
       const peer = body.payload.chatId ?? (body.payload.fromMe === true ? body.payload.to ?? body.payload.from : body.payload.from)
-      const mapped = typeof peer === 'string' && peer.endsWith('@lid') ? await waha.resolveLid(body.session, peer) : undefined
+      const mapped = typeof peer === 'string' && peer.endsWith('@lid')
+        ? await store.wahaRequest(integration, settings, request,
+          async (scoped) => await new WahaClient(scoped, request).resolveLid(body.session, peer)).catch(() => undefined)
+        : undefined
       const batch = parseWahaEvent(body.event, body.session, phone, { ...body.payload, ...(mapped === undefined ? {} : { chatId: mapped }) })
       if (batch.messages.length + batch.statuses.length > 0) {
         if (inbox === undefined) { res.sendStatus(503); return }
         for (const message of batch.messages) {
-          if (body.payload.hasMedia === true) message.mediaAvailable = await media.save(body.session, message.wamid, body.payload.media)
+          if (body.payload.hasMedia === true) message.mediaAvailable = await store.wahaRequest(integration, settings, request,
+            async (scoped) => await new WahaMedia(scoped, request).save(body.session, message.wamid, body.payload.media)).catch(() => false)
         }
         await inbox.enqueue(batch)
       }
@@ -436,7 +439,11 @@ export function createApp (
       void (async () => {
         const connection = await store.get(res.locals.workspace, res.locals.socialId)
         const session = connection?.data?.wahaSession
-        if (session === sessionName(res.locals.workspace, res.locals.socialId)) await new WahaClient(await workspaceConfig(res.locals.workspace), request).disconnect(session)
+        if (connection !== undefined && session === sessionName(res.locals.workspace, res.locals.socialId)) {
+          const admin = new WahaClient(await workspaceConfig(res.locals.workspace), request)
+          await store.revokeWahaKey(connection, admin)
+          await admin.disconnect(session)
+        }
         await store.disconnectWaha(res.locals.workspace, res.locals.socialId)
         res.json({ connected: false })
       })().catch(() => res.status(503).json({ code: 'Failed' }))

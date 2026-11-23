@@ -154,7 +154,9 @@ export class OutgoingService {
         if (session !== sessionName(workspace, integration.socialId) || integration.data?.wahaStatus !== 'WORKING') {
           throw new SendError('NOT_CONNECTED', 'WhatsApp 已断开，请重新扫码。')
         }
-        wamid = await new WahaClient(runtimeConfig(this.config, await this.store.serviceSettings(workspace)), this.request).send(session, phone, message.content)
+        const settings = runtimeConfig(this.config, await this.store.serviceSettings(workspace))
+        wamid = await this.store.wahaRequest(integration, settings, this.request,
+          async (scoped) => await new WahaClient(scoped, this.request).send(session, phone, message.content))
       } else {
         const meta = new MetaProvider(this.config, this.store, this.request)
         wamid = await meta.send({
