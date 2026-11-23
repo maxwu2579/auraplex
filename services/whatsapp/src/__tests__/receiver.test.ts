@@ -264,3 +264,17 @@ it('puts two numbers for the same customer in separate private spaces', async ()
     { attachedTo: 'old-channel', owner: 'follower', space: 'follower-space' }
   ])
 })
+
+it('records a WAHA phone send once and ignores the echo of a service send', async () => {
+  const f = fixture()
+  const outbound = { ...incoming, session: 'waha-synthetic', outgoing: true }
+  await f.receiver.receive(f.client, integration, outbound)
+  await f.receiver.receive(f.client, integration, outbound)
+  const sent = f.records().filter((record) => record._class === whatsapp.class.Message)
+  expect(sent).toHaveLength(1)
+  expect(sent[0]).toMatchObject({ direction: 'outgoing', status: 'sent', owner: 'owner', space: 'owner-space' })
+  expect(f.records().find((record) => record.kind === 'whatsapp').label).toBe('•••• 0001')
+  sent[0]._id = 'app-created-message'
+  await f.receiver.receive(f.client, integration, outbound)
+  expect(f.records().filter((record) => record._class === whatsapp.class.Message)).toHaveLength(1)
+})

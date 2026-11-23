@@ -80,6 +80,13 @@ export class WahaClient implements WhatsAppProvider<string, string, WahaSession 
       }
     } else if (['FAILED', 'STOPPED'].includes(existing.status)) {
       const res = await this.call('/api/sessions/' + session + '/' + (existing.status === 'FAILED' ? 'restart' : 'start'), 'POST')
+      if (!res.ok && existing.status === 'FAILED') {
+        const logout = await this.call('/api/sessions/' + session + '/logout', 'POST')
+        if (logout.ok) {
+          const start = await this.call('/api/sessions/' + session + '/start', 'POST')
+          if (start.ok) return
+        }
+      }
       if (!res.ok) throw new Error('WAHA unavailable')
     }
   }

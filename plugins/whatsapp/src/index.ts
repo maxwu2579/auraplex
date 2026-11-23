@@ -117,6 +117,7 @@ export default plugin(whatsappId, {
     WahaAttachment: '' as IntlString,
     WahaRisk: '' as IntlString,
     WahaScan: '' as IntlString,
+    WahaRefreshQr: '' as IntlString,
     WahaWaiting: '' as IntlString,
     WahaDisconnected: '' as IntlString,
     WahaSingleSession: '' as IntlString,

@@ -178,7 +178,7 @@ export class OutgoingService {
         : { status: 'failed', errorCode: failure.code, errorMessage: failure.message }
     )
     if (failure === undefined && message.owner !== undefined) {
-      await recordWhatsappExchange(client, finish, message.owner, message.phone, Date.now())
+      await recordWhatsappExchange(client, finish, message.owner, this.config.provider === 'waha' ? '•••• ' + message.phone.slice(-4) : message.phone, Date.now())
     }
     if (!(await finish.commit()).result) throw new Error('Send result could not be saved')
   }

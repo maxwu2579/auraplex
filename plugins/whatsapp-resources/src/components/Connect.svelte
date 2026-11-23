@@ -117,7 +117,7 @@
     <div class="buttons">
       <Button label={state.connected ? whatsapp.string.Save : whatsapp.string.Cancel} on:click={() => dispatch('close', { connected: state?.connected })} />
       {#if !state.connected && state.status !== 'UNCONFIGURED'}
-        <Button label={whatsapp.string.Connect} kind="primary" disabled={busy} on:click={save} />
+        <Button label={state.status === 'FAILED' ? whatsapp.string.WahaRefreshQr : whatsapp.string.Connect} kind="primary" disabled={busy} on:click={save} />
       {/if}
     </div>
   {:else if state !== undefined}

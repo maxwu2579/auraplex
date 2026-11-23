@@ -3,6 +3,7 @@
     "WahaAttachment": "下载附件",
     "WahaRisk": "扫码使用非官方 WhatsApp 接口，号码有被限制的风险。建议用工作号，不要用私人号。",
     "WahaScan": "用手机打开 WhatsApp → 已关联的设备 → 关联新设备，扫一扫。",
+    "WahaRefreshQr": "重新获取二维码",
     "WahaWaiting": "等待扫码",
     "WahaDisconnected": "WhatsApp 已断开，请重新扫码。",
     "WahaSingleSession": "WAHA 版本太旧，只支持一个号，请联系管理员。",
