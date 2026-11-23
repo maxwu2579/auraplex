@@ -63,7 +63,6 @@ export class ConnectionStore {
       const key = { ...integration, key: section }
       const existing = await this.account.getIntegrationSecret(key)
       const result = changeSettings(existing == null ? {} : JSON.parse(existing.secret), patch, members)
-      if (await this.account.getIntegration(integration) == null) await this.account.createIntegration(integration)
       const update = { ...key, secret: JSON.stringify(result.value) }
       if (existing == null) await this.account.addIntegrationSecret(update)
       else await this.account.updateIntegrationSecret(update)

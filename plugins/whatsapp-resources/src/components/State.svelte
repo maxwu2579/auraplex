@@ -30,8 +30,8 @@
   const load = (): void => {
     void getConnection().then((result) => {
       state = result
-      if (!disposed && result.provider === 'waha' && ['STARTING', 'SCAN_QR_CODE'].includes(result.status ?? '')) {
-        timer = setTimeout(load, 3000)
+      if (!disposed && result.provider === 'waha' && (['STARTING', 'SCAN_QR_CODE'].includes(result.status ?? '') || result.connected)) {
+        timer = setTimeout(load, result.connected ? 10000 : 3000)
       }
     }).catch((error) => {
       unavailable = error instanceof ConnectionError && error.label === whatsapp.string.Unavailable

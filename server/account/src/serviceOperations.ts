@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import {
+import core, {
   type AccountRole,
   type Data,
   isActiveMode,
@@ -783,6 +783,16 @@ export async function getIntegration (
   return await db.integration.findOne({ socialId, kind, workspaceUuid })
 }
 
+// Auraplex: workspace settings are standalone secret rows, with no user integration parent.
+function isWorkspaceServiceSecret (account: AccountUuid, service: unknown, params: IntegrationSecretKey): boolean {
+  if (String(params.kind) !== 'auraplex-service-settings') return false
+  if (account !== systemAccountUuid || service !== 'whatsapp' || params.socialId !== core.account.System ||
+    params.workspaceUuid == null || !['settings', 'recognizer-settings', 'mail-settings'].includes(params.key)) {
+    throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+  }
+  return true
+}
+
 export async function addIntegrationSecret (
   ctx: MeasureContext,
   db: AccountDB,
@@ -803,8 +813,8 @@ export async function addIntegrationSecret (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
-  const existingIntegration = await findExistingIntegration(account, db, params, extra)
-  if (existingIntegration == null) {
+  if (!isWorkspaceServiceSecret(account, extra?.service, params) &&
+      await findExistingIntegration(account, db, params, extra) == null) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationNotFound, {}))
   }
 
@@ -837,8 +847,8 @@ export async function updateIntegrationSecret (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
-  const existingIntegration = await findExistingIntegration(account, db, params, extra)
-  if (existingIntegration == null) {
+  if (!isWorkspaceServiceSecret(account, extra?.service, params) &&
+      await findExistingIntegration(account, db, params, extra) == null) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationNotFound, {}))
   }
 
@@ -871,8 +881,8 @@ export async function deleteIntegrationSecret (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
-  const existingIntegration = await findExistingIntegration(account, db, params, extra)
-  if (existingIntegration == null) {
+  if (!isWorkspaceServiceSecret(account, extra?.service, params) &&
+      await findExistingIntegration(account, db, params, extra) == null) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationNotFound, {}))
   }
 
@@ -898,7 +908,7 @@ export async function getIntegrationSecret (
   const service = extra?.service
   if (service === 'prospects-recognizer' || service === 'prospect-mail') {
     const allowedKey = service === 'prospects-recognizer' ? 'recognizer-settings' : 'mail-settings'
-    if (account !== systemAccountUuid || workspace !== workspaceUuid || kind !== 'auraplex-service-settings' || key !== allowedKey) {
+    if (account !== systemAccountUuid || workspace !== workspaceUuid || socialId !== core.account.System || kind !== 'auraplex-service-settings' || key !== allowedKey) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
     }
   } else {

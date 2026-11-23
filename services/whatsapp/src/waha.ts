@@ -74,7 +74,8 @@ export class WahaClient implements WhatsAppProvider<string, string, WahaSession 
       if (!res.ok) return undefined
       const { pn } = await res.json() as { pn?: string }
       return typeof pn === 'string' && /^\d+@c\.us$/.test(pn) ? pn : undefined
-    } catch {
+    } catch (err) {
+      if (err instanceof WahaKeyRejected) throw err
       return undefined
     }
   }
