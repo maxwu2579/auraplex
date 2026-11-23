@@ -135,7 +135,10 @@ export function createApp (
         return
       }
       const integration = await store.findWaha(body.session)
-      if (integration === undefined) { res.sendStatus(200); return }
+      if (integration?.workspaceUuid == null || sessionName(integration.workspaceUuid, integration.socialId) !== body.session) {
+        res.sendStatus(200)
+        return
+      }
       if (body.event === 'session.status') {
         await refreshWaha(body.session)
         res.sendStatus(200)
@@ -198,7 +201,9 @@ export function createApp (
     if (!config.wahaUrl || !config.wahaApiKey || !config.wahaWebhookSecret) {
       return { provider: 'waha', connected: false, status: 'UNCONFIGURED' }
     }
-    if (waha === undefined || typeof session !== 'string') return { provider: 'waha', connected: false }
+    if (waha === undefined || typeof session !== 'string' || session !== sessionName(res.locals.workspace, res.locals.socialId)) {
+      return { provider: 'waha', connected: false }
+    }
     const { status, phone } = await refreshWaha(session)
     return {
       provider: 'waha', connected: status === 'WORKING' && !!phone,
@@ -349,7 +354,7 @@ export function createApp (
       void (async () => {
         const connection = await store.get(res.locals.workspace, res.locals.socialId)
         const session = connection?.data?.wahaSession
-        if (typeof session === 'string') await waha.disconnect(session)
+        if (session === sessionName(res.locals.workspace, res.locals.socialId)) await waha.disconnect(session)
         await store.disconnectWaha(res.locals.workspace, res.locals.socialId)
         res.json({ connected: false })
       })().catch(() => res.status(503).json({ code: 'Failed' }))

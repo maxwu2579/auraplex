@@ -27,7 +27,7 @@ import core, {
   type WorkspaceUuid,
   type ApplyOperations
 } from '@hcengineering/core'
-import notification, { type DocNotifyContext } from '@hcengineering/notification'
+import notification, { type DocNotifyContext, type CommonInboxNotification } from '@hcengineering/notification'
 import { createClient, getTransactorEndpoint } from '@hcengineering/server-client'
 import { generateToken } from '@hcengineering/server-token'
 import whatsapp, { type WhatsappMessage } from '@hcengineering/whatsapp'
@@ -74,7 +74,7 @@ export class WorkspaceReceiver {
     if (person === undefined) return
     const space = await client.findOne(contact.class.PersonSpace, { person: person._id })
     if (space === undefined || !space.private || !space.members.includes(user)) return
-    const id = stableId('waha-disconnected', user, String(integration.data?.wahaConnectedOn ?? ''))
+    const id = stableId<CommonInboxNotification>('waha-disconnected', user, String(integration.data?.wahaConnectedOn ?? ''))
     if (await client.findOne(notification.class.CommonInboxNotification, { _id: id }) !== undefined) return
     const ops = client.apply('whatsapp-disconnected')
     ops.notMatch(notification.class.CommonInboxNotification, { _id: id })
