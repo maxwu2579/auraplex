@@ -1,0 +1,91 @@
+// Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import { createHash, createHmac, timingSafeEqual } from 'crypto'
+import type { Config } from './config'
+import { SendError } from './graph'
+
+export interface WahaSession {
+  status: string
+  me?: { id?: string }
+}
+
+export function sessionName (workspace: string, owner: string): string {
+  return 'huly-' + createHash('sha256').update(JSON.stringify([workspace, owner])).digest('hex').slice(0, 32)
+}
+
+export function verifyWahaSignature (raw: Buffer, signature: string, secret: string): boolean {
+  if (secret === '' || !/^[a-f0-9]{128}$/i.test(signature)) return false
+  const expected = createHmac('sha512', secret).update(raw).digest()
+  return timingSafeEqual(expected, Buffer.from(signature, 'hex'))
+}
+
+export class WahaClient {
+  constructor (private readonly config: Config, private readonly request: typeof fetch = fetch) {}
+
+  private async call (path: string, method = 'GET', body?: unknown): Promise<Response> {
+    if (!this.config.wahaUrl || !this.config.wahaApiKey) throw new SendError('UNCONFIGURED', 'WhatsApp 未配置，请联系管理员。')
+    return await this.request(new URL(path, this.config.wahaUrl), {
+      method,
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+      headers: { 'X-Api-Key': this.config.wahaApiKey, 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+  }
+
+  async status (session: string): Promise<WahaSession | undefined> {
+    const res = await this.call('/api/sessions/' + session)
+    if (res.status === 404) return undefined
+    if (!res.ok) throw new Error('WAHA unavailable')
+    return await res.json() as WahaSession
+  }
+
+  async start (session: string): Promise<void> {
+    const existing = await this.status(session)
+    if (existing === undefined) {
+      const res = await this.call('/api/sessions', 'POST', {
+        name: session,
+        start: true,
+        config: { webhooks: [{
+          url: this.config.wahaWebhookUrl ?? this.config.publicUrl + '/webhook/waha',
+          events: ['message', 'message.any', 'message.ack', 'session.status'],
+          hmac: { key: this.config.wahaWebhookSecret }
+        }] }
+      })
+      if (!res.ok) {
+        const detail = (await res.text()).slice(0, 4000)
+        if (/only.{0,60}(default|one session)|core.{0,60}(default|session)|default.{0,60}session/i.test(detail)) {
+          throw new Error('SingleSession')
+        }
+        throw new Error('WAHA unavailable')
+      }
+    } else if (['FAILED', 'STOPPED'].includes(existing.status)) {
+      const res = await this.call('/api/sessions/' + session + '/' + (existing.status === 'FAILED' ? 'restart' : 'start'), 'POST')
+      if (!res.ok) throw new Error('WAHA unavailable')
+    }
+  }
+
+  async qr (session: string): Promise<string | undefined> {
+    const res = await this.call('/api/' + session + '/auth/qr')
+    if (!res.ok) return undefined
+    const mime = res.headers.get('content-type')?.split(';')[0]
+    if (mime === 'image/png') return Buffer.from(await res.arrayBuffer()).toString('base64')
+    if (mime !== 'application/json') return undefined
+    const { data, mimetype } = await res.json() as { data?: string, mimetype?: string }
+    return mimetype === 'image/png' && typeof data === 'string' ? data : undefined
+  }
+
+  async disconnect (session: string): Promise<void> {
+    const logout = await this.call('/api/sessions/' + session + '/logout', 'POST')
+    if (!logout.ok && logout.status !== 404) throw new Error('WAHA unavailable')
+    const remove = await this.call('/api/sessions/' + session, 'DELETE')
+    if (!remove.ok && remove.status !== 404) throw new Error('WAHA unavailable')
+  }
+
+  async send (session: string, phone: string, text: string): Promise<string> {
+    const res = await this.call('/api/sendText', 'POST', { session, chatId: phone + '@c.us', text })
+    if (!res.ok) throw new SendError('WAHA_SEND', '发送失败，请检查号码或重新扫码连接。')
+    const { id } = await res.json() as { id?: string }
+    if (typeof id !== 'string' || id === '') throw new SendError('WAHA_SEND', '发送状态未确认，请检查手机。')
+    return id
+  }
+}

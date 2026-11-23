@@ -16,6 +16,11 @@
 import { REPLY_WINDOW_MS } from '@hcengineering/whatsapp'
 
 export interface Config {
+  provider?: 'meta' | 'waha'
+  wahaUrl?: string
+  wahaApiKey?: string
+  wahaWebhookSecret?: string
+  wahaWebhookUrl?: string
   port: number
   accountsUrl: string
   secret: string
@@ -41,15 +46,23 @@ function replyWindow (minutes: string | undefined): number {
 
 export function readConfig (): Config {
   const { ACCOUNTS_URL, SECRET, WHATSAPP_PUBLIC_URL, WHATSAPP_GRAPH_VERSION } = process.env
+  // Auraplex: new installations default to WAHA.
+  const provider = process.env.WHATSAPP_PROVIDER ?? 'waha'
+  if (provider !== 'meta' && provider !== 'waha') throw new Error('Invalid WHATSAPP_PROVIDER')
   if (
     ACCOUNTS_URL === undefined ||
     SECRET === undefined ||
     WHATSAPP_PUBLIC_URL === undefined ||
-    WHATSAPP_GRAPH_VERSION === undefined
+    (provider === 'meta' && WHATSAPP_GRAPH_VERSION === undefined)
   ) {
-    throw new Error('ACCOUNTS_URL, SECRET, WHATSAPP_PUBLIC_URL and WHATSAPP_GRAPH_VERSION are required')
+    throw new Error('Required WhatsApp service configuration is missing')
   }
   return {
+    provider,
+    wahaUrl: process.env.WHATSAPP_WAHA_URL,
+    wahaApiKey: process.env.WHATSAPP_WAHA_API_KEY,
+    wahaWebhookSecret: process.env.WHATSAPP_WAHA_WEBHOOK_SECRET,
+    wahaWebhookUrl: process.env.WHATSAPP_WAHA_WEBHOOK_URL,
     port: Number(process.env.PORT ?? 8098),
     accountsUrl: ACCOUNTS_URL,
     secret: SECRET,
@@ -59,7 +72,7 @@ export function readConfig (): Config {
     appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
     inboxDirectory: process.env.WHATSAPP_INBOX_DIR ?? '/var/lib/whatsapp/inbox',
-    graphVersion: WHATSAPP_GRAPH_VERSION,
+    graphVersion: WHATSAPP_GRAPH_VERSION ?? '',
     replyWindowMs: replyWindow(process.env.WHATSAPP_REPLY_WINDOW_MINUTES)
   }
 }
