@@ -18,6 +18,7 @@
 export const cardBaseClass = 'card:class:Card'
 export const executionClass = 'process:class:Execution'
 export const approveRequestClass = 'process:class:ApproveRequest'
+export const attachmentClass = 'attachment:class:Attachment'
 
 export interface RequestLike {
   user: string

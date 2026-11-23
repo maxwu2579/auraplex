@@ -58,6 +58,7 @@ import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type Order
 import { isOwner, isSystem } from './utils'
 import {
   approveRequestClass,
+  attachmentClass,
   canChangeExecutionStatus,
   canChangeRequest,
   cardBaseClass,
@@ -464,10 +465,21 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
 
   /** Applications: approved content stays fixed, steps are decided by their own approver, the applicant withdraws. */
   private async checkApplications (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
-    if (tx._class !== core.class.TxUpdateDoc && tx._class !== core.class.TxMixin) return
     const account = ctx.contextData.account
-    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return
     const hierarchy = this.context.hierarchy
+    if (tx.objectClass === attachmentClass) {
+      // Files of an approved application stay as they were approved.
+      if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return
+      const attachedTo =
+        tx.attachedTo ??
+        ((tx._class === core.class.TxCreateDoc ? undefined : await this.findOne(ctx, tx.objectClass, tx.objectId)) as any)?.attachedTo
+      if (attachedTo === undefined) return
+      const parent = await this.findOne(ctx, cardBaseClass as Ref<Class<Doc>>, attachedTo)
+      if (parent !== undefined && (await this.applicationLocked(ctx, parent._id))) forbidden()
+      return
+    }
+    if (tx._class !== core.class.TxUpdateDoc && tx._class !== core.class.TxMixin) return
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return
     const operations = ((tx as TxUpdateDoc<Doc>).operations ?? (tx as TxMixin<Doc, Doc>).attributes ?? {}) as Record<string, unknown>
     const isCard = (): boolean =>
       hierarchy.hasClass(tx.objectClass) && hierarchy.isDerived(tx.objectClass, cardBaseClass as Ref<Class<Doc>>)
@@ -483,12 +495,16 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const person = (await this.next?.findAll(ctx, 'contact:class:Person' as Ref<Class<Doc>>, { personUuid: account.uuid } as any, { limit: 1 }))?.[0]
       if (!canChangeRequest(operations, person?._id, request)) forbidden()
     } else if (touchesApplicationContent(operations) && isCard()) {
-      const requests = ((await this.next?.findAll(ctx, approveRequestClass as Ref<Class<Doc>>, { card: tx.objectId, approved: true } as any)) ?? []) as unknown as Array<Doc & RequestLike>
-      if (requests.length === 0) return
-      const executions = (await this.next?.findAll(ctx, executionClass as Ref<Class<Doc>>, { _id: { $in: requests.map((it) => it.execution) } } as any)) ?? []
-      const cancelled = new Set<string>(executions.filter((it) => (it as any).status === 'cancelled').map((it) => it._id))
-      if (isApplicationLocked(requests, cancelled)) forbidden()
+      if (await this.applicationLocked(ctx, tx.objectId)) forbidden()
     }
+  }
+
+  private async applicationLocked (ctx: MeasureContext, card: Ref<Doc>): Promise<boolean> {
+    const requests = ((await this.next?.findAll(ctx, approveRequestClass as Ref<Class<Doc>>, { card, approved: true } as any)) ?? []) as unknown as Array<Doc & RequestLike>
+    if (requests.length === 0) return false
+    const executions = (await this.next?.findAll(ctx, executionClass as Ref<Class<Doc>>, { _id: { $in: requests.map((it) => it.execution) } } as any)) ?? []
+    const cancelled = new Set<string>(executions.filter((it) => (it as any).status === 'cancelled').map((it) => it._id))
+    return isApplicationLocked(requests, cancelled)
   }
 
   private async findOne (
