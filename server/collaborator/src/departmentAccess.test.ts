@@ -1,3 +1,4 @@
+import { connect } from './platform'
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import { getClient } from '@hcengineering/account-client'
 import {
@@ -32,6 +33,8 @@ const base: CollaborationAccessInput = {
     readerPermissions: ['comment']
   }
 }
+jest.mock('./platform', () => ({ connect: jest.fn() }))
+
 test('rejects a private space nonmember', () => {
   expect(decideCollaborationAccess({ ...base, actor: 'outsider' })).toEqual({ read: false, write: false })
 })
@@ -124,4 +127,24 @@ test('a missing document can only create an isolated draft for a workspace membe
     write: false,
     allowDraft: false
   })
+})
+
+test('an existing application card requires a successful read with the user token', async () => {
+  const cardClass = 'card:class:Card'
+  const client = {
+    findOne: jest.fn().mockResolvedValue({ _id: 'private-application', _class: cardClass }),
+    getHierarchy: () => ({ isDerived: (left: string, right: string) => left === right }),
+    close: jest.fn()
+  }
+  const caller = { findAll: jest.fn().mockResolvedValue([]), close: jest.fn() }
+  ;(connect as jest.Mock).mockResolvedValue(caller)
+  ;(getClient as jest.Mock).mockReturnValue({
+    getLoginInfoByToken: async () => ({ account: 'employee', workspace: 'workspace', role: 'USER' })
+  })
+  const context: any = { wsIds: { uuid: 'workspace' }, clientFactory: async () => client }
+  const token: any = { account: 'employee', workspace: 'workspace', extra: {} }
+  await expect(checkCollaborationAccess(token, 'fake', context, 'workspace|class|doc|body', 'http://account.test'))
+    .resolves.toEqual({ read: false, write: false })
+  expect(connect).toHaveBeenCalledWith('fake')
+  expect(caller.close).toHaveBeenCalledTimes(1)
 })

@@ -5,6 +5,7 @@ import { decodeDocumentId } from '@hcengineering/collaborator-client'
 import core, { AccountRole, roleOrder, type Class, type Doc, type Ref, type Space } from '@hcengineering/core'
 import { type Token } from '@hcengineering/server-token'
 import { type Context } from './context'
+import { connect } from './platform'
 
 export interface DepartmentAccessSnapshot {
   administrators: readonly string[]
@@ -90,6 +91,18 @@ export async function checkCollaborationAccess (
       }
     }
     const hierarchy = client.getHierarchy()
+    // Auraplex: the system lookup distinguishes a missing draft from a private existing card.
+    const cardClass = 'card:class:Card' as Ref<Class<Doc>>
+    if (hierarchy.isDerived(object._class, cardClass)) {
+      const userClient = await connect(rawToken)
+      try {
+        if ((await userClient.findAll(object._class, { _id: object._id }, { limit: 1 })).length === 0) {
+          return { read: false, write: false }
+        }
+      } finally {
+        await userClient.close()
+      }
+    }
     const attribute = hierarchy.findAttribute(object._class, documentId.objectAttr)
     if (attribute === undefined || !hierarchy.isDerived(attribute.type._class, core.class.TypeCollaborativeDoc)) {
       return { read: false, write: false }

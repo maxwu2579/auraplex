@@ -29,7 +29,8 @@ import { getClient as getAccountClient } from '@hcengineering/account-client'
 
 import config from './config'
 
-async function connect (token: string): Promise<Client> {
+// Auraplex: use the caller’s token for document visibility checks.
+export async function connect (token: string): Promise<Client> {
   const endpoint = await getTransactorEndpoint(token)
   return await createClient(endpoint, token)
 }
