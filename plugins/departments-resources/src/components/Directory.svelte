@@ -835,14 +835,17 @@
           <section class="application-assignments">
             <h3><Label label={departments.string.ApplicationAssignments} /></h3>
             <p><Label label={departments.string.ApplicationAssignmentsHint} /></p>
-            {#each applicationForms as form (form._id)}
-              <ModernCheckbox labelIntl={form.label}
-                checked={assignedApplication(live, form._id)}
-                disabled={!canCreateDepartment || busy}
-                on:change={() => { void assignApplication(form._id, !assignedApplication(live, form._id)) }} />
-            {:else}
-              <p><Label label={departments.string.ApplicationAssignmentsEmpty} /></p>
-            {/each}
+            <!-- Auraplex: keep each checkbox and its caption on a single row. -->
+            <div class="application-assignment-list">
+              {#each applicationForms as form (form._id)}
+                <ModernCheckbox labelIntl={form.label}
+                  checked={assignedApplication(live, form._id)}
+                  disabled={!canCreateDepartment || busy}
+                  on:change={() => { void assignApplication(form._id, !assignedApplication(live, form._id)) }} />
+              {:else}
+                <p><Label label={departments.string.ApplicationAssignmentsEmpty} /></p>
+              {/each}
+            </div>
             {#if error && !canEdit}<p role="alert"><Label label={departments.string.ApplicationAssignmentsError} /></p>{/if}
           </section>
         {/if}
@@ -930,6 +933,14 @@
 </section>
 
 <style lang="scss">
+  .application-assignment-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-2);
+    margin-block: var(--spacing-2);
+  }
+
   .departments {
     box-sizing: border-box;
     align-self: stretch;
