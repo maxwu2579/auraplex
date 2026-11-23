@@ -1,5 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
-import core, { TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind } from '@hcengineering/core'
+import core, { TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
 import { setMetadata } from '@hcengineering/platform'
 import prospects, { type ProspectMailCursor } from '@hcengineering/prospects'
 import serverClient, { createClient, getTransactorEndpoint } from '@hcengineering/server-client'
@@ -42,7 +42,7 @@ async function workspaceClient (workspace: WorkspaceUuid): Promise<TxOperations>
 async function workspaceSettings (workspace: WorkspaceUuid): Promise<typeof config> {
   const token = generateToken(systemAccountUuid, workspace, { service: 'prospect-mail' })
   const value = await getClient(config.accountsUrl, token).getIntegrationSecret({
-    workspaceUuid: workspace, socialId: core.account.System,
+    workspaceUuid: workspace, socialId: '0' as PersonId,
     kind: 'auraplex-service-settings' as IntegrationKind, key: 'mail-settings'
   })
   if (value == null) return config

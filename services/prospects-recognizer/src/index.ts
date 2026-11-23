@@ -1,4 +1,4 @@
-import core, { systemAccountUuid, type IntegrationKind } from '@hcengineering/core'
+import { systemAccountUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
 import { getClient } from '@hcengineering/account-client'
 import { setMetadata } from '@hcengineering/platform'
 import token, { generateToken } from '@hcengineering/server-token'
@@ -16,7 +16,7 @@ createApp({
     if (!secret) return {}
     const serviceToken = generateToken(systemAccountUuid, workspace, { service: 'prospects-recognizer' })
     const result = await getClient(accountsUrl, serviceToken).getIntegrationSecret({
-      workspaceUuid: workspace, socialId: core.account.System,
+      workspaceUuid: workspace, socialId: '0' as PersonId,
       kind: 'auraplex-service-settings' as IntegrationKind, key: 'recognizer-settings'
     })
     if (result == null) return {}

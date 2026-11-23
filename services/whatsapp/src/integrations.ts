@@ -15,7 +15,7 @@
 
 import type { AccountClient, Integration, IntegrationKey } from '@hcengineering/account-client'
 import { whatsappIntegrationKind } from '@hcengineering/whatsapp'
-import core, { type IntegrationKind, type PersonId, type WorkspaceUuid } from '@hcengineering/core'
+import { type IntegrationKind, type PersonId, type WorkspaceUuid } from '@hcengineering/core'
 import { sessionName, WahaClient, WahaKeyRejected } from './waha'
 import type { Config } from './config'
 import { changeSettings, type ServiceSettings } from './serviceSettings'
@@ -47,7 +47,7 @@ export class ConnectionStore {
   }
 
   private settingsKey (workspaceUuid: WorkspaceUuid): IntegrationKey {
-    return { kind: 'auraplex-service-settings' as IntegrationKind, socialId: core.account.System, workspaceUuid }
+    return { kind: 'auraplex-service-settings' as IntegrationKind, socialId: '0' as PersonId, workspaceUuid }
   }
 
   async serviceSettings (workspace: WorkspaceUuid, section = 'settings'): Promise<ServiceSettings> {

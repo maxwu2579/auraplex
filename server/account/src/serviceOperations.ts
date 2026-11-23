@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-import core, {
+import {
   type AccountRole,
   type Data,
   isActiveMode,
@@ -786,7 +786,7 @@ export async function getIntegration (
 // Auraplex: workspace settings are standalone secret rows, with no user integration parent.
 function isWorkspaceServiceSecret (account: AccountUuid, service: unknown, params: IntegrationSecretKey): boolean {
   if (String(params.kind) !== 'auraplex-service-settings') return false
-  if (account !== systemAccountUuid || service !== 'whatsapp' || params.socialId !== core.account.System ||
+  if (account !== systemAccountUuid || service !== 'whatsapp' || String(params.socialId) !== '0' ||
     params.workspaceUuid == null || !['settings', 'recognizer-settings', 'mail-settings'].includes(params.key)) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
   }
@@ -908,7 +908,7 @@ export async function getIntegrationSecret (
   const service = extra?.service
   if (service === 'prospects-recognizer' || service === 'prospect-mail') {
     const allowedKey = service === 'prospects-recognizer' ? 'recognizer-settings' : 'mail-settings'
-    if (account !== systemAccountUuid || workspace !== workspaceUuid || socialId !== core.account.System || kind !== 'auraplex-service-settings' || key !== allowedKey) {
+    if (account !== systemAccountUuid || workspace !== workspaceUuid || String(socialId) !== '0' || kind !== 'auraplex-service-settings' || key !== allowedKey) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
     }
   } else {

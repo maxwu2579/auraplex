@@ -291,6 +291,8 @@ export function createApp (
         name.startsWith('mail') ? 'mail-settings' : 'settings'))
       if (sections.size !== 1) { res.sendStatus(400); return }
       const members = await res.locals.account.getWorkspaceMembers() as Array<{ person: string }>
+      if (sections.has('settings') && (req.body.wahaUrl || req.body.wahaApiKey) && !config.wahaWebhookSecret &&
+        !(await store.serviceSettings(res.locals.workspace)).webhookSecret) req.body.regenerateWebhook = true
       const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)), [...sections][0])
       await receiver?.auditAccess(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
       const [waha, ai, mail] = await Promise.all(['settings', 'recognizer-settings', 'mail-settings'].map((name) => store.serviceSettings(res.locals.workspace, name)))
