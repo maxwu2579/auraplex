@@ -118,10 +118,14 @@ export class ConnectionStore {
   }
 
   // Auraplex: retain Meta credentials when a WAHA session is added to an existing integration.
+  async findWaha (session: string): Promise<Integration | undefined> {
+    return (await this.list()).find((entry) => entry.data?.wahaSession === session)
+  }
+
   async startWaha (workspaceUuid: WorkspaceUuid, socialId: PersonId, session: string): Promise<void> {
     await this.serialize(async () => {
       const existing = await this.get(workspaceUuid, socialId)
-      if (existing?.data?.wahaSession === session) return
+      if (existing?.data?.wahaSession === session && existing.data.wahaStatus !== 'CONFLICT') return
       const record = { ...existing, workspaceUuid, socialId, kind: whatsappIntegrationKind,
         data: { ...existing?.data, wahaSession: session, wahaStatus: 'STARTING' } }
       if (existing === undefined) await this.account.createIntegration(record)

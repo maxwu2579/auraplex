@@ -2,6 +2,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import type { Config } from './config'
 import { SendError } from './graph'
+import type { WebhookBatch } from './webhook'
 
 export interface WahaSession {
   status: string
@@ -88,4 +89,29 @@ export class WahaClient {
     if (typeof id !== 'string' || id === '') throw new SendError('WAHA_SEND', '发送状态未确认，请检查手机。')
     return id
   }
+}
+
+export function parseWahaEvent (
+  event: string, session: string, ownPhone: string, payload: Record<string, unknown>
+): WebhookBatch {
+  const result: WebhookBatch = { messages: [], statuses: [] }
+  if (typeof payload.id !== 'string' || payload.id === '') return result
+  const outgoing = payload.fromMe === true
+  const peer = payload.chatId ?? (outgoing && payload.to != null ? payload.to : payload.from)
+  const phone = typeof peer === 'string' ? peer.match(/^(\d+)@c\.us$/)?.[1] : undefined
+  if (phone === undefined || phone === ownPhone) return result
+  if (event === 'message.ack') {
+    const status = ({ 1: 'sent', 2: 'delivered', 3: 'read', 4: 'read' } as const)[Number(payload.ack) as 1 | 2 | 3 | 4]
+    if (outgoing && status !== undefined) result.statuses.push({ session, phoneNumberId: ownPhone, wamid: payload.id, status })
+    return result
+  }
+  if (event !== 'message' && event !== 'message.any') return result
+  const media = payload.media as Record<string, unknown> | undefined
+  const placeholder = typeof media?.mimetype === 'string' && media.mimetype.startsWith('image/') ? '[图片]' : '[文件]'
+  const body = typeof payload.body === 'string' ? payload.body : ''
+  const content = payload.hasMedia === true ? [body, placeholder].filter(Boolean).join(' ') : body
+  const timestamp = Number(payload.timestamp) * 1000
+  if (content === '' || !Number.isFinite(timestamp) || timestamp <= 0) return result
+  result.messages.push({ session, outgoing, phoneNumberId: ownPhone, wamid: payload.id, phone, name: phone, content, timestamp })
+  return result
 }

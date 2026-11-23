@@ -21,14 +21,15 @@ import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
 import { SendError, getPhoneStatus, listTemplates } from './graph'
-import { WahaClient, sessionName } from './waha'
+import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
 export function createApp (
   config: Config,
   store: ConnectionStore,
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
-  request: typeof fetch = fetch
+  request: typeof fetch = fetch,
+  notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
@@ -96,6 +97,61 @@ export function createApp (
       })
   })
 
+  async function refreshWaha (session: string): Promise<{ status: string, phone?: string }> {
+    const current = await store.findWaha(session)
+    if (current?.data?.wahaStatus === 'CONFLICT') {
+      await waha?.disconnect(session)
+      return { status: 'CONFLICT' }
+    }
+    const remote = await waha?.status(session)
+    const status = remote?.status ?? 'STOPPED'
+    const phone = status === 'WORKING' ? remote?.me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1] : undefined
+    try {
+      if (status === 'WORKING' && phone === undefined) return { status: 'STARTING' }
+      if (current?.data?.wahaStatus === 'WORKING' && ['FAILED', 'STOPPED', 'SCAN_QR_CODE'].includes(status)) {
+        await notifyDisconnected?.(current)
+      }
+      await store.updateWaha(session, status, phone)
+      return { status, phone }
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== 'Conflict') throw err
+      await waha?.disconnect(session)
+      return { status: 'CONFLICT' }
+    }
+  }
+
+  app.post('/webhook/waha', (req, res) => {
+    const raw = (req as Request & { rawBody?: Buffer }).rawBody
+    if (waha === undefined || raw === undefined ||
+      !verifyWahaSignature(raw, req.get('X-Webhook-Hmac') ?? '', config.wahaWebhookSecret ?? '')) {
+      res.sendStatus(401)
+      return
+    }
+    void (async () => {
+      const body = req.body
+      if (typeof body?.session !== 'string' || !/^huly-[a-f0-9]{32}$/.test(body.session) ||
+        typeof body.event !== 'string' || body.payload == null || typeof body.payload !== 'object') {
+        res.sendStatus(200)
+        return
+      }
+      const integration = await store.findWaha(body.session)
+      if (integration === undefined) { res.sendStatus(200); return }
+      if (body.event === 'session.status') {
+        await refreshWaha(body.session)
+        res.sendStatus(200)
+        return
+      }
+      const phone = integration.data?.wahaPhone
+      if (integration.data?.wahaStatus !== 'WORKING' || typeof phone !== 'string') { res.sendStatus(200); return }
+      const batch = parseWahaEvent(body.event, body.session, phone, body.payload)
+      if (batch.messages.length + batch.statuses.length > 0) {
+        if (inbox === undefined) { res.sendStatus(503); return }
+        await inbox.enqueue(batch)
+      }
+      res.sendStatus(200)
+    })().catch(() => res.sendStatus(503))
+  })
+
   app.use('/api', (req, res, next) => {
     void (async () => {
       const bearer = req.headers.authorization
@@ -143,20 +199,10 @@ export function createApp (
       return { provider: 'waha', connected: false, status: 'UNCONFIGURED' }
     }
     if (waha === undefined || typeof session !== 'string') return { provider: 'waha', connected: false }
-    const remote = await waha.status(session)
-    const status = remote?.status ?? (integration?.data?.wahaStatus === 'CONFLICT' ? 'CONFLICT' : 'STOPPED')
-    const phone = remote?.me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1]
-    let saved = integration
-    try {
-      if (status !== 'WORKING' || phone !== undefined) saved = await store.updateWaha(session, status, phone)
-    } catch (err) {
-      if (!(err instanceof Error) || err.message !== 'Conflict') throw err
-      await waha.disconnect(session)
-      return { provider: 'waha', connected: false, status: 'CONFLICT' }
-    }
+    const { status, phone } = await refreshWaha(session)
     return {
       provider: 'waha', connected: status === 'WORKING' && !!phone,
-      status, phoneNumberId: saved?.data?.wahaPhone, displayPhone: saved?.data?.wahaDisplayPhone,
+      status, phoneNumberId: phone, displayPhone: phone === undefined ? undefined : '•••• ' + phone.slice(-4),
       qr: withQr && status === 'SCAN_QR_CODE' ? await waha.qr(session) : undefined
     }
   }
@@ -210,7 +256,6 @@ export function createApp (
               connectedOn: entry.data?.wahaConnectedOn,
               status: entry.data?.wahaStatus
             } : ({
-              provider: 'meta',
               person: entry.socialId,
               phoneNumberId: entry.data?.phoneNumberId,
               connectedOn: entry.data?.connectedOn,

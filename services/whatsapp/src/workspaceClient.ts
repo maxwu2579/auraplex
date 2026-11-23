@@ -64,21 +64,58 @@ export class WorkspaceReceiver {
     }
   }
 
+  // Auraplex: send just one inbox notification per disconnected connection, only to its owner.
+  async notifyDisconnected (integration?: Integration): Promise<void> {
+    if (integration?.workspaceUuid == null) return
+    const user = await this.account.findPersonBySocialId(integration.socialId, true) as AccountUuid | undefined
+    if (user === undefined) return
+    const client = await this.getClient(integration.workspaceUuid)
+    const person = await client.findOne(contact.mixin.Employee, { personUuid: user, active: true })
+    if (person === undefined) return
+    const space = await client.findOne(contact.class.PersonSpace, { person: person._id })
+    if (space === undefined || !space.private || !space.members.includes(user)) return
+    const id = stableId('waha-disconnected', user, String(integration.data?.wahaConnectedOn ?? ''))
+    if (await client.findOne(notification.class.CommonInboxNotification, { _id: id }) !== undefined) return
+    const ops = client.apply('whatsapp-disconnected')
+    ops.notMatch(notification.class.CommonInboxNotification, { _id: id })
+    const existing = await client.findOne(notification.class.DocNotifyContext, { user, objectId: person._id })
+    const context = existing?._id ?? stableId<DocNotifyContext>('waha-context', user)
+    if (existing === undefined) {
+      ops.notMatch(notification.class.DocNotifyContext, { _id: context })
+      await ops.createDoc(notification.class.DocNotifyContext, space._id, {
+        user, objectId: person._id, objectClass: person._class, objectSpace: person.space,
+        hidden: false, isPinned: false, lastUpdateTimestamp: Date.now()
+      }, context)
+    }
+    await ops.createDoc(notification.class.CommonInboxNotification, space._id, {
+      user, objectId: person._id, objectClass: person._class, docNotifyContext: context,
+      isViewed: false, archived: false, header: whatsapp.string.WahaDisconnected
+    }, id)
+    if (!(await ops.commit()).result &&
+      await client.findOne(notification.class.CommonInboxNotification, { _id: id }) === undefined) {
+      throw new Error('Could not record disconnect notification')
+    }
+  }
+
   async consume (batch: WebhookBatch): Promise<void> {
     for (const message of batch.messages) {
-      const integration = await this.store.findByPhoneNumberId(message.phoneNumberId)
+      const integration = message.session === undefined
+        ? await this.store.findByPhoneNumberId(message.phoneNumberId)
+        : await this.store.findWaha(message.session)
       if (integration?.workspaceUuid == null) continue
       await this.receive(await this.getClient(integration.workspaceUuid), integration, message)
     }
     for (const status of batch.statuses) {
-      const integration = await this.store.findByPhoneNumberId(status.phoneNumberId)
+      const integration = status.session === undefined
+        ? await this.store.findByPhoneNumberId(status.phoneNumberId)
+        : await this.store.findWaha(status.session)
       if (integration?.workspaceUuid == null) continue
       await this.updateStatus(await this.getClient(integration.workspaceUuid), status)
     }
   }
 
   async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<void> {
-    const id = stableId<WhatsappMessage>('message', message.phoneNumberId, message.wamid)
+    const id = stableId<WhatsappMessage>('message', message.session ?? message.phoneNumberId, message.wamid)
     if ((await client.findOne(whatsapp.class.Message, { _id: id })) !== undefined) return
     const owner = (await this.account.findPersonBySocialId(integration.socialId, true)) as AccountUuid | undefined
     if (owner === undefined) throw new Error('Missing integration owner')
@@ -87,6 +124,14 @@ export class WorkspaceReceiver {
       employee === undefined ? undefined : await client.findOne(contact.class.PersonSpace, { person: employee._id })
     if (personalSpace === undefined || !personalSpace.private || !personalSpace.members.includes(owner)) {
       throw new Error('Missing private integration space')
+    }
+    // Auraplex: wait for a concurrent service send to persist its provider ID before recording its echo.
+    const echo = { owner, phoneNumberId: message.phoneNumberId, phone: message.phone, direction: 'outgoing' as const }
+    if (message.outgoing === true) {
+      if (await client.findOne(whatsapp.class.Message, { ...echo, wamid: message.wamid }) !== undefined) return
+      if (await client.findOne(whatsapp.class.Message, { ...echo, status: 'sending' }) !== undefined) {
+        throw new Error('Waiting for outgoing message ID')
+      }
     }
     const ops = client.apply('whatsapp-incoming')
     ops.notMatch(whatsapp.class.Message, { _id: id })
@@ -166,8 +211,8 @@ export class WorkspaceReceiver {
       {
         owner,
         content: message.content,
-        direction: 'incoming',
-        status: 'received',
+        direction: message.outgoing === true ? 'outgoing' : 'incoming',
+        status: message.outgoing === true ? 'sent' : 'received',
         phone: message.phone,
         phoneNumberId: message.phoneNumberId,
         sendOn: message.timestamp,
@@ -175,7 +220,7 @@ export class WorkspaceReceiver {
       },
       id
     )
-    await this.addNotifications(client, ops, owner, customer, channel, message, id)
+    if (message.outgoing !== true) await this.addNotifications(client, ops, owner, customer, channel, message, id)
     await recordWhatsappExchange(client, ops, owner, message.phone, message.timestamp)
     const result = await ops.commit()
     if (!result.result && (await client.findOne(whatsapp.class.Message, { _id: id })) === undefined) {
