@@ -117,6 +117,56 @@ export class ConnectionStore {
     })
   }
 
+  // Auraplex: retain Meta credentials when a WAHA session is added to an existing integration.
+  async startWaha (workspaceUuid: WorkspaceUuid, socialId: PersonId, session: string): Promise<void> {
+    await this.serialize(async () => {
+      const existing = await this.get(workspaceUuid, socialId)
+      if (existing?.data?.wahaSession === session) return
+      const record = { ...existing, workspaceUuid, socialId, kind: whatsappIntegrationKind,
+        data: { ...existing?.data, wahaSession: session, wahaStatus: 'STARTING' } }
+      if (existing === undefined) await this.account.createIntegration(record)
+      else await this.account.updateIntegration(record)
+    })
+  }
+
+  async updateWaha (session: string, status: string, phone?: string): Promise<Integration | undefined> {
+    return await this.serialize(async () => {
+      const entries = await this.list()
+      const entry = entries.find((item) => item.data?.wahaSession === session)
+      if (entry === undefined) return undefined
+      if (phone !== undefined && entries.some((other) => other !== entry &&
+        (other.data?.wahaPhone === phone || (other.data?.displayPhone ?? '').replace(/[^0-9]/g, '') === phone))) {
+        const data = { ...entry.data, wahaStatus: 'CONFLICT', wahaPhone: '' }
+        await this.account.updateIntegration({ ...entry, data })
+        throw new Error('Conflict')
+      }
+      if (entry.data?.wahaStatus === status && (phone === undefined || entry.data?.wahaPhone === phone)) return entry
+      const data = { ...entry.data, wahaStatus: status,
+        ...(phone === undefined ? {} : {
+          wahaPhone: phone,
+          wahaDisplayPhone: '•••• ' + phone.slice(-4),
+          wahaConnectedOn: entry.data?.wahaStatus === 'WORKING' ? entry.data?.wahaConnectedOn : Date.now()
+        }) }
+      const updated = { ...entry, data }
+      await this.account.updateIntegration(updated)
+      return updated
+    })
+  }
+
+  async disconnectWaha (workspaceUuid: WorkspaceUuid, socialId: PersonId): Promise<void> {
+    await this.serialize(async () => {
+      const entry = await this.get(workspaceUuid, socialId)
+      if (entry?.data?.wahaSession === undefined) return
+      if (entry.data.phoneNumberId === undefined) {
+        await this.account.deleteIntegration(this.key(entry))
+        return
+      }
+      const data = { ...entry.data }
+      for (const field of ['wahaSession', 'wahaStatus', 'wahaPhone', 'wahaDisplayPhone', 'wahaConnectedOn']) delete data[field]
+      await this.account.updateIntegration({ ...entry, data })
+    })
+  }
+
   private key (integration: Integration): IntegrationKey {
     return { kind: whatsappIntegrationKind, socialId: integration.socialId, workspaceUuid: integration.workspaceUuid }
   }

@@ -21,6 +21,7 @@ import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
 import { SendError, getPhoneStatus, listTemplates } from './graph'
+import { WahaClient, sessionName } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
 export function createApp (
@@ -30,6 +31,8 @@ export function createApp (
   request: typeof fetch = fetch
 ): express.Express {
   const app = express()
+  // Auraplex: provider selection is server-wide; no connection can override it.
+  const waha = config.provider === 'waha' ? new WahaClient(config, request) : undefined
   const encryption = new TokenEncryption()
   app.disable('x-powered-by')
   app.use(
@@ -58,7 +61,7 @@ export function createApp (
 
   app.get('/webhook', (req, res) => {
     if (
-      !verifyChallenge(req.query['hub.mode'], req.query['hub.verify_token'], config.verifyToken ?? '') ||
+      waha !== undefined || !verifyChallenge(req.query['hub.mode'], req.query['hub.verify_token'], config.verifyToken ?? '') ||
       typeof req.query['hub.challenge'] !== 'string'
     ) {
       res.sendStatus(403)
@@ -68,7 +71,7 @@ export function createApp (
   })
   app.post('/webhook', (req, res) => {
     const raw = (req as Request & { rawBody?: Buffer }).rawBody
-    if (raw === undefined || !verifySignature(raw, req.get('X-Hub-Signature-256'), config.appSecret ?? '')) {
+    if (waha !== undefined || raw === undefined || !verifySignature(raw, req.get('X-Hub-Signature-256'), config.appSecret ?? '')) {
       res.sendStatus(401)
       return
     }
@@ -133,16 +136,51 @@ export function createApp (
     })
   })
 
+  const wahaState = async (res: Response, withQr = false): Promise<unknown> => {
+    const integration = await store.get(res.locals.workspace, res.locals.socialId)
+    const session = integration?.data?.wahaSession
+    if (!config.wahaUrl || !config.wahaApiKey || !config.wahaWebhookSecret) {
+      return { provider: 'waha', connected: false, status: 'UNCONFIGURED' }
+    }
+    if (waha === undefined || typeof session !== 'string') return { provider: 'waha', connected: false }
+    const remote = await waha.status(session)
+    const status = remote?.status ?? (integration?.data?.wahaStatus === 'CONFLICT' ? 'CONFLICT' : 'STOPPED')
+    const phone = remote?.me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1]
+    let saved = integration
+    try {
+      if (status !== 'WORKING' || phone !== undefined) saved = await store.updateWaha(session, status, phone)
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== 'Conflict') throw err
+      await waha.disconnect(session)
+      return { provider: 'waha', connected: false, status: 'CONFLICT' }
+    }
+    return {
+      provider: 'waha', connected: status === 'WORKING' && !!phone,
+      status, phoneNumberId: saved?.data?.wahaPhone, displayPhone: saved?.data?.wahaDisplayPhone,
+      qr: withQr && status === 'SCAN_QR_CODE' ? await waha.qr(session) : undefined
+    }
+  }
+
+  app.get('/api/qr', (_req, res) => {
+    if (waha === undefined) { res.sendStatus(404); return }
+    // Only the authenticated user's integration can be loaded. The API accepts no session selector.
+    void wahaState(res, true).then((state) => res.json(state)).catch(() => res.status(503).json({ code: 'Unavailable' }))
+  })
   app.get('/api/key', (_req, res) => {
     res.json(encryption.createChallenge(res.locals.owner))
   })
   app.get('/api/connection', (_req, res) => {
+    if (waha !== undefined) {
+      void wahaState(res).then((state) => res.json(state)).catch(() => res.status(503).json({ code: 'Unavailable' }))
+      return
+    }
     void store
       .get(res.locals.workspace, res.locals.socialId)
       .then((integration) => {
         // Return a whitelist of non-secret fields only.
         res.json({
-          connected: integration !== undefined,
+          connected: integration?.data?.phoneNumberId !== undefined,
+          provider: 'meta',
           phoneNumberId: integration?.data?.phoneNumberId,
           wabaId: integration?.data?.wabaId,
           webhook: config.publicUrl + '/webhook',
@@ -165,7 +203,14 @@ export function createApp (
         const summaries = await Promise.all(
           entries
             .filter((entry) => entry.workspaceUuid === res.locals.workspace)
-            .map(async (entry) => ({
+            .map(async (entry) => waha !== undefined ? {
+              person: entry.socialId,
+              provider: 'waha',
+              displayPhone: entry.data?.wahaDisplayPhone,
+              connectedOn: entry.data?.wahaConnectedOn,
+              status: entry.data?.wahaStatus
+            } : ({
+              provider: 'meta',
               person: entry.socialId,
               phoneNumberId: entry.data?.phoneNumberId,
               connectedOn: entry.data?.connectedOn,
@@ -180,6 +225,7 @@ export function createApp (
       })
   })
   app.get('/api/templates', (_req, res) => {
+    if (waha !== undefined) { res.json({ templates: [] }); return }
     void (async () => {
       const integration = await store.get(res.locals.workspace, res.locals.socialId)
       const wabaId = integration?.data?.wabaId
@@ -205,6 +251,22 @@ export function createApp (
   })
   app.post('/api/connection', (req, res) => {
     void (async () => {
+      if (waha !== undefined) {
+        if (!config.wahaUrl || !config.wahaApiKey || !config.wahaWebhookSecret) {
+          res.status(503).json({ code: 'Unavailable' })
+          return
+        }
+        const session = sessionName(res.locals.workspace, res.locals.socialId)
+        try {
+          await waha.start(session)
+          await store.startWaha(res.locals.workspace, res.locals.socialId, session)
+          res.json(await wahaState(res))
+        } catch (err) {
+          const single = err instanceof Error && err.message === 'SingleSession'
+          res.status(single ? 409 : 503).json({ code: single ? 'SingleSession' : 'Unavailable' })
+        }
+        return
+      }
       if (!validIds(req.body)) {
         res.status(400).json({ code: 'InvalidParameters' })
         return
@@ -237,6 +299,16 @@ export function createApp (
     })
   })
   app.delete('/api/connection', (_req, res) => {
+    if (waha !== undefined) {
+      void (async () => {
+        const connection = await store.get(res.locals.workspace, res.locals.socialId)
+        const session = connection?.data?.wahaSession
+        if (typeof session === 'string') await waha.disconnect(session)
+        await store.disconnectWaha(res.locals.workspace, res.locals.socialId)
+        res.json({ connected: false })
+      })().catch(() => res.status(503).json({ code: 'Failed' }))
+      return
+    }
     void store
       .disconnect(res.locals.workspace, res.locals.socialId)
       .then(() => {
