@@ -15,7 +15,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { fade } from 'svelte/transition'
-  import { createQuery, departmentModuleLevel, getCurrentWorkspaceUuid } from '@hcengineering/presentation'
+  import { createQuery, departmentModuleLevel, getCurrentWorkspaceUuid, hasResource } from '@hcengineering/presentation'
   import { type IntegrationType, IntegrationError } from '@hcengineering/setting'
   import setting from '@hcengineering/setting'
   import { type Integration } from '@hcengineering/account-client'
@@ -30,7 +30,7 @@
     Switcher,
     Loading
   } from '@hcengineering/ui'
-  import { hasResource, translate } from '@hcengineering/platform'
+  import { translate } from '@hcengineering/platform'
   import { onIntegrationEvent } from '@hcengineering/integration-client'
 
   import IntegrationCard from './IntegrationCard.svelte'

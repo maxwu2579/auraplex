@@ -42453,6 +42453,9 @@ importers:
       '@hcengineering/prospects':
         specifier: workspace:^0.7.0
         version: link:../../plugins/prospects
+      '@hcengineering/server-token':
+        specifier: workspace:^0.7.18
+        version: link:../../foundations/server/packages/token
       express:
         specifier: ^4.21.2
         version: 4.21.2

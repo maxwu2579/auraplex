@@ -2,7 +2,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { randomUUID } from 'crypto'
 import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
-import { AccountRole } from '@hcengineering/core'
+import { AccountRole, type WorkspaceUuid } from '@hcengineering/core'
 import { parseRecognition } from '@hcengineering/prospects'
 
 export interface RecognizerConfig {
@@ -10,6 +10,7 @@ export interface RecognizerConfig {
   aiUrl?: string
   model?: string
   key?: string
+  resolve?: (workspace: WorkspaceUuid) => Promise<Partial<RecognizerConfig>>
 }
 async function readBounded (response: globalThis.Response): Promise<string> {
   if (response.body === null) return ''
@@ -58,6 +59,7 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
           res.sendStatus(403)
           return
         }
+        res.locals.workspace = login.workspace
         next()
       } catch {
         res.sendStatus(401)
@@ -65,10 +67,12 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
     })()
   })
   app.use('/api', express.json({ limit: '12mb' }))
+  const activeConfig = async (workspace: WorkspaceUuid): Promise<RecognizerConfig> =>
+    ({ ...config, ...(await config.resolve?.(workspace)) })
   app.get('/api/status', (_req, res) => {
-    res.json({
-      configured: config.aiUrl !== undefined && config.aiUrl !== '' && config.model !== undefined && config.model !== ''
-    })
+    void activeConfig(res.locals.workspace).then((active) => {
+      res.json({ configured: !!active.aiUrl && !!active.model })
+    }).catch(() => res.sendStatus(503))
   })
   app.post('/api/recognize', (req, res) => {
     void (async () => {
@@ -76,7 +80,8 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
       const started = Date.now()
       let kind = 'ok'
       try {
-        if (config.aiUrl === undefined || config.aiUrl === '' || config.model === undefined || config.model === '') {
+        const active = await activeConfig(res.locals.workspace)
+        if (active.aiUrl === undefined || active.aiUrl === '' || active.model === undefined || active.model === '') {
           res.status(503).json({ error: '识别服务未配置' })
           kind = 'not-configured'
           return
@@ -101,15 +106,16 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
         let response: globalThis.Response
         let raw: string
         try {
-          response = await request(`${config.aiUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
+          response = await request(`${active.aiUrl.replace(/\/+$/, '')}/v1/chat/completions`, {
             method: 'POST',
             signal: controller.signal,
+            redirect: 'error',
             headers: {
               'content-type': 'application/json',
               ...(config.key !== undefined && config.key !== '' ? { authorization: `Bearer ${config.key}` } : {})
             },
             body: JSON.stringify({
-              model: config.model,
+              model: active.model,
               temperature: 0,
               response_format: { type: 'json_object' },
               messages: [
@@ -145,7 +151,7 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
         } catch {
           throw new SyntaxError('invalid response')
         }
-        res.json({ ...result, model: config.model, recognizedAt: Date.now() })
+        res.json({ ...result, model: active.model, recognizedAt: Date.now() })
       } catch (error) {
         kind =
           error instanceof SyntaxError

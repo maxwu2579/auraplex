@@ -32,7 +32,8 @@ const objectIdPattern = /^[a-zA-Z0-9:_-]{1,150}$/
 export function createApp (
   config: MailConfig,
   backend: MailBackend,
-  status: () => Record<string, unknown> = () => ({})
+  status: () => Record<string, unknown> = () => ({}),
+  resolve?: (workspace: WorkspaceUuid) => Promise<MailConfig>
 ): express.Express {
   const app = express()
   app.disable('x-powered-by')
@@ -74,7 +75,8 @@ export function createApp (
     })()
   })
   app.use('/api', express.json({ limit: '80kb' }))
-  const configured = (): boolean =>
+  const active = async (workspace: WorkspaceUuid): Promise<MailConfig> => resolve === undefined ? config : await resolve(workspace)
+  const configured = (config: MailConfig): boolean =>
     config.address !== undefined &&
     config.address !== '' &&
     config.password !== undefined &&
@@ -82,11 +84,13 @@ export function createApp (
     config.workspace !== undefined &&
     config.workspace !== ''
   app.get('/api/status', (_req, res) => {
-    res.json({ ...status(), configured: configured(), address: configured() ? config.address : undefined })
+    void active(res.locals.workspace).then((value) => {
+      res.json({ ...status(), configured: configured(value), address: configured(value) ? value.address : undefined })
+    }).catch(() => res.sendStatus(503))
   })
   app.post('/api/send', (req, res) => {
     void (async () => {
-      if (!configured()) {
+      if (!configured(await active(res.locals.workspace))) {
         res.status(503).json({ error: '邮件未配置' })
         return
       }
@@ -118,7 +122,7 @@ export function createApp (
   })
   app.post('/api/forward', (req, res) => {
     void (async () => {
-      if (!configured()) {
+      if (!configured(await active(res.locals.workspace))) {
         res.status(503).json({ error: '邮件未配置' })
         return
       }

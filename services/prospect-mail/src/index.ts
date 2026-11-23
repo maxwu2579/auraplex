@@ -1,9 +1,10 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
-import core, { TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid } from '@hcengineering/core'
+import core, { TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind } from '@hcengineering/core'
 import { setMetadata } from '@hcengineering/platform'
 import prospects, { type ProspectMailCursor } from '@hcengineering/prospects'
 import serverClient, { createClient, getTransactorEndpoint } from '@hcengineering/server-client'
 import serverToken, { generateToken } from '@hcengineering/server-token'
+import { getClient } from '@hcengineering/account-client'
 import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import { readConfig } from './config'
@@ -37,24 +38,43 @@ async function workspaceClient (workspace: WorkspaceUuid): Promise<TxOperations>
   }
 }
 
-const transport = nodemailer.createTransport({
-  host: config.smtp.host,
-  port: config.smtp.port,
-  secure: config.smtp.secure,
-  ignoreTLS: !config.smtp.secure,
-  auth: config.address === undefined ? undefined : { user: config.address, pass: config.password ?? '' }
-})
+// Auraplex: read new credentials at each send or poll; no restart or secret response is needed.
+async function workspaceSettings (workspace: WorkspaceUuid): Promise<typeof config> {
+  const token = generateToken(systemAccountUuid, workspace, { service: 'prospect-mail' })
+  const value = await getClient(config.accountsUrl, token).getIntegrationSecret({
+    workspaceUuid: workspace, socialId: core.account.System,
+    kind: 'auraplex-service-settings' as IntegrationKind, key: 'mail-settings'
+  })
+  if (value == null) return config
+  const settings = JSON.parse(value.secret)
+  return {
+    ...config,
+    address: settings.mailAddress ?? config.address,
+    password: settings.mailPassword ?? config.password,
+    smtp: { ...config.smtp, host: settings.mailSmtpHost ?? config.smtp.host, port: settings.mailSmtpPort ?? config.smtp.port },
+    imap: { ...config.imap, host: settings.mailImapHost ?? active.imap.host, port: settings.mailImapPort ?? active.imap.port }
+  }
+}
+
+function smtp (value: typeof config): ReturnType<typeof nodemailer.createTransport> {
+  return nodemailer.createTransport({
+    host: value.smtp.host, port: value.smtp.port, secure: value.smtp.secure, ignoreTLS: !value.smtp.secure,
+    auth: value.address === undefined ? undefined : { user: value.address, pass: value.password ?? '' }
+  })
+}
 
 let lastPoll: { at: number, ok: boolean, error?: string } | undefined
 async function pollOnce (): Promise<void> {
-  if (config.workspace === undefined || config.address === undefined || config.password === undefined) return
+  if (config.workspace === undefined) return
+  const active = await workspaceSettings(config.workspace as WorkspaceUuid)
+  if (active.address === undefined || active.password === undefined) return
   const client = await workspaceClient(config.workspace as WorkspaceUuid)
   const receiver = new Receiver(client)
   const imap = new ImapFlow({
-    host: config.imap.host,
-    port: config.imap.port,
-    secure: config.imap.secure,
-    auth: { user: config.address, pass: config.password },
+    host: active.imap.host,
+    port: active.imap.port,
+    secure: active.imap.secure,
+    auth: { user: active.address, pass: active.password },
     logger: false
   })
   imap.on('error', () => {})
@@ -74,7 +94,7 @@ async function pollOnce (): Promise<void> {
     accept: async (reply) => await receiver.accept(reply)
   })
 }
-function schedule (delay = config.pollMs): void {
+function schedule (delay = Math.min(config.pollMs, 60_000)): void {
   setTimeout(() => {
     void pollOnce()
       .then(() => {
@@ -97,14 +117,17 @@ createApp(
   {
     send: async (workspace, actor, prospectId, requestId, subject, body) => {
       const client = await workspaceClient(workspace)
-      await new Sender(client, transport, config.address ?? '').send(actor, prospectId, requestId, subject, body)
+      const active = await workspaceSettings(workspace)
+      await new Sender(client, smtp(active), active.address ?? '').send(actor, prospectId, requestId, subject, body)
     },
     forward: async (workspace, actor, prospectId, replyId, requestId) => {
       const client = await workspaceClient(workspace)
-      await new Forwarder(client, transport, config.address ?? '').forward(actor, prospectId, replyId, requestId)
+      const active = await workspaceSettings(workspace)
+      await new Forwarder(client, smtp(active), active.address ?? '').forward(actor, prospectId, replyId, requestId)
     }
   },
-  () => ({ lastPoll })
+  () => ({ lastPoll }),
+  workspaceSettings
 ).listen(config.port)
 schedule(5000)
 console.info(JSON.stringify({ event: 'started', configured: config.address !== undefined }))
