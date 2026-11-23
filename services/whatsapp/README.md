@@ -231,6 +231,6 @@ node services/whatsapp/mock/index.mjs error --mode none
 
 ## Local WAHA simulator
 
-Use the dev stack with the overlay services/whatsapp/mock/compose.waha.mock.yaml alongside the base compose files. Put randomly generated, local-only values for WHATSAPP_WAHA_API_KEY and WHATSAPP_WAHA_WEBHOOK_SECRET in the untracked dev/.env.whatsapp.local file. The simulator listens on loopback port 8099. All simulator API and control requests take the local key in the X-Api-Key header.
+Use the dev stack with the overlay services/whatsapp/mock/compose.waha.mock.yaml alongside the base compose files. Put randomly generated, local-only values for WHATSAPP_WAHA_API_KEY and WHATSAPP_WAHA_WEBHOOK_SECRET in the untracked dev/.env.whatsapp.local file. The simulator listens on loopback port 18099 (8099 is taken by hulypulse in the dev stack). All simulator API and control requests take the local key in the X-Api-Key header.
 
 Get a test session name from the local WAHA API or derive it from the test workspace ID and the verified test social ID using sessionName. The QR is a fixture. Pair through POST /control/{session}/scan with an unused simulated number in the 155501xxxxx range. POST /control/{session}/event accepts { event, payload } and forwards a signed event. POST /control/{session}/status accepts { status } to test disconnection. Use the Meta overlay compose.mock.yaml to test the legacy adapter separately.
