@@ -45,6 +45,8 @@
     "OrderActionLabel": "操作",
     "OrderHandedOver": "订单轮到你的部门",
     "OrderEscalated": "订单上报主管",
+    "ApplicationWithdrawn": "申请已撤回",
+    "ApplicationCancelled": "申请已取消",
     "OrderReturned": "已退回",
     "OrderAssigned": "你被指定为订单负责人",
     "OrderFinished": "订单已全部完成",

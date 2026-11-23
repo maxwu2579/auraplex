@@ -2103,6 +2103,43 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
   return results
 }
 
+/**
+ * Applications (cards with an approval process): when the applicant withdraws or cancels, the steps
+ * still waiting are closed and everybody asked to approve is told, with the reason when given.
+ */
+export async function OnApplicationCancelled (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const results: Tx[] = []
+  for (const tx of txes) {
+    if (tx._class !== core.class.TxUpdateDoc) continue
+    const update = tx as TxUpdateDoc<Doc>
+    const operations = update.operations as Record<string, any>
+    if (operations.status !== 'cancelled') continue
+    const requestClass = 'process:class:ApproveRequest' as Ref<Class<Doc>>
+    const requests = (await control.findAll(control.ctx, requestClass, { execution: update.objectId } as any)) as any[]
+    if (requests.length === 0) continue
+    const card = (await control.findAll(control.ctx, 'card:class:Card' as Ref<Class<Doc>>, { _id: requests[0].card }, { limit: 1 }))[0] as any
+    if (card === undefined) continue
+    const now = update.modifiedOn
+    for (const req of requests) {
+      if (req.doneOn == null) {
+        results.push(control.txFactory.createTxUpdateDoc(req._class, req.space, req._id, { doneOn: now } as any))
+      }
+    }
+    const approved = requests.some((it) => it.approved === true)
+    const persons = await control.findAll(control.ctx, contact.class.Person, { _id: { $in: requests.map((it) => it.user) } })
+    const accounts = persons
+      .map((it) => it.personUuid as AccountUuid | undefined)
+      .filter((it): it is AccountUuid => it !== undefined && it !== control.ctx.contextData.account.uuid)
+    const reason = typeof operations.cancelReason === 'string' && operations.cancelReason.trim() !== '' ? operations.cancelReason.trim() : undefined
+    const what = approved ? '申请人取消了这个已批准的申请' : '申请人撤回了这个申请'
+    const zh = `${card.title}\n${what}${reason !== undefined ? '：' + reason : ''}`
+    const en = `${approved ? 'The applicant cancelled this approved application' : 'The applicant withdrew this application'}${reason !== undefined ? ': ' + reason : ''}`
+    await notifyOrder(control, results, update, card, accounts,
+      approved ? departments.string.ApplicationCancelled : departments.string.ApplicationWithdrawn, zh, en)
+  }
+  return results
+}
+
 export async function OnOrder (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
   const results: Tx[] = []
   for (const tx of txes) {
@@ -2292,6 +2329,7 @@ export default async () => ({
     OnEmployeeDeactivate,
     OnMaterialStockMovement,
     OnOrder,
+    OnApplicationCancelled,
     OnAuditLogin,
     OnAuditView,
     PushNotificationsHandler

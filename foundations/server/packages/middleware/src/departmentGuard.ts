@@ -56,6 +56,16 @@ import {
 } from './departmentPolicy'
 import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type OrderLike, type RoleOf } from './orderPolicy'
 import { isOwner, isSystem } from './utils'
+import {
+  approveRequestClass,
+  canChangeExecutionStatus,
+  canChangeRequest,
+  cardBaseClass,
+  executionClass,
+  isApplicationLocked,
+  touchesApplicationContent,
+  type RequestLike
+} from './applicationPolicy'
 
 // This package sits below the plugins, so their ids are spelled out here.
 export const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
@@ -394,6 +404,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const cud = tx as TxCUD<Doc>
     if (cud._class === core.class.TxMixin &&
       (cud as TxMixin<Doc, Doc>).mixin === 'departments:mixin:DepartmentAutoMembers') forbidden()
+    await this.checkApplications(ctx, cud)
     if (cud.objectClass === moduleSettings || cud.objectClass === moduleGrant) {
       await this.checkModuleConfiguration(ctx, cud)
       return
@@ -449,6 +460,35 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   ): void {
     const allowed = effectivePermissions(department.members, department.policy, ctx.contextData.account.uuid)
     if (department.archived || !allowed.has(permission)) forbidden()
+  }
+
+  /** Applications: approved content stays fixed, steps are decided by their own approver, the applicant withdraws. */
+  private async checkApplications (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    if (tx._class !== core.class.TxUpdateDoc && tx._class !== core.class.TxMixin) return
+    const account = ctx.contextData.account
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return
+    const hierarchy = this.context.hierarchy
+    const operations = ((tx as TxUpdateDoc<Doc>).operations ?? (tx as TxMixin<Doc, Doc>).attributes ?? {}) as Record<string, unknown>
+    const isCard = (): boolean =>
+      hierarchy.hasClass(tx.objectClass) && hierarchy.isDerived(tx.objectClass, cardBaseClass as Ref<Class<Doc>>)
+    if (tx.objectClass === executionClass) {
+      if (!('status' in operations)) return
+      const execution = (await this.findOne(ctx, executionClass as Ref<Class<Doc>>, tx.objectId)) as (Doc & { card: Ref<Doc> }) | undefined
+      const card = await this.findOne(ctx, cardBaseClass as Ref<Class<Doc>>, execution?.card)
+      const applicant = card?.createdBy !== undefined && account.socialIds.includes(card.createdBy)
+      if (!canChangeExecutionStatus(operations, applicant)) forbidden()
+    } else if (tx.objectClass === approveRequestClass) {
+      const request = (await this.findOne(ctx, approveRequestClass as Ref<Class<Doc>>, tx.objectId)) as (Doc & RequestLike) | undefined
+      if (request === undefined) return
+      const person = (await this.next?.findAll(ctx, 'contact:class:Person' as Ref<Class<Doc>>, { personUuid: account.uuid } as any, { limit: 1 }))?.[0]
+      if (!canChangeRequest(operations, person?._id, request)) forbidden()
+    } else if (touchesApplicationContent(operations) && isCard()) {
+      const requests = ((await this.next?.findAll(ctx, approveRequestClass as Ref<Class<Doc>>, { card: tx.objectId, approved: true } as any)) ?? []) as unknown as Array<Doc & RequestLike>
+      if (requests.length === 0) return
+      const executions = (await this.next?.findAll(ctx, executionClass as Ref<Class<Doc>>, { _id: { $in: requests.map((it) => it.execution) } } as any)) ?? []
+      const cancelled = new Set<string>(executions.filter((it) => (it as any).status === 'cancelled').map((it) => it._id))
+      if (isApplicationLocked(requests, cancelled)) forbidden()
+    }
   }
 
   private async findOne (

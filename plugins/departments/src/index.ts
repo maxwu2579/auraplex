@@ -453,6 +453,8 @@ export default plugin(departmentsId, {
     OrderActionLabel: '' as IntlString,
     OrderHandedOver: '' as IntlString,
     OrderEscalated: '' as IntlString,
+    ApplicationWithdrawn: '' as IntlString,
+    ApplicationCancelled: '' as IntlString,
     OrderReturned: '' as IntlString,
     OrderAssigned: '' as IntlString,
     OrderFinished: '' as IntlString,

@@ -25,6 +25,9 @@
   import { UserBox } from '@hcengineering/contact-resources'
   import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
   import SignatureDialog from './SignatureDialog.svelte'
+  import NewFormWizard from './NewFormWizard.svelte'
+  import EditApplicationPopup from './EditApplicationPopup.svelte'
+  import StopApplicationPopup from './StopApplicationPopup.svelte'
   import plugin from '../plugin'
 
   const client = getClient()
@@ -32,6 +35,7 @@
   const me = getCurrentAccount()
   const myPerson = getCurrentEmployee()
   const isOwner = me.role === AccountRole.Owner
+  const canBuildForms = isOwner || me.role === AccountRole.Maintainer
   const createCard = 'card:component:CreateCard' as AnyComponent
   const userMixin = 'setting:mixin:UserMixin' as Ref<Mixin<Class<Doc>>>
 
@@ -174,7 +178,15 @@
     const rejected = reqs.find((it) => it.card === doc._id && it.execution === exec._id && it.approved === false)
     const note = rejected?.reason !== undefined && rejected.reason !== '' ? rejected.reason : undefined
     if (exec.error != null && exec.error.length > 0) return { text: zh ? '出错，请联系管理员' : 'Error, ask an admin', tone: 'bad' }
-    if (exec.status === 'cancelled') return { text: zh ? '已取消' : 'Cancelled', tone: 'none' }
+    if (exec.status === 'cancelled') {
+      const wasApproved = reqs.some((it) => it.execution === exec._id && it.approved === true)
+      const why = (exec as any).cancelReason
+      return {
+        text: wasApproved ? (zh ? '已取消' : 'Cancelled') : zh ? '已撤回' : 'Withdrawn',
+        tone: 'none',
+        note: typeof why === 'string' && why !== '' ? why : undefined
+      }
+    }
     if (exec.status === 'done') return { text: state, tone: rejected !== undefined ? 'bad' : 'done', note }
     const waiting = reqs.filter((it) => it.card === doc._id && it.execution === exec._id && it.doneOn == null)
     if (waiting.length > 0) {
@@ -185,6 +197,36 @@
       return { text: state, tone: 'wait', note: zh ? `等 ${names} 审批` : `Waiting for ${names}` }
     }
     return { text: state, tone: rejected !== undefined ? 'bad' : 'wait', note }
+  }
+
+  function latestExecution (doc: Card, execs: Execution[]): Execution | undefined {
+    return execs
+      .filter((it) => it.card === doc._id)
+      .sort((a, b) => (b.createdOn ?? b.modifiedOn) - (a.createdOn ?? a.modifiedOn))[0]
+  }
+
+  // Before anybody decided: change or withdraw. After an approval: ask to cancel.
+  function actionsOf (doc: Card, execs: Execution[], reqs: ApproveRequest[]): 'open' | 'approved' | 'none' {
+    const exec = latestExecution(doc, execs)
+    if (exec === undefined || exec.status === 'cancelled') return 'none'
+    const mine = reqs.filter((it) => it.execution === exec._id)
+    if (mine.some((it) => it.approved === false)) return 'none'
+    if (mine.some((it) => it.approved === true)) return 'approved'
+    return exec.status === 'active' ? 'open' : 'none'
+  }
+
+  function change (doc: Card): void {
+    showPopup(EditApplicationPopup, { value: doc }, 'top')
+  }
+
+  function stop (doc: Card, approved: boolean): void {
+    const exec = latestExecution(doc, executions)
+    if (exec === undefined) return
+    showPopup(StopApplicationPopup, { execution: exec, title: doc.title, approved }, 'top')
+  }
+
+  function newForm (): void {
+    showPopup(NewFormWizard, { space: adminSpace(spaces) }, 'top')
   }
 
   // A step that came back to the applicant (an admin's own application, or nobody else fits):
@@ -254,7 +296,12 @@
   </Header>
   <Scroller>
     <div class="body">
-      <div class="section-title">{L('我要申请', 'New application')}</div>
+      <div class="section-head">
+        <div class="section-title">{L('我要申请', 'New application')}</div>
+        {#if canBuildForms}
+          <button class="new-form" on:click={newForm}>+ {L('新建申请表', 'New form')}</button>
+        {/if}
+      </div>
       {#if forms.length === 0}
         <div class="hint">
           {L(
@@ -300,13 +347,24 @@
         {/if}
         {#each mine as doc (doc._id)}
           {@const st = statusOf(doc, executions, requests, states, persons, $languageStore)}
-          <button class="row" on:click={() => openDoc(h, doc)}>
-            <span class="row-type"><Label label={typeLabel(doc)} /></span>
-            <span class="row-title">{doc.title}</span>
-            <span class="row-when">{when(doc)}</span>
-            <span class="status {st.tone}">{st.text === '' ? '—' : st.text}</span>
-            <span class="row-note">{st.note ?? ''}</span>
-          </button>
+          {@const can = actionsOf(doc, executions, requests)}
+          <div class="row">
+            <button class="row-open" on:click={() => openDoc(h, doc)}>
+              <span class="row-type"><Label label={typeLabel(doc)} /></span>
+              <span class="row-title">{doc.title}</span>
+              <span class="row-when">{when(doc)}</span>
+              <span class="status {st.tone}">{st.text === '' ? '—' : st.text}</span>
+              <span class="row-note">{st.note ?? ''}</span>
+            </button>
+            <span class="row-actions">
+              {#if can === 'open'}
+                <button class="small" on:click={() => { change(doc) }}>{L('修改', 'Change')}</button>
+                <button class="small" on:click={() => { stop(doc, false) }}>{L('撤回', 'Withdraw')}</button>
+              {:else if can === 'approved'}
+                <button class="small" on:click={() => { stop(doc, true) }}>{L('申请取消', 'Cancel')}</button>
+              {/if}
+            </span>
+          </div>
         {/each}
       {:else}
         {#if todoGroups.length === 0}
@@ -374,6 +432,40 @@
     gap: 0.75rem;
     padding: 1.25rem 1.5rem 2rem;
     max-width: 60rem;
+  }
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .new-form {
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    background: var(--primary-button-default);
+    color: #fff;
+    font-weight: 500;
+  }
+  .row-open {
+    display: contents;
+    text-align: left;
+    color: inherit;
+  }
+  .row-actions {
+    display: flex;
+    gap: 0.375rem;
+    justify-content: flex-end;
+  }
+  .small {
+    padding: 0.25rem 0.625rem;
+    border: 1px solid var(--theme-divider-color);
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--theme-content-color);
+    white-space: nowrap;
+    &:hover {
+      background: var(--theme-button-hovered);
+    }
   }
   .section-title {
     font-weight: 600;
@@ -458,7 +550,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: 5rem minmax(8rem, 1fr) 7rem auto minmax(6rem, 14rem);
+    grid-template-columns: 5rem minmax(8rem, 1fr) 7rem auto minmax(6rem, 14rem) auto;
     align-items: center;
     gap: 0.75rem;
     padding: 0.625rem 0.75rem;
@@ -568,7 +660,8 @@
     .row-when {
       display: none;
     }
-    .row-note {
+    .row-note,
+    .row-actions {
       grid-column: 1 / -1;
     }
   }

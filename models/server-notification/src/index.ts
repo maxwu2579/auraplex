@@ -90,6 +90,15 @@ export function createModel (builder: Builder): void {
     }
   })
 
+  // Auraplex applications: close open steps and tell the approvers when the applicant withdraws or cancels.
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverNotification.trigger.OnApplicationCancelled,
+    txMatch: {
+      _class: core.class.TxUpdateDoc,
+      objectClass: 'process:class:Execution' as any
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAttributeCreate,
     txMatch: {

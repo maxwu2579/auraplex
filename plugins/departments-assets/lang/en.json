@@ -45,6 +45,8 @@
     "OrderActionLabel": "Action",
     "OrderHandedOver": "An order reached your department",
     "OrderEscalated": "Order escalated",
+    "ApplicationWithdrawn": "Application withdrawn",
+    "ApplicationCancelled": "Application cancelled",
     "OrderReturned": "Returned",
     "OrderAssigned": "You are in charge of an order stage",
     "OrderFinished": "Order finished",
