@@ -3,6 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto'
 import type { Config } from './config'
 import { SendError } from './graph'
 import type { WebhookBatch } from './webhook'
+import type { WhatsAppProvider } from './provider'
 
 export interface WahaSession {
   status: string
@@ -19,7 +20,7 @@ export function verifyWahaSignature (raw: Buffer, signature: string, secret: str
   return timingSafeEqual(expected, Buffer.from(signature, 'hex'))
 }
 
-export class WahaClient {
+export class WahaClient implements WhatsAppProvider<string, string, WahaSession | undefined, void> {
   constructor (private readonly config: Config, private readonly request: typeof fetch = fetch) {}
 
   private async call (path: string, method = 'GET', body?: unknown): Promise<Response> {
@@ -57,7 +58,7 @@ export class WahaClient {
     }
   }
 
-  async start (session: string): Promise<void> {
+  async bind (session: string): Promise<void> {
     const existing = await this.status(session)
     if (existing === undefined) {
       const res = await this.call('/api/sessions', 'POST', {

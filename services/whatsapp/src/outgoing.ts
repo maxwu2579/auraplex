@@ -21,7 +21,7 @@ import type { Config } from './config'
 import type { ConnectionStore } from './integrations'
 import type { WorkspaceReceiver } from './workspaceClient'
 import { normalizePhone } from './webhook'
-import { SendError, sendTemplate, sendText } from './graph'
+import { MetaProvider, SendError } from './graph'
 import { WahaClient, sessionName } from './waha'
 
 export function outgoingMessageId (tx: Tx): Ref<WhatsappMessage> | undefined {
@@ -155,23 +155,14 @@ export class OutgoingService {
         }
         wamid = await new WahaClient(this.config, this.request).send(session, phone, message.content)
       } else {
-      const token = await this.store.accessToken(integration)
-      if (token === undefined || token === '') throw new SendError('190', '访问令牌未配置，请管理员重新连接。')
-      wamid =
-        message.templateName !== undefined
-          ? await sendTemplate(
-            this.config,
-            token,
-            phoneNumberId,
-            phone,
-            {
-              name: message.templateName,
-              language: message.templateLanguage ?? '',
-              parameters: message.templateParameters ?? []
-            },
-            this.request
-          )
-          : await sendText(this.config, token, phoneNumberId, phone, message.content, this.request)
+        const meta = new MetaProvider(this.config, this.store, this.request)
+        wamid = await meta.send({
+          workspace, socialId: integration.socialId, phoneNumberId, token: await this.store.accessToken(integration)
+        }, phone, message.content, message.templateName === undefined ? undefined : {
+          name: message.templateName,
+          language: message.templateLanguage ?? '',
+          parameters: message.templateParameters ?? []
+        })
       }
     } catch (err) {
       failure =

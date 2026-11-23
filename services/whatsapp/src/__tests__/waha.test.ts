@@ -29,5 +29,5 @@ test('a single-session Core response maps to a stable application error', async 
     wahaApiKey: randomBytes(32).toString('hex')
   }, jest.fn().mockResolvedValueOnce(new Response('', { status: 404 }))
     .mockResolvedValueOnce(new Response('WAHA Core supports only the default session', { status: 422 })))
-  await expect(client.start(sessionName('fake', 'fake'))).rejects.toThrow('SingleSession')
+  await expect(client.bind(sessionName('fake', 'fake'))).rejects.toThrow('SingleSession')
 })

@@ -15,6 +15,10 @@
 
 import { templateParameterCount, type WhatsappTemplate } from '@hcengineering/whatsapp'
 import type { Config } from './config'
+import type { PersonId, WorkspaceUuid } from '@hcengineering/core'
+import type { Integration } from '@hcengineering/account-client'
+import type { ConnectionStore } from './integrations'
+import type { WhatsAppProvider } from './provider'
 
 export class SendError extends Error {
   constructor (
@@ -196,4 +200,44 @@ export async function listTemplates (
     .map(toSendableTemplate)
     .filter((t): t is WhatsappTemplate => t !== undefined)
     .sort((a, b) => (a.name !== b.name ? a.name.localeCompare(b.name) : a.language.localeCompare(b.language)))
+}
+
+export interface MetaConnection {
+  workspace: WorkspaceUuid
+  socialId: PersonId
+  phoneNumberId?: string
+  token?: string
+}
+
+type MetaBind = MetaConnection & { phoneNumberId: string, wabaId: string }
+type MetaStatus = Awaited<ReturnType<typeof getPhoneStatus>>
+
+// Auraplex: keep the original Graph operations behind the same lifecycle interface as WAHA.
+export class MetaProvider implements WhatsAppProvider<MetaConnection, MetaBind, MetaStatus, Integration> {
+  constructor (
+    private readonly config: Config, private readonly store: ConnectionStore, private readonly request: typeof fetch = fetch
+  ) {}
+
+  async status (connection: MetaConnection): Promise<MetaStatus> {
+    return await getPhoneStatus(this.config, connection.token, connection.phoneNumberId, this.request)
+  }
+
+  async bind (input: MetaBind): Promise<Integration> {
+    const { workspace, socialId, phoneNumberId, wabaId, token } = input
+    return await this.store.connect(workspace, socialId, { phoneNumberId, wabaId }, token, (await this.status(input)).displayPhone)
+  }
+
+  async disconnect (connection: MetaConnection): Promise<void> {
+    await this.store.disconnect(connection.workspace, connection.socialId)
+  }
+
+  async send (connection: MetaConnection, phone: string, content: string, template?: TemplateMessage): Promise<string> {
+    const { phoneNumberId, token } = connection
+    if (typeof phoneNumberId !== 'string' || token === undefined || token === '') {
+      throw new SendError('190', '访问令牌未配置，请管理员重新连接。')
+    }
+    return template === undefined
+      ? await sendText(this.config, token, phoneNumberId, phone, content, this.request)
+      : await sendTemplate(this.config, token, phoneNumberId, phone, template, this.request)
+  }
 }

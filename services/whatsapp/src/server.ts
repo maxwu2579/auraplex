@@ -20,7 +20,7 @@ import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
-import { SendError, getPhoneStatus, listTemplates } from './graph'
+import { MetaProvider, SendError, listTemplates } from './graph'
 import { WahaMedia } from './wahaMedia'
 import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
@@ -35,6 +35,7 @@ export function createApp (
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
   const waha = config.provider === 'waha' ? new WahaClient(config, request) : undefined
+  const meta = new MetaProvider(config, store, request)
   const media = new WahaMedia(config, request)
   const encryption = new TokenEncryption()
   app.disable('x-powered-by')
@@ -303,7 +304,10 @@ export function createApp (
               phoneNumberId: entry.data?.phoneNumberId,
               connectedOn: entry.data?.connectedOn,
               displayPhone: entry.data?.displayPhone,
-              ...(await getPhoneStatus(config, await store.accessToken(entry), entry.data?.phoneNumberId, request))
+              ...(await meta.status({
+                workspace: res.locals.workspace, socialId: entry.socialId,
+                phoneNumberId: entry.data?.phoneNumberId, token: await store.accessToken(entry)
+              }))
             }))
         )
         res.json(summaries)
@@ -346,7 +350,7 @@ export function createApp (
         }
         const session = sessionName(res.locals.workspace, res.locals.socialId)
         try {
-          await waha.start(session)
+          await waha.bind(session)
           await store.startWaha(res.locals.workspace, res.locals.socialId, session)
           res.json(await wahaState(res))
         } catch (err) {
@@ -369,13 +373,10 @@ export function createApp (
         }
       }
       try {
-        const integration = await store.connect(
-          res.locals.workspace,
-          res.locals.socialId,
-          { phoneNumberId: req.body.phoneNumberId, wabaId: req.body.wabaId },
-          token,
-          (await getPhoneStatus(config, token, req.body.phoneNumberId, request)).displayPhone
-        )
+        const integration = await meta.bind({
+          workspace: res.locals.workspace, socialId: res.locals.socialId,
+          phoneNumberId: req.body.phoneNumberId, wabaId: req.body.wabaId, token
+        })
         res.json({ connected: true, phoneNumberId: integration.data?.phoneNumberId, wabaId: integration.data?.wabaId })
       } catch (err) {
         const message = err instanceof Error ? err.message : ''
@@ -397,8 +398,8 @@ export function createApp (
       })().catch(() => res.status(503).json({ code: 'Failed' }))
       return
     }
-    void store
-      .disconnect(res.locals.workspace, res.locals.socialId)
+    void meta
+      .disconnect({ workspace: res.locals.workspace, socialId: res.locals.socialId })
       .then(() => {
         res.json({ connected: false })
       })
