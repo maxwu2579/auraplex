@@ -21,6 +21,8 @@ import { createApp } from '../server'
 import type { ConnectionStore } from '../integrations'
 import type { Config } from '../config'
 
+import { sessionName } from '../waha'
+
 jest.mock('@hcengineering/account-client', () => ({
   ...jest.requireActual('@hcengineering/account-client'),
   getClient: jest.fn()
@@ -265,4 +267,27 @@ it('returns only safe connection summaries to the workspace owner', async () => 
   expect(await res.json()).toEqual([
     { person: 'person-a', phoneNumberId: '123', connectedOn: 42, status: 'valid', displayPhone: '+123' }
   ])
+})
+
+it('never retrieves a WAHA QR from a session owned by someone else, even for an owner', async () => {
+  const request = jest.fn()
+  const session = sessionName('ws', 'other-person')
+  store.get.mockResolvedValue({ data: { wahaSession: session } })
+  const waha = createApp({
+    ...config, provider: 'waha', wahaUrl: 'http://127.0.0.1:2',
+    wahaApiKey: randomBytes(32).toString('hex'),
+    wahaWebhookSecret: randomBytes(32).toString('hex')
+  }, store as unknown as ConnectionStore, inbox, request).listen(0, '127.0.0.1')
+  try {
+    await new Promise<void>((resolve) => waha.once('listening', resolve))
+    const address = waha.address()
+    if (address === null || typeof address === 'string') throw new Error('Missing server address')
+    const result = await fetch('http://127.0.0.1:' + address.port + '/api/qr?session=' + session, {
+      headers: { Authorization: 'Bearer local-test' }
+    })
+    expect(await result.json()).toEqual({ provider: 'waha', connected: false })
+    expect(request).not.toHaveBeenCalled()
+  } finally {
+    await new Promise<void>((resolve) => waha.close(() => resolve()))
+  }
 })

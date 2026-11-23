@@ -1,7 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import { AccountRole, getCurrentAccount } from '@hcengineering/core'
-  import contact from '@hcengineering/contact'
+  import contact, { type SocialIdentity } from '@hcengineering/contact'
   import { getClient } from '@hcengineering/presentation'
   import { Label } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
@@ -16,7 +16,7 @@
     if (owner) {
       void getConnections().then(async (result) => {
         entries = result
-        const ids = result.map((entry) => entry.person)
+        const ids = result.map((entry) => entry.person as SocialIdentity['_id'])
         if (ids.length === 0) return
         const client = getClient()
         const identities = await client.findAll(contact.class.SocialIdentity, { _id: { $in: ids } })
