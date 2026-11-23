@@ -29,6 +29,7 @@ IMAGES=(
   "hardcoreeng/link-preview         link-preview          @hcengineering/pod-link-preview      no"
   "hardcoreeng/print                print                 @hcengineering/pod-print             no"
   "hardcoreeng/process              process               @hcengineering/pod-process           no"
+  "hardcoreeng/datalake             datalake              @hcengineering/pod-datalake          no"
   "hardcoreeng/prospects-recognizer prospects-recognizer  @hcengineering/prospects-recognizer  no"
   "hardcoreeng/prospect-mail        prospect-mail         @hcengineering/prospect-mail         no"
 )
