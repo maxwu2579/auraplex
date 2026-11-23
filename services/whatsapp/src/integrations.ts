@@ -15,7 +15,8 @@
 
 import type { AccountClient, Integration, IntegrationKey } from '@hcengineering/account-client'
 import { whatsappIntegrationKind } from '@hcengineering/whatsapp'
-import type { PersonId, WorkspaceUuid } from '@hcengineering/core'
+import core, { type IntegrationKind, type PersonId, type WorkspaceUuid } from '@hcengineering/core'
+import { changeSettings, type ServiceSettings } from './serviceSettings'
 
 export interface ConnectionIds {
   phoneNumberId: string
@@ -41,6 +42,31 @@ export class ConnectionStore {
     const result = this.pending.then(operation)
     this.pending = result.catch(() => {})
     return await result
+  }
+
+  private settingsKey (workspaceUuid: WorkspaceUuid): IntegrationKey {
+    return { kind: 'auraplex-service-settings' as IntegrationKind, socialId: core.account.System, workspaceUuid }
+  }
+
+  async serviceSettings (workspace: WorkspaceUuid): Promise<ServiceSettings> {
+    const record = await this.account.getIntegrationSecret({ ...this.settingsKey(workspace), key: 'settings' })
+    return record == null ? {} : JSON.parse(record.secret) as ServiceSettings
+  }
+
+  async saveServiceSettings (
+    workspace: WorkspaceUuid, patch: unknown, members: Set<string>
+  ): Promise<{ value: ServiceSettings, fields: string[] }> {
+    return await this.serialize(async () => {
+      const integration = this.settingsKey(workspace)
+      const key = { ...integration, key: 'settings' }
+      const existing = await this.account.getIntegrationSecret(key)
+      const result = changeSettings(existing == null ? {} : JSON.parse(existing.secret), patch, members)
+      if (await this.account.getIntegration(integration) == null) await this.account.createIntegration(integration)
+      const update = { ...key, secret: JSON.stringify(result.value) }
+      if (existing == null) await this.account.addIntegrationSecret(update)
+      else await this.account.updateIntegrationSecret(update)
+      return result
+    })
   }
 
   async findByPhoneNumberId (phoneNumberId: string): Promise<Integration | undefined> {

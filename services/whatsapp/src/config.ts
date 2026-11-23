@@ -16,6 +16,8 @@
 import { REPLY_WINDOW_MS } from '@hcengineering/whatsapp'
 
 export interface Config {
+  mediaLimitMb?: number
+  historyDays?: number
   provider?: 'meta' | 'waha'
   wahaUrl?: string
   wahaApiKey?: string

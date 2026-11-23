@@ -33,6 +33,7 @@ let base: string
 const getLogin = jest.fn()
 const inbox = { enqueue: jest.fn().mockResolvedValue(undefined) }
 const store = {
+  serviceSettings: jest.fn().mockResolvedValue({}),
   list: jest.fn(),
   get: jest.fn(),
   connect: jest.fn(),

@@ -4,8 +4,6 @@ import { mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import type { Config } from './config'
 
-const maxBytes = 20 * 1024 * 1024
-
 /** Media stays on the service volume and is served only after owner authentication. */
 export class WahaMedia {
   constructor (private readonly config: Config, private readonly request: typeof fetch = fetch) {}
@@ -19,6 +17,7 @@ export class WahaMedia {
     if (!this.config.wahaUrl || !this.config.wahaApiKey || media == null || typeof media !== 'object') return false
     const url = (media as { url?: unknown }).url
     if (typeof url !== 'string') return false
+    const maxBytes = (this.config.mediaLimitMb ?? 20) * 1024 * 1024
     const file = this.file(session, id)
     const temporary = file + '.' + randomUUID()
     try {

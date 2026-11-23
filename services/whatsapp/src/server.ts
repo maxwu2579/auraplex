@@ -21,6 +21,7 @@ import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
 import { MetaProvider, SendError, listTemplates } from './graph'
+import { publicSettings, runtimeConfig } from './serviceSettings'
 import { WahaMedia } from './wahaMedia'
 import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
@@ -30,11 +31,14 @@ export function createApp (
   store: ConnectionStore,
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
   request: typeof fetch = fetch,
-  notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>
+  notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>,
+  audit?: (workspace: string, actor: string, label: string) => Promise<void>
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
   const waha = config.provider === 'waha' ? new WahaClient(config, request) : undefined
+  const workspaceConfig = async (workspace: string): Promise<Config> =>
+    runtimeConfig(config, await store.serviceSettings(workspace as Parameters<ConnectionStore['serviceSettings']>[0]))
   const meta = new MetaProvider(config, store, request)
   const media = new WahaMedia(config, request)
   const encryption = new TokenEncryption()
@@ -100,7 +104,7 @@ export function createApp (
       })
   })
 
-  async function refreshWaha (session: string): Promise<{ status: string, phone?: string }> {
+  async function refreshWaha (session: string, waha: WahaClient): Promise<{ status: string, phone?: string }> {
     const current = await store.findWaha(session)
     if (current?.data?.wahaStatus === 'CONFLICT') {
       await waha?.disconnect(session)
@@ -128,8 +132,7 @@ export function createApp (
   const wahaRequests = new Map<string, number>()
   app.post('/webhook/waha', (req, res) => {
     const raw = (req as Request & { rawBody?: Buffer }).rawBody
-    if (waha === undefined || raw === undefined ||
-      !verifyWahaSignature(raw, req.get('X-Webhook-Hmac') ?? '', config.wahaWebhookSecret ?? '')) {
+    if (waha === undefined || raw === undefined) {
       res.sendStatus(401)
       return
     }
@@ -160,11 +163,18 @@ export function createApp (
       }
       const integration = await store.findWaha(body.session)
       if (integration?.workspaceUuid == null || sessionName(integration.workspaceUuid, integration.socialId) !== body.session) {
-        res.sendStatus(200)
+        res.sendStatus(401)
         return
       }
+      const settings = await workspaceConfig(integration.workspaceUuid)
+      if (!verifyWahaSignature(raw, req.get('X-Webhook-Hmac') ?? '', settings.wahaWebhookSecret ?? '')) {
+        res.sendStatus(401)
+        return
+      }
+      const waha = new WahaClient(settings, request)
+      const media = new WahaMedia(settings, request)
       if (body.event === 'session.status') {
-        await refreshWaha(body.session)
+        await refreshWaha(body.session, waha)
         accepted()
         return
       }
@@ -214,6 +224,8 @@ export function createApp (
         res.sendStatus(403)
         return
       }
+      res.locals.actor = login.account
+      res.locals.account = account
       res.locals.role = login.role
       res.locals.workspace = login.workspace
       res.locals.socialId = social._id
@@ -224,16 +236,45 @@ export function createApp (
     })
   })
 
+  // Auraplex: account-service secrets are never read using the browser's credentials.
+  app.get('/api/service-settings', (_req, res) => {
+    if (res.locals.role !== AccountRole.Owner) { res.sendStatus(403); return }
+    void Promise.all([
+      store.serviceSettings(res.locals.workspace),
+      res.locals.account.getWorkspaceMembers()
+    ]).then(([settings, members]) => res.json({ ...publicSettings(settings), members }))
+      .catch(() => res.sendStatus(503))
+  })
+
+  app.post('/api/service-settings', (req, res) => {
+    if (res.locals.role !== AccountRole.Owner) { res.sendStatus(403); return }
+    void (async () => {
+      if (typeof req.body?.wahaUrl === 'string') {
+        const origins = (process.env.WHATSAPP_WAHA_ALLOWED_ORIGINS ?? config.wahaUrl ?? '').split(',').filter(Boolean)
+        if (!origins.some((origin) => new URL(origin).origin === new URL(req.body.wahaUrl).origin)) {
+          res.status(400).json({ code: 'InvalidParameters' })
+          return
+        }
+      }
+      const members = await res.locals.account.getWorkspaceMembers() as Array<{ person: string }>
+      const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)))
+      await audit?.(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
+      res.json(publicSettings(result.value))
+    })().catch(() => res.status(400).json({ code: 'InvalidParameters' }))
+  })
+
   const wahaState = async (res: Response, withQr = false): Promise<unknown> => {
     const integration = await store.get(res.locals.workspace, res.locals.socialId)
     const session = integration?.data?.wahaSession
-    if (!config.wahaUrl || !config.wahaApiKey || !config.wahaWebhookSecret) {
+    const settings = await workspaceConfig(res.locals.workspace)
+    if (!settings.wahaUrl || !settings.wahaApiKey || !settings.wahaWebhookSecret) {
       return { provider: 'waha', connected: false, status: 'UNCONFIGURED' }
     }
-    if (waha === undefined || typeof session !== 'string' || session !== sessionName(res.locals.workspace, res.locals.socialId)) {
+    if (typeof session !== 'string' || session !== sessionName(res.locals.workspace, res.locals.socialId)) {
       return { provider: 'waha', connected: false }
     }
-    const { status, phone } = await refreshWaha(session)
+    const waha = new WahaClient(settings, request)
+    const { status, phone } = await refreshWaha(session, waha)
     return {
       provider: 'waha', connected: status === 'WORKING' && !!phone,
       status, phoneNumberId: phone, displayPhone: phone === undefined ? undefined : '•••• ' + phone.slice(-4),
@@ -345,13 +386,15 @@ export function createApp (
   app.post('/api/connection', (req, res) => {
     void (async () => {
       if (waha !== undefined) {
-        if (!config.wahaUrl || !config.wahaApiKey || !config.wahaWebhookSecret) {
+        const settings = await workspaceConfig(res.locals.workspace)
+        const client = new WahaClient(settings, request)
+        if (!settings.wahaUrl || !settings.wahaApiKey || !settings.wahaWebhookSecret) {
           res.status(503).json({ code: 'Unavailable' })
           return
         }
         const session = sessionName(res.locals.workspace, res.locals.socialId)
         try {
-          await waha.bind(session)
+          await client.bind(session)
           await store.startWaha(res.locals.workspace, res.locals.socialId, session)
           res.json(await wahaState(res))
         } catch (err) {
@@ -393,7 +436,7 @@ export function createApp (
       void (async () => {
         const connection = await store.get(res.locals.workspace, res.locals.socialId)
         const session = connection?.data?.wahaSession
-        if (session === sessionName(res.locals.workspace, res.locals.socialId)) await waha.disconnect(session)
+        if (session === sessionName(res.locals.workspace, res.locals.socialId)) await new WahaClient(await workspaceConfig(res.locals.workspace), request).disconnect(session)
         await store.disconnectWaha(res.locals.workspace, res.locals.socialId)
         res.json({ connected: false })
       })().catch(() => res.status(503).json({ code: 'Failed' }))

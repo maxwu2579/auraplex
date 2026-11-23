@@ -22,6 +22,7 @@ import type { ConnectionStore } from './integrations'
 import type { WorkspaceReceiver } from './workspaceClient'
 import { normalizePhone } from './webhook'
 import { MetaProvider, SendError } from './graph'
+import { runtimeConfig } from './serviceSettings'
 import { WahaClient, sessionName } from './waha'
 
 export function outgoingMessageId (tx: Tx): Ref<WhatsappMessage> | undefined {
@@ -153,7 +154,7 @@ export class OutgoingService {
         if (session !== sessionName(workspace, integration.socialId) || integration.data?.wahaStatus !== 'WORKING') {
           throw new SendError('NOT_CONNECTED', 'WhatsApp 已断开，请重新扫码。')
         }
-        wamid = await new WahaClient(this.config, this.request).send(session, phone, message.content)
+        wamid = await new WahaClient(runtimeConfig(this.config, await this.store.serviceSettings(workspace)), this.request).send(session, phone, message.content)
       } else {
         const meta = new MetaProvider(this.config, this.store, this.request)
         wamid = await meta.send({
