@@ -15,12 +15,12 @@
 //
 -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
+  import { createEventDispatcher, onDestroy } from 'svelte'
   import { Button, Label } from '@hcengineering/ui'
   import type { IntlString } from '@hcengineering/platform'
   import type { Integration } from '@hcengineering/account-client'
   import whatsapp from '@hcengineering/whatsapp'
-  import { ConnectionError, getConnection, saveConnection } from '../api'
+  import { ConnectionError, getConnection, getWahaQr, saveConnection, startWahaConnection, type ConnectionState } from '../api'
 
   export let integration: Integration | undefined = undefined
   let phoneNumberId = integration?.data?.phoneNumberId ?? ''
@@ -28,17 +28,42 @@
   let token = ''
   let webhook = ''
   let connected = integration !== undefined
+  // Auraplex: poll the owner's QR while the pairing dialog is open.
+  let state: ConnectionState | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
+  onDestroy(() => {
+    disposed = true
+    if (timer !== undefined) clearTimeout(timer)
+  })
+  const poll = async (): Promise<void> => {
+    let retry = true
+    try {
+      const current = await getWahaQr()
+      if (disposed) return
+      state = current
+      retry = !current.connected && !['CONFLICT', 'FAILED', 'STOPPED', 'UNCONFIGURED'].includes(current.status ?? '')
+    } catch (err) {
+      if (disposed) return
+      error = err instanceof ConnectionError ? err.label : whatsapp.string.Failed
+      retry = false
+    } finally {
+      if (!disposed && retry) timer = setTimeout(() => { void poll() }, 3000)
+    }
+  }
+
   let busy = true
   let error: IntlString | undefined
   const dispatch = createEventDispatcher()
 
   async function init (): Promise<void> {
     try {
-      const state = await getConnection()
+      state = await getConnection()
       connected = state.connected
       phoneNumberId = state.phoneNumberId ?? ''
       wabaId = state.wabaId ?? ''
-      webhook = state.webhook
+      webhook = state.webhook ?? ''
+      if (state.provider === 'waha' && ['STARTING', 'SCAN_QR_CODE'].includes(state.status ?? '')) void poll()
     } catch (err) {
       error = err instanceof ConnectionError ? err.label : whatsapp.string.Failed
     } finally {
@@ -50,6 +75,12 @@
     busy = true
     error = undefined
     try {
+      if (state?.provider === 'waha') {
+        if (timer !== undefined) clearTimeout(timer)
+        state = await startWahaConnection()
+        void poll()
+        return
+      }
       const saving = saveConnection(phoneNumberId.trim(), wabaId.trim(), token)
       token = ''
       await saving
@@ -66,6 +97,30 @@
 
 <form class="whatsapp-connect" on:submit|preventDefault={save}>
   <h2><Label label={whatsapp.string.Whatsapp} /></h2>
+  {#if state?.provider === 'waha'}
+    <p><Label label={whatsapp.string.WahaRisk} /></p>
+    {#if state.connected}
+      <p><Label label={whatsapp.string.Connected} /> {state.displayPhone ?? ''}</p>
+    {:else if state.status === 'UNCONFIGURED'}
+      <p role="status"><Label label={whatsapp.string.Unavailable} /></p>
+    {:else if state.status === 'CONFLICT'}
+      <p role="alert"><Label label={whatsapp.string.Conflict} /></p>
+    {:else if state.qr}
+      <p><Label label={whatsapp.string.WahaScan} /></p>
+      <img class="waha-qr" alt="" src={'data:image/png;base64,' + state.qr} />
+    {:else if state.status === 'STARTING' || state.status === 'SCAN_QR_CODE'}
+      <p role="status"><Label label={whatsapp.string.WahaWaiting} /></p>
+    {:else if state.status}
+      <p role="status"><Label label={whatsapp.string.WahaDisconnected} /></p>
+    {/if}
+    {#if error !== undefined}<p class="error" role="alert"><Label label={error} /></p>{/if}
+    <div class="buttons">
+      <Button label={state.connected ? whatsapp.string.Save : whatsapp.string.Cancel} on:click={() => dispatch('close', { connected: state?.connected })} />
+      {#if !state.connected && state.status !== 'UNCONFIGURED'}
+        <Button label={whatsapp.string.Connect} kind="primary" disabled={busy} on:click={save} />
+      {/if}
+    </div>
+  {:else if state !== undefined}
   <label>
     <span><Label label={whatsapp.string.PhoneNumberId} /></span>
     <input
@@ -121,9 +176,14 @@
       on:click={save}
     />
   </div>
+  {:else if error !== undefined}
+    <p role="alert"><Label label={error} /></p>
+    <Button label={whatsapp.string.Cancel} on:click={() => dispatch('close')} />
+  {/if}
 </form>
 
 <style>
+  .waha-qr { width: min(16rem, 100%); height: auto; }
   .whatsapp-connect {
     width: min(28rem, 90vw);
     padding: 1.5rem;

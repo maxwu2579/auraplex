@@ -80,7 +80,7 @@
   const keyOf = (t: WhatsappTemplate): string => t.name + '|' + t.language
 
   $: lastIncoming = lastIncomingAt(messages)
-  $: windowOpen = isReplyWindowOpen(lastIncoming, now, connection?.replyWindowMs ?? REPLY_WINDOW_MS)
+  $: windowOpen = connection?.provider === 'waha' || isReplyWindowOpen(lastIncoming, now, connection?.replyWindowMs ?? REPLY_WINDOW_MS)
   $: selected = templates?.find((t) => keyOf(t) === templateKey)
   $: if (selected !== undefined && parameters.length !== selected.parameterCount) {
     parameters = Array.from({ length: selected.parameterCount }, (_, i) => parameters[i] ?? '')
@@ -197,7 +197,7 @@
     <div class="messages" class:embedded>
       {#each messages as message (message._id)}
         <article class:outgoing={message.direction === 'outgoing'} class:failed={message.status === 'failed'}>
-          {#if message.templateName !== undefined}
+          {#if connection?.provider !== 'waha' && message.templateName !== undefined}
             <div class="tag"><Label label={whatsapp.string.Template} /> · {message.templateName}</div>
           {/if}
           <p>{message.content}</p>

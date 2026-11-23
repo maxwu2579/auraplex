@@ -20,6 +20,10 @@ import { pki, md, cipher, util } from 'node-forge'
 import whatsapp, { type WhatsappTemplate } from '@hcengineering/whatsapp'
 
 export interface ConnectionState {
+  provider?: 'waha' | 'meta'
+  status?: string
+  qr?: string
+  displayPhone?: string
   connected: boolean
   phoneNumberId?: string
   wabaId?: string
@@ -58,6 +62,7 @@ async function request<T> (path: string, method = 'GET', body?: object): Promise
   if (!response.ok) {
     const labels: Record<string, IntlString> = {
       Forbidden: whatsapp.string.Forbidden,
+      SingleSession: whatsapp.string.WahaSingleSession,
       Conflict: whatsapp.string.Conflict,
       InvalidParameters: whatsapp.string.InvalidParameters,
       NotConnected: whatsapp.string.ConnectionRequired,
@@ -73,7 +78,8 @@ export interface ConnectionSummary {
   phoneNumberId?: string
   displayPhone?: string
   connectedOn?: number
-  status: 'valid' | 'invalid' | 'unknown'
+  provider?: 'waha' | 'meta'
+  status?: string
 }
 export async function getConnections (): Promise<ConnectionSummary[]> {
   return await request<ConnectionSummary[]>('connections')
@@ -119,4 +125,15 @@ export async function disconnect (): Promise<void> {
 export async function getTemplates (): Promise<WhatsappTemplate[]> {
   const result = await request<{ templates: WhatsappTemplate[] }>('templates')
   return result.templates
+}
+
+// Auraplex: all pairing operations act on the authenticated user's session.
+export async function startWahaConnection (): Promise<ConnectionState> {
+  const result = await request<ConnectionState>('connection', 'POST', {})
+  getIntegrationEventBus().emit('integration:created', {})
+  return result
+}
+
+export async function getWahaQr (): Promise<ConnectionState> {
+  return await request<ConnectionState>('qr')
 }

@@ -22,6 +22,7 @@ import type { ConnectionStore } from './integrations'
 import type { WorkspaceReceiver } from './workspaceClient'
 import { normalizePhone } from './webhook'
 import { SendError, sendTemplate, sendText } from './graph'
+import { WahaClient } from './waha'
 
 export function outgoingMessageId (tx: Tx): Ref<WhatsappMessage> | undefined {
   const cud = tx as TxCUD<WhatsappMessage>
@@ -123,11 +124,13 @@ export class OutgoingService {
       if (!identities.some((identity) => identity._id === message.createdBy)) {
         throw new SendError('INVALID_MESSAGE', '无法确认发件人身份。')
       }
+      // Auraplex: validate the same owner, private space and recipient for either provider.
+      const useWaha = this.config.provider === 'waha'
       const integration = (
         await Promise.all(identities.map(async (identity) => await this.store.get(workspace, identity._id)))
-      ).find((entry) => entry?.data?.phoneNumberId === message.phoneNumberId)
+      ).find((entry) => (useWaha ? entry?.data?.wahaPhone : entry?.data?.phoneNumberId) === message.phoneNumberId)
       if (integration === undefined) throw new SendError('NOT_CONNECTED', 'WhatsApp 尚未连接，请管理员在设置中连接。')
-      const phoneNumberId = integration.data?.phoneNumberId
+      const phoneNumberId = useWaha ? integration.data?.wahaPhone : integration.data?.phoneNumberId
       const channel = await client.findOne(contact.class.Channel, { _id: message.attachedTo as Ref<Channel> })
       const phone = normalizePhone(channel?.value ?? '')
       if (
@@ -140,10 +143,17 @@ export class OutgoingService {
         typeof message.content !== 'string' ||
         message.content.trim() === '' ||
         message.content.length > 4096 ||
-        (message.templateName !== undefined && !validTemplate(message))
+        (message.templateName !== undefined && (useWaha || !validTemplate(message)))
       ) {
         throw new SendError('INVALID_MESSAGE', '消息或号码无效，请检查后重新发送。')
       }
+      if (useWaha) {
+        const session = integration.data?.wahaSession
+        if (typeof session !== 'string' || integration.data?.wahaStatus !== 'WORKING') {
+          throw new SendError('NOT_CONNECTED', 'WhatsApp 已断开，请重新扫码。')
+        }
+        wamid = await new WahaClient(this.config, this.request).send(session, phone, message.content)
+      } else {
       const token = await this.store.accessToken(integration)
       if (token === undefined || token === '') throw new SendError('190', '访问令牌未配置，请管理员重新连接。')
       wamid =
@@ -161,6 +171,7 @@ export class OutgoingService {
             this.request
           )
           : await sendText(this.config, token, phoneNumberId, phone, message.content, this.request)
+      }
     } catch (err) {
       failure =
         err instanceof SendError ? err : new SendError('SERVICE_UNAVAILABLE', '发送服务暂时不可用，请稍后重新发送。')

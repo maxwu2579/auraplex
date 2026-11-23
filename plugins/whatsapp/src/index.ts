@@ -113,6 +113,13 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    WahaRisk: '' as IntlString,
+    WahaScan: '' as IntlString,
+    WahaWaiting: '' as IntlString,
+    WahaDisconnected: '' as IntlString,
+    WahaSingleSession: '' as IntlString,
+    MetaOfficial: '' as IntlString,
+
     Connections: '' as IntlString,
     WeCom: '' as IntlString,
     WeComNotice: '' as IntlString,
