@@ -26,7 +26,7 @@ import { TokenEncryption } from './security'
 import { MetaProvider, SendError, listTemplates } from './graph'
 import { publicSettings, runtimeConfig } from './serviceSettings'
 import { WahaMedia, WahaMediaTooLarge } from './wahaMedia'
-import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
+import { WahaClient, mediaPlaceholder, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
 export function createApp (
@@ -467,7 +467,7 @@ export function createApp (
       const stored = await media.write(session, id, req.body, { mimetype: mime, filename }).then(() => true).catch(() => false)
       await receiver.receive(await receiver.getClient(workspace), integration, {
         session, outgoing: true, phoneNumberId: ownPhone, phone, wamid: id, name: phone,
-        timestamp: Date.now(), content: caption || '[文件]', mediaAvailable: stored
+        timestamp: Date.now(), content: caption || mediaPlaceholder(mime), mediaAvailable: stored
       })
       res.json({ sent: true })
     })().catch(() => res.status(503).json({ code: 'Failed' }))

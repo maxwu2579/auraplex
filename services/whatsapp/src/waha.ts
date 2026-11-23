@@ -224,11 +224,17 @@ export function parseWahaEvent (
   }
   if (event !== 'message' && event !== 'message.any') return result
   const media = payload.media as Record<string, unknown> | undefined
-  const placeholder = typeof media?.mimetype === 'string' && media.mimetype.startsWith('image/') ? '[图片]' : '[文件]'
+  const placeholder = mediaPlaceholder(media?.mimetype)
   const body = typeof payload.body === 'string' ? payload.body : ''
   const content = payload.hasMedia === true ? [body, placeholder].filter(Boolean).join(' ') : body
   const timestamp = Number(payload.timestamp) * 1000
   if (content === '' || !Number.isFinite(timestamp) || timestamp <= 0) return result
   result.messages.push({ session, outgoing, phoneNumberId: ownPhone, wamid: payload.id, phone, name: phone.endsWith('@lid') ? 'WhatsApp · ' + phone.slice(-8, -4) : phone, content, timestamp })
   return result
+}
+
+/** Auraplex: the text shown for a media message without a caption, by file type. */
+export function mediaPlaceholder (mimetype: unknown): string {
+  const type = typeof mimetype === 'string' ? mimetype.split('/')[0] : ''
+  return type === 'image' ? '[图片]' : type === 'video' ? '[视频]' : type === 'audio' ? '[语音]' : '[文件]'
 }
