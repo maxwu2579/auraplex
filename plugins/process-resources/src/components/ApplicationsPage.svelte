@@ -16,11 +16,11 @@
   // Applications: one simple page for card types that have an approval process.
   // Staff pick a form, fill it in and follow it; approvers see what waits for them.
   import card, { type Card, type CardSpace, type MasterTag } from '@hcengineering/card'
-  import contact, { formatName, getCurrentEmployee, type Person } from '@hcengineering/contact'
-  import { AccountRole, SortingOrder, applicationFormTypes, getCurrentAccount, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import contact, { formatName, getCurrentEmployee, type Employee, type Person } from '@hcengineering/contact'
+  import { AccountRole, SortingOrder, applicationFormTypes, getCurrentAccount, type AccountUuid, type Class, type Doc, type Mixin, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Execution, type Process, type State } from '@hcengineering/process'
-  import { Button, Header, Icon, Label, Scroller, eventToHTMLElement, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
+  import { Button, DropdownLabelsIntl, Header, Icon, Label, Scroller, eventToHTMLElement, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
   import { PersonIdPresenter, openDoc } from '@hcengineering/view-resources'
   import { UserBox } from '@hcengineering/contact-resources'
   import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
@@ -40,7 +40,7 @@
 
   $: L = (zh: string, en: string): string => ($languageStore === 'zh' ? zh : en)
 
-  let tab: 'mine' | 'todo' = 'mine'
+  let tab: 'mine' | 'todo' | 'department' = 'mine'
 
   // Which forms: card types that have a process people can run.
   let processes: Process[] = []
@@ -51,6 +51,78 @@
   // Auraplex: use the same form eligibility rule as the department settings and server.
   $: forms = applicationFormTypes(h, processes).map((tag) => h.getClass(tag) as MasterTag)
   $: formIds = forms.map((it) => it._id)
+
+
+  // Auraplex: read department responsibilities without a dependency on the department UI.
+  interface ResponsibleDepartment extends Doc {
+    name: string
+    archived?: boolean
+    administrators?: AccountUuid[]
+    supervisors?: AccountUuid[]
+    applicationTypes?: Array<Ref<Doc>>
+  }
+  const departmentClass = 'hr:class:Department' as Ref<Class<ResponsibleDepartment>>
+  const departmentAccess = 'departments:mixin:DepartmentAccess' as Ref<Mixin<ResponsibleDepartment>>
+  let departments: ResponsibleDepartment[] = []
+
+  if (h.hasClass(departmentClass) && h.hasClass(departmentAccess)) {
+    createQuery().query(departmentClass, {}, (docs) => {
+      departments = docs.flatMap((doc) => h.asIf(doc, departmentAccess) ?? [])
+    })
+  }
+  $: responsibleTypes = new Set(departments.flatMap((department) =>
+    !department.archived && (department.administrators?.includes(me.uuid) === true || department.supervisors?.includes(me.uuid) === true)
+      ? department.applicationTypes ?? []
+      : []))
+  $: departmentForms = forms.filter((form) => responsibleTypes.has(form._id))
+  $: if (departmentForms.length === 0 && tab === 'department') tab = 'mine'
+  $: departmentClasses = [...new Set(departmentForms.flatMap((form) =>
+    [form._id, ...h.getDescendants(form._id)]))] as Array<Ref<Class<Card>>>
+
+  let departmentCards: Card[] = []
+  const departmentCardQuery = createQuery()
+  $: if (departmentClasses.length === 0) {
+    departmentCardQuery.unsubscribe()
+    departmentCards = []
+  } else {
+    departmentCardQuery.query(card.class.Card, { _class: { $in: departmentClasses } },
+      (docs) => { departmentCards = docs }, { sort: { createdOn: SortingOrder.Descending } })
+  }
+  let departmentExecutions: Execution[] = []
+  const departmentExecutionQuery = createQuery()
+  $: if (departmentCards.length === 0) {
+    departmentExecutionQuery.unsubscribe()
+    departmentExecutions = []
+  } else {
+    departmentExecutionQuery.query(plugin.class.Execution, { card: { $in: departmentCards.map((doc) => doc._id) } },
+      (docs) => { departmentExecutions = docs })
+  }
+
+  type DepartmentStatus = 'all' | 'active' | 'done' | 'cancelled'
+  let departmentStatus: DepartmentStatus = 'all'
+  function selectDepartmentStatus (value: string): void {
+    if (value === 'all' || value === 'active' || value === 'done' || value === 'cancelled') departmentStatus = value
+  }
+  const departmentStatuses = {
+    all: plugin.string.DepartmentApplicationsAll,
+    active: plugin.string.DepartmentApplicationsActive,
+    done: plugin.string.DepartmentApplicationsDone,
+    cancelled: plugin.string.DepartmentApplicationsCancelled
+  }
+  const departmentStatusOptions = Object.entries(departmentStatuses).map(([id, label]) => ({ id, label }))
+  $: departmentExecutionByCard = new Map([...departmentExecutions]
+    .sort((a, b) => (a.createdOn ?? a.modifiedOn) - (b.createdOn ?? b.modifiedOn))
+    .map((execution) => [execution.card, execution]))
+  function departmentStatusOf (execution: Execution | undefined): Exclude<DepartmentStatus, 'all'> {
+    if (execution?.status === 'done') return 'done'
+    if (execution?.status === 'cancelled') return 'cancelled'
+    return 'active'
+  }
+
+  $: filteredDepartmentCards = departmentCards.map((doc) => ({
+    doc,
+    status: departmentStatusOf(departmentExecutionByCard.get(doc._id))
+  })).filter(({ status }) => departmentStatus === 'all' || departmentStatus === status)
 
   let spaces: CardSpace[] = []
   const spaceQuery = createQuery()
@@ -237,7 +309,7 @@
     }
   }
 
-  async function handTo (reqs: ApproveRequest[], person: Ref<Person> | null): Promise<void> {
+  async function handTo (reqs: ApproveRequest[], person: Ref<Employee> | null): Promise<void> {
     if (person == null) return
     for (const req of reqs) {
       if (person !== req.user) await client.update(req, { user: person })
@@ -334,9 +406,34 @@
           {L('等我审批', 'Waiting for me')}
           {#if todoGroups.length > 0}<span class="badge">{todoGroups.length}</span>{/if}
         </button>
+        {#if departmentForms.length > 0}
+          <Button label={plugin.string.DepartmentApplications} selected={tab === 'department'}
+            on:click={() => { tab = 'department' }} />
+        {/if}
       </div>
 
-      {#if tab === 'mine'}
+      {#if tab === 'department'}
+        <div class="section-head">
+          <DropdownLabelsIntl label={plugin.string.DepartmentApplicationsStatus}
+            items={departmentStatusOptions} selected={departmentStatus}
+            on:selected={(event) => { selectDepartmentStatus(event.detail) }} />
+        </div>
+        {#each departmentForms as form (form._id)}
+          <div class="section-title"><Label label={form.label} /></div>
+          {#each filteredDepartmentCards.filter(({ doc }) => h.isDerived(doc._class, form._id)) as { doc, status } (doc._id)}
+            <div class="row">
+              <span class="row-title">{doc.title}</span>
+              <PersonIdPresenter value={doc.createdBy} />
+              <span class="status" class:done={status === 'done'} class:bad={status === 'cancelled'} class:wait={status === 'active'}>
+                <Label label={departmentStatuses[status]} />
+              </span>
+              <span class="row-when">{when(doc)}</span>
+            </div>
+          {:else}
+            <p class="hint"><Label label={plugin.string.DepartmentApplicationsEmpty} /></p>
+          {/each}
+        {/each}
+      {:else if tab === 'mine'}
         {#if mine.length === 0}
           <div class="hint">{L('还没有申请。点上面的按钮开始。', 'Nothing yet. Pick a form above to start.')}</div>
         {/if}

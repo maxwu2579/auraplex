@@ -1,5 +1,14 @@
 {
   "string": {
+    "DepartmentApplications": "Department applications",
+    "DepartmentApplicationsStatus": "Status",
+    "DepartmentApplicationsAll": "All statuses",
+    "DepartmentApplicationsActive": "In progress",
+    "DepartmentApplicationsDone": "Completed",
+    "DepartmentApplicationsCancelled": "Withdrawn or cancelled",
+    "DepartmentApplicationsEmpty": "No applications match this filter.",
+    "DepartmentApplicationsWizard": "Responsible departments (optional)",
+    "DepartmentApplicationsWizardHint": "Administrators and supervisors in the selected departments can see all applications from this form.",
     "Method": "Method",
     "Execution": "Execution",
     "Process": "Process",

@@ -1,5 +1,14 @@
 {
   "string": {
+    "DepartmentApplications": "部门的申请",
+    "DepartmentApplicationsStatus": "状态",
+    "DepartmentApplicationsAll": "全部状态",
+    "DepartmentApplicationsActive": "进行中",
+    "DepartmentApplicationsDone": "已完成",
+    "DepartmentApplicationsCancelled": "已撤回或取消",
+    "DepartmentApplicationsEmpty": "没有符合筛选条件的申请。",
+    "DepartmentApplicationsWizard": "哪个部门负责（可以不选）",
+    "DepartmentApplicationsWizardHint": "选了的部门，它的管理员和主管能看到全部这类申请。",
     "Method": "方法",
     "Execution": "执行",
     "Process": "过程",

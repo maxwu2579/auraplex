@@ -16,18 +16,47 @@
   // New form in one go: name, fields and who approves. Builds the card type, its fields and an
   // approval process (department admin, then optionally the department supervisor) and opens it.
   import card, { type CardSpace, type MasterTag } from '@hcengineering/card'
-  import core, { ClassifierKind, generateId, type AnyAttribute, type Data, type Ref, type Type } from '@hcengineering/core'
+  import core, { ClassifierKind, generateId, type Class, type Doc, type Mixin, type AnyAttribute, type Data, type Ref, type Type } from '@hcengineering/core'
   import { getEmbeddedLabel } from '@hcengineering/platform'
-  import { Card, getClient } from '@hcengineering/presentation'
+  import { Card, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Process, type State, type Transition } from '@hcengineering/process'
   import { makeRank } from '@hcengineering/rank'
-  import { getColorNumberByText, languageStore } from '@hcengineering/ui'
+  import { Label, ModernCheckbox, getColorNumberByText, languageStore } from '@hcengineering/ui'
   import { createEventDispatcher } from 'svelte'
   import plugin from '../plugin'
 
   export let space: CardSpace | undefined = undefined
 
   const client = getClient()
+
+  // Auraplex: read department responsibilities without a dependency on the department UI.
+  interface Department extends Doc {
+    name: string
+  }
+  interface ResponsibleDepartment extends Department {
+    archived?: boolean
+    applicationTypes?: Array<Ref<Doc>>
+  }
+  const departmentClass = 'hr:class:Department' as Ref<Class<Department>>
+  const departmentAccess = 'departments:mixin:DepartmentAccess' as Ref<Mixin<ResponsibleDepartment>>
+  let departments: ResponsibleDepartment[] = []
+
+  const hierarchy = client.getHierarchy()
+  let responsibleIds = new Set<Ref<Doc>>()
+  if (hierarchy.hasClass(departmentClass) && hierarchy.hasClass(departmentAccess)) {
+    createQuery().query(departmentClass, {}, (docs) => {
+      departments = docs.flatMap((doc) => hierarchy.asIf(doc, departmentAccess) ?? [])
+        .filter((department) => !department.archived)
+    })
+  }
+
+  function selectDepartment (id: Ref<Doc>, checked: boolean): void {
+    const updated = new Set(responsibleIds)
+    if (checked) updated.add(id)
+    else updated.delete(id)
+    responsibleIds = updated
+  }
+
   const dispatch = createEventDispatcher()
   $: L = (zh: string, en: string): string => ($languageStore === 'zh' ? zh : en)
 
@@ -188,7 +217,15 @@
         )
         rank = makeRank(rank, undefined)
       }
-      await ops.commit()
+      for (const department of departments) {
+        if (!responsibleIds.has(department._id)) continue
+        ops.match(departmentClass, { _id: department._id, modifiedOn: department.modifiedOn })
+        await ops.updateMixin(department._id, departmentClass, department.space, departmentAccess, {
+          applicationTypes: [...new Set([...(department.applicationTypes ?? []), tag])]
+        })
+      }
+      if (!(await ops.commit()).result) throw new Error('Application form data changed before saving')
+
 
       // Open it to everyone right away.
       if (space !== undefined && !space.types.includes(tag)) {
@@ -260,6 +297,14 @@
           'Admins get their own step back to pass or hand on. The form shows up right away; fine-tune it later in Settings → Types.'
         )}
       </div>
+    </div>
+    <div class="step">
+      <div class="step-title">4. <Label label={plugin.string.DepartmentApplicationsWizard} /></div>
+      <p class="hint"><Label label={plugin.string.DepartmentApplicationsWizardHint} /></p>
+      {#each departments as department (department._id)}
+        <ModernCheckbox label={department.name} checked={responsibleIds.has(department._id)} disabled={saving}
+          on:change={() => { selectDepartment(department._id, !responsibleIds.has(department._id)) }} />
+      {/each}
     </div>
     {#if error !== ''}<div class="error">{error}</div>{/if}
   </div>
