@@ -20,11 +20,11 @@
   import { AccountRole, SortingOrder, getCurrentAccount, type Class, type Doc, type Mixin, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Execution, type Process, type State } from '@hcengineering/process'
-  import { Header, Icon, Label, Scroller, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
+  import { Button, Header, Icon, Label, Scroller, eventToHTMLElement, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
   import { PersonIdPresenter, openDoc } from '@hcengineering/view-resources'
   import { UserBox } from '@hcengineering/contact-resources'
   import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
-  import ApproveRequestButtons from './ApproveRequestButtons.svelte'
+  import SignatureDialog from './SignatureDialog.svelte'
   import plugin from '../plugin'
 
   const client = getClient()
@@ -125,6 +125,9 @@
     todo = res
   })
 
+  // One entry per card: a person in several departments can get the same step twice.
+  $: todoGroups = [...new Set(todo.map((it) => it.card))].map((cardId) => todo.filter((it) => it.card === cardId))
+
   let todoCards: Card[] = []
   const todoCardQuery = createQuery()
   $: todoCardQuery.query(card.class.Card, { _id: { $in: todo.map((it) => it.card) } }, (res) => {
@@ -178,7 +181,7 @@
       if (waiting.every((it) => it.user === myPerson)) {
         return { text: state, tone: 'wait', note: zh ? '等你处理：去「等我审批」' : 'Your turn: see "Waiting for me"' }
       }
-      const names = waiting.map((it) => personName(it.user, people)).join('、')
+      const names = [...new Set(waiting.map((it) => personName(it.user, people)))].join('、')
       return { text: state, tone: 'wait', note: zh ? `等 ${names} 审批` : `Waiting for ${names}` }
     }
     return { text: state, tone: rejected !== undefined ? 'bad' : 'wait', note }
@@ -190,17 +193,34 @@
     return doc.createdBy !== undefined && me.socialIds.includes(doc.createdBy)
   }
 
-  async function passDirectly (req: ApproveRequest): Promise<void> {
-    await client.update(req, {
-      doneOn: Date.now(),
-      approved: true,
-      reason: $languageStore === 'zh' ? '无需审批，直接通过' : 'No approval needed'
-    })
+  async function passDirectly (reqs: ApproveRequest[]): Promise<void> {
+    const reason = $languageStore === 'zh' ? '无需审批，直接通过' : 'No approval needed'
+    for (const req of reqs) {
+      await client.update(req, { doneOn: Date.now(), approved: true, reason })
+    }
   }
 
-  async function handTo (req: ApproveRequest, person: Ref<Person> | null): Promise<void> {
-    if (person == null || person === req.user) return
-    await client.update(req, { user: person })
+  async function handTo (reqs: ApproveRequest[], person: Ref<Person> | null): Promise<void> {
+    if (person == null) return
+    for (const req of reqs) {
+      if (person !== req.user) await client.update(req, { user: person })
+    }
+  }
+
+  // Same signature dialog as Huly's own buttons, applied to every request of this card at once.
+  function decide (ev: MouseEvent, reqs: ApproveRequest[], isRejection: boolean): void {
+    showPopup(SignatureDialog, { isRejection }, eventToHTMLElement(ev), async (res) => {
+      if (res == null || res === false) return
+      const { rejectionNote } = res
+      if (isRejection && rejectionNote == null) return
+      for (const req of reqs) {
+        await client.update(req, {
+          doneOn: Date.now(),
+          approved: !isRejection,
+          reason: isRejection ? rejectionNote : undefined
+        })
+      }
+    })
   }
 
   function typeLabel (doc: Card): IntlString {
@@ -270,7 +290,7 @@
         </button>
         <button class:selected={tab === 'todo'} on:click={() => (tab = 'todo')}>
           {L('等我审批', 'Waiting for me')}
-          {#if todo.length > 0}<span class="badge">{todo.length}</span>{/if}
+          {#if todoGroups.length > 0}<span class="badge">{todoGroups.length}</span>{/if}
         </button>
       </div>
 
@@ -289,10 +309,11 @@
           </button>
         {/each}
       {:else}
-        {#if todo.length === 0}
+        {#if todoGroups.length === 0}
           <div class="hint">{L('没有等你审批的申请。', 'Nothing is waiting for you.')}</div>
         {/if}
-        {#each todo as req (req._id)}
+        {#each todoGroups as reqs (reqs[0]._id)}
+          {@const req = reqs[0]}
           {@const doc = todoCards.find((it) => it._id === req.card)}
           {#if doc !== undefined}
             <div class="todo">
@@ -312,7 +333,7 @@
               <div class="todo-actions">
                 {#if isOwn(doc)}
                   <span class="own-hint">{L('这是你自己的申请：', 'This is your own application:')}</span>
-                  <button class="pass" on:click={() => passDirectly(req)}>{L('无需审批，直接通过', 'No approval needed')}</button>
+                  <button class="pass" on:click={() => passDirectly(reqs)}>{L('无需审批，直接通过', 'No approval needed')}</button>
                   <UserBox
                     _class={contact.mixin.Employee}
                     label={getEmbeddedLabel(L('换人审批', 'Hand to someone'))}
@@ -322,10 +343,15 @@
                     kind="regular"
                     size="medium"
                     showNavigate={false}
-                    on:change={(e) => handTo(req, e.detail)}
+                    on:change={(e) => handTo(reqs, e.detail)}
                   />
                 {:else}
-                  <ApproveRequestButtons todo={req} card={doc._id} />
+                  <Button
+                    label={req.actionType === 'review' ? plugin.string.Review : plugin.string.Approve}
+                    kind="positive"
+                    on:click={(ev) => { decide(ev, reqs, false) }}
+                  />
+                  <Button label={plugin.string.Reject} kind="negative" on:click={(ev) => { decide(ev, reqs, true) }} />
                 {/if}
               </div>
             </div>
