@@ -411,17 +411,21 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   override async searchFulltext (
     ctx: MeasureContext<SessionData>, query: SearchQuery, options: SearchOptions
   ): Promise<SearchResult> {
-    const allowed = ctx.contextData === undefined || isSystem(ctx.contextData.account, ctx) ? undefined : await this.moduleAccess(ctx)
-    if (allowed === undefined) return await super.searchFulltext(ctx, query, options)
+    // Auraplex: remove private application hits before sending search snippets to the browser.
+    if (ctx.contextData === undefined || isSystem(ctx.contextData.account, ctx)) {
+      return await super.searchFulltext(ctx, query, options)
+    }
+    const [allowed, hidden] = await Promise.all([this.moduleAccess(ctx), this.hiddenApplications(ctx)])
+    if (allowed === undefined && hidden.size === 0) return await super.searchFulltext(ctx, query, options)
     const canRead = (cls: Ref<Class<Doc>>): boolean => {
       const alias = this.protectedModule(cls)
-      return alias === undefined || allowed(alias) !== 'none'
+      return alias === undefined || allowed?.(alias) !== 'none'
     }
     const classes = query.classes?.filter(canRead)
     if (classes?.length === 0 && query.classes?.length !== 0) return { docs: [], total: 0 }
     const result = await super.searchFulltext(ctx, { ...query, classes }, options)
-    const docs = result.docs.filter(({ doc }) => canRead(doc._class) &&
-      (doc.attachedToClass === undefined || canRead(doc.attachedToClass)))
+    const docs = result.docs.filter(({ doc, id }) => !hidden.has(id) && !referencesHiddenApplication(doc, hidden) &&
+      canRead(doc._class) && (doc.attachedToClass === undefined || canRead(doc.attachedToClass)))
     return { docs, total: docs.length }
   }
 

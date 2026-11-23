@@ -269,6 +269,7 @@ test('application reads and writes respect department, author and historical app
   const process = 'process:class:Process'
   const person = 'contact:class:Person'
   const dept = 'hr:class:Department'
+  const inbox = 'notification:class:InboxNotification'
   let archived = false
   const cards = [
     { _id: 'peer-leave', _class: leave, createdBy: 'peer' },
@@ -294,13 +295,28 @@ test('application reads and writes respect department, author and historical app
     if (cls === person) return [{ _id: query.personUuid }]
     if (cls === approval) return query.user === undefined || query.user === 'new-approver' ? [request] : []
     if (cls === execution) return [run]
+    if (cls === inbox) return [
+      { _id: 'private-notice', _class: inbox, objectId: 'peer-leave' },
+      { _id: 'own-notice', _class: inbox, objectId: 'own-leave' }
+    ]
     if (cls === core.class.TxCreateDoc && query['attributes.user'] === 'old-approver') return [{ objectId: 'req' }]
     return []
   })
   const hierarchy = { hasClass: () => true, isMixin: () => false, hasMixin: () => true,
     getClass: () => ({}), getDescendants: () => [], isDerived: (cls: string, base: string) =>
       cls === base || (base === card && (cls === leave || cls === expense)) }
-  const next = { findAll, tx: async () => [] } as unknown as Middleware
+  const next = {
+    findAll,
+    searchFulltext: async () => ({
+      docs: [
+        { doc: cards[0], id: cards[0]._id, title: 'Private test application' },
+        { doc: cards[1], id: cards[1]._id, title: 'Own test application' },
+        { doc: { _id: 'message', _class: comment, attachedTo: cards[0]._id }, id: 'message' }
+      ],
+      total: 3
+    }),
+    tx: async () => []
+  } as unknown as Middleware
   const guard = await DepartmentGuardMiddleware.create(context('worker'), { hierarchy } as unknown as PipelineContext, next)
   const read = async (actor: string, role = AccountRole.User) =>
     await guard.findAll(context(actor, role), card as Ref<Class<Doc>>, {}, { limit: 1, total: true })
@@ -316,6 +332,12 @@ test('application reads and writes respect department, author and historical app
   }
   expect(await guard.findAll(context('worker'), approval as Ref<Class<Doc>>, {})).toHaveLength(0)
   expect(await guard.findAll(context('worker'), comment as Ref<Class<Doc>>, {})).toHaveLength(0)
+  const notices = await guard.findAll(context('worker'), inbox as Ref<Class<Doc>>, {})
+  expect(notices.map((notice) => notice._id)).toEqual(['own-notice'])
+  expect(notices.total).toBe(1)
+  const search = await guard.searchFulltext(context('worker'), { query: 'test' }, {})
+  expect(search.docs.map((hit) => hit.id)).toEqual(['own-leave'])
+  expect(search.total).toBe(1)
   for (const role of [AccountRole.Owner, AccountRole.Maintainer]) {
     expect((await read('company-admin', role))[0]?._id).toBe('peer-leave')
   }

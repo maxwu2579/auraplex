@@ -50,7 +50,8 @@ export function canChangeExecutionStatus (operations: Record<string, unknown>, i
 
 export const applicationRelatedClasses = [
   executionClass, approveRequestClass, attachmentClass, 'activity:class:ActivityMessage',
-  'process:class:ExecutionLog', 'process:class:ProcessLog'
+  'process:class:ExecutionLog', 'process:class:ProcessLog',
+  'notification:class:InboxNotification', 'notification:class:DocNotifyContext'
 ]
 
 export function canSeeApplication (application: {
@@ -68,7 +69,7 @@ export function canSeeApplication (application: {
 export function referencesHiddenApplication (value: unknown, hidden: ReadonlySet<string>): boolean {
   if (value == null || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-  return ['_id', 'card', 'attachedTo', 'objectId'].some((key) => {
+  return ['_id', 'card', 'attachedTo', 'objectId', 'headerObjectId'].some((key) => {
     const id = record[key]
     return typeof id === 'string' && hidden.has(id)
   })
