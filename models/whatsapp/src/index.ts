@@ -34,6 +34,7 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
 
   // Auraplex: optional attachment marker; the bytes are served privately by the WhatsApp service.
   @Hidden() mediaAvailable?: boolean
+  @Hidden() mediaDeferred?: boolean
 
   @Prop(TypeString(), whatsapp.string.Direction)
     direction!: WhatsappMessage['direction']

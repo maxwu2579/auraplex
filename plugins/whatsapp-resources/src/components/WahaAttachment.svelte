@@ -6,6 +6,7 @@
   import { readWahaAttachment } from '../api'
 
   export let mediaId: string
+  export let deferred = false
   export let scope: { employee: string, channel: string } | undefined = undefined
   let container: HTMLDivElement
   let url: string | undefined
@@ -35,6 +36,7 @@
   }
 
   onMount(() => {
+    if (deferred) return
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         observer.disconnect()
@@ -63,7 +65,7 @@
     {/if}
     <div><a href={url} download={name}>{name || '—'}</a> · {Math.ceil(size / 1024)} KB</div>
     <a href={url} download={name}><Label label={whatsapp.string.WahaAttachment} /></a>
-  {:else if error}
+  {:else if error || deferred}
     <Button label={whatsapp.string.WahaAttachment} on:click={load} />
   {/if}
 </div>

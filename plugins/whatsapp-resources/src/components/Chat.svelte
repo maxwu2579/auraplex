@@ -224,7 +224,7 @@
           {/if}
           <p>{message.content}</p>
           {#if message.mediaAvailable && message.wamid}
-            <WahaAttachment mediaId={message.wamid} />
+            <WahaAttachment mediaId={message.wamid} deferred={message.mediaDeferred ?? false} />
           {/if}
           {#if message.direction === 'outgoing'}
             <div class="status" aria-live="polite"><Label label={statusLabels[message.status]} /></div>

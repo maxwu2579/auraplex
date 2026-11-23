@@ -115,7 +115,7 @@ export class WorkspaceReceiver {
 
   async supervisionMessages (
     workspace: WorkspaceUuid, owner: AccountUuid, channel?: Ref<Channel>, after?: number, before?: number
-  ): Promise<Array<{ id: string, channel: string, phone: string, name: string, content: string, direction: string, sendOn: number, mediaId?: string }>> {
+  ): Promise<Array<{ id: string, channel: string, phone: string, name: string, content: string, direction: string, sendOn: number, mediaId?: string, mediaDeferred?: boolean }>> {
     const client = await this.getClient(workspace)
     const messages = await client.findAll(whatsapp.class.Message, {
       owner, ...(channel === undefined ? {} : { attachedTo: channel }),
@@ -130,7 +130,7 @@ export class WorkspaceReceiver {
     return messages.sort((a, b) => a.sendOn - b.sendOn).map((msg) => ({
       id: msg._id, channel: msg.attachedTo, phone: msg.phone,
       name: channelNames.get(msg.attachedTo as Ref<Channel>) ?? msg.phone, content: msg.content,
-      direction: msg.direction, sendOn: msg.sendOn, mediaId: msg.mediaAvailable === true ? msg.wamid : undefined
+      direction: msg.direction, sendOn: msg.sendOn, mediaId: msg.mediaAvailable === true ? msg.wamid : undefined, mediaDeferred: msg.mediaDeferred
     }))
   }
 
@@ -184,14 +184,14 @@ export class WorkspaceReceiver {
     }
   }
 
-  async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<void> {
+  async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<boolean> {
     const id = stableId<WhatsappMessage>('message', message.session ?? message.phoneNumberId, message.wamid)
     const existing = await client.findOne(whatsapp.class.Message, { _id: id })
     if (existing !== undefined) {
       if (message.mediaAvailable === true && existing.mediaAvailable !== true) {
         await client.update(existing, { mediaAvailable: true })
       }
-      return
+      return false
     }
     const owner = (await this.account.findPersonBySocialId(integration.socialId, true)) as AccountUuid | undefined
     if (owner === undefined) throw new Error('Missing integration owner')
@@ -204,7 +204,7 @@ export class WorkspaceReceiver {
     // Auraplex: wait for a concurrent service send to persist its provider ID before recording its echo.
     const echo = { owner, phoneNumberId: message.phoneNumberId, phone: message.phone, direction: 'outgoing' as const }
     if (message.outgoing === true) {
-      if (await client.findOne(whatsapp.class.Message, { ...echo, wamid: message.wamid }) !== undefined) return
+      if (await client.findOne(whatsapp.class.Message, { ...echo, wamid: message.wamid }) !== undefined) return false
       if (await client.findOne(whatsapp.class.Message, { ...echo, status: 'sending' }) !== undefined) {
         throw new Error('Waiting for outgoing message ID')
       }
@@ -287,7 +287,7 @@ export class WorkspaceReceiver {
       {
         owner,
         content: message.content,
-        ...(message.mediaAvailable === true ? { mediaAvailable: true } : {}),
+        ...(message.mediaAvailable === true ? { mediaAvailable: true, ...(message.historical === true ? { mediaDeferred: true } : {}) } : {}),
         direction: message.outgoing === true ? 'outgoing' : 'incoming',
         status: message.outgoing === true ? 'sent' : 'received',
         phone: message.phone,
@@ -303,6 +303,7 @@ export class WorkspaceReceiver {
     if (!result.result && (await client.findOne(whatsapp.class.Message, { _id: id })) === undefined) {
       throw new Error('Message transaction was not committed')
     }
+    return result.result
   }
 
   private async addNotifications (

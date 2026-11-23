@@ -40,6 +40,7 @@
     direction: string
     content: string
     mediaId?: string
+    mediaDeferred?: boolean
   }
 
   const owner = getCurrentAccount().role === AccountRole.Owner
@@ -243,7 +244,7 @@
           · <time>{new Date(message.sendOn).toLocaleString()}</time>
           <p>{message.content}</p>
           {#if message.mediaId && employee}
-            <WahaAttachment mediaId={message.mediaId} scope={{ employee, channel: message.channel }} />
+            <WahaAttachment mediaId={message.mediaId} deferred={message.mediaDeferred ?? false} scope={{ employee, channel: message.channel }} />
           {/if}
         </article>
       {/each}

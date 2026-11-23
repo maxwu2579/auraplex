@@ -27,6 +27,7 @@ export interface WhatsappMessage extends AttachedDoc {
   owner?: import('@hcengineering/core').AccountUuid
   content: string
   mediaAvailable?: boolean
+  mediaDeferred?: boolean
   direction: 'incoming' | 'outgoing'
   status: MessageStatus
   phone: string
