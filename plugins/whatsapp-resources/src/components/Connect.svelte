@@ -97,6 +97,7 @@
 
 <form class="whatsapp-connect" on:submit|preventDefault={save}>
   <h2><Label label={whatsapp.string.Whatsapp} /></h2>
+  <p><Label label={whatsapp.string.SupervisionBindingHint} /></p>
   {#if state?.provider === 'waha'}
     <p><Label label={whatsapp.string.WahaRisk} /></p>
     {#if state.connected}

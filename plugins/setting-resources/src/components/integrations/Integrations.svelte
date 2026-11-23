@@ -20,6 +20,7 @@
   import setting from '@hcengineering/setting'
   import { type Integration } from '@hcengineering/account-client'
   import {
+    Component,
     Header,
     Breadcrumb,
     NotificationSeverity,
@@ -29,15 +30,18 @@
     Switcher,
     Loading
   } from '@hcengineering/ui'
-  import { translate } from '@hcengineering/platform'
+  import { hasResource, translate } from '@hcengineering/platform'
   import { onIntegrationEvent } from '@hcengineering/integration-client'
 
   import IntegrationCard from './IntegrationCard.svelte'
   import IntegrationErrorNotification from './IntegrationErrorNotification.svelte'
   import { getAccountClient } from '../../utils'
   import { Analytics } from '@hcengineering/analytics'
+  import type { AnyComponent } from '@hcengineering/ui'
   import { IntegrationKind } from '@hcengineering/core'
 
+  // Auraplex: the WhatsApp plugin owns its service settings and supervision UI.
+  const whatsappAdministration = 'whatsapp:component:WorkspaceAdministration' as AnyComponent
   const typeQuery = createQuery()
 
   const accountClient = getAccountClient()
@@ -264,6 +268,7 @@
       />
     </svelte:fragment>
   </Header>
+  {#if hasResource(whatsappAdministration)}<Component is={whatsappAdministration} />{/if}
   {#if isLoading}
     <div class="loading-container">
       <Loading />

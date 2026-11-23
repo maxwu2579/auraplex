@@ -39,7 +39,8 @@ export class ConnectionError extends Error {
   }
 }
 
-async function request<T> (path: string, method = 'GET', body?: object): Promise<T> {
+// Auraplex: settings and supervision use the same authenticated service API.
+export async function request<T> (path: string, method = 'GET', body?: object): Promise<T> {
   const base = getMetadata(whatsapp.metadata.WhatsappURL)
   if (base === undefined || base === '') throw new ConnectionError(whatsapp.string.Unavailable)
   let response: Response
