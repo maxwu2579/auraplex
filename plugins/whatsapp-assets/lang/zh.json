@@ -28,6 +28,7 @@
     "ChooseEmployee": "选择员工",
     "SupervisionDate": "日期",
     "SupervisionSearch": "搜索客户名字或号码",
+    "ServiceSavedWarning": "设置已保存，但 WAHA 连接或会话回调校验失败。",
     "ServiceSaved": "设置已保存",
     "WahaAttachment": "下载附件",
     "WahaRisk": "扫码使用非官方 WhatsApp 接口，号码有被限制的风险。建议用工作号，不要用私人号。",

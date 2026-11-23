@@ -28,6 +28,7 @@
     "ChooseEmployee": "Choose an employee",
     "SupervisionDate": "Date",
     "SupervisionSearch": "Search customer name or phone",
+    "ServiceSavedWarning": "Settings saved, but WAHA or a session webhook could not be verified.",
     "ServiceSaved": "Settings saved",
     "WahaAttachment": "Download attachment",
     "WahaRisk": "QR pairing uses an unofficial WhatsApp interface. The number may be restricted. Use a work number.",

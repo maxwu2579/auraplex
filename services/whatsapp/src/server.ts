@@ -25,7 +25,7 @@ import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
 import { MetaProvider, SendError, listTemplates } from './graph'
 import { publicSettings, runtimeConfig } from './serviceSettings'
-import { WahaMedia } from './wahaMedia'
+import { WahaMedia, WahaMediaTooLarge } from './wahaMedia'
 import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
@@ -35,7 +35,7 @@ export function createApp (
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
   request: typeof fetch = fetch,
   notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>,
-  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages' | 'ownsIntegration' | 'attachmentRecipient' | 'getClient' | 'receive'>
+  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages' | 'ownsIntegration' | 'attachmentRecipient' | 'mediaPhone' | 'getClient' | 'receive'>
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
@@ -193,7 +193,13 @@ export function createApp (
         if (inbox === undefined) { res.sendStatus(503); return }
         for (const message of batch.messages) {
           if (body.payload.hasMedia === true) message.mediaAvailable = await store.wahaRequest(integration, settings, request,
-            async (scoped) => await new WahaMedia(scoped, request).save(body.session, message.wamid, body.payload.media)).catch(() => false)
+            async (scoped) => await new WahaMedia(scoped, request).save(body.session, message.wamid, body.payload.media)).catch((err) => {
+              if (err instanceof WahaMediaTooLarge) {
+                const name = body.payload.media?.filename
+                message.content = '[文件太大，未下载]' + (typeof name === 'string' ? ' ' + name.slice(0, 160) : '')
+              }
+              return false
+            })
         }
         await inbox.enqueue(batch)
       }
@@ -378,6 +384,8 @@ export function createApp (
       if (typeof id !== 'string' || id.length === 0 || id.length > 512) { res.sendStatus(400); return }
       const workspace = res.locals.workspace as WorkspaceUuid
       let session = sessionName(workspace, res.locals.socialId)
+      let owner = res.locals.actor as AccountUuid
+      let linked
       if (employee !== undefined) {
         if (typeof employee !== 'string' || typeof channel !== 'string' || receiver === undefined ||
           !await supervisorAllowed(res)) { res.sendStatus(403); return }
@@ -387,10 +395,25 @@ export function createApp (
         const checks = await Promise.all(candidates.map(async (item) => await receiver.ownsIntegration(item, employee)))
         const entry = candidates[checks.findIndex(Boolean)]
         if (entry === undefined) { res.sendStatus(404); return }
+        owner = employee as AccountUuid
+        linked = entry
         session = sessionName(workspace, entry.socialId)
         await receiver.auditAccess(workspace, res.locals.actor, 'WhatsApp supervision · employee ' + employee, channel)
       }
-      const file = await media.read(session, id)
+      let file = await media.read(session, id)
+      if (file === undefined && waha !== undefined && receiver !== undefined) {
+        const phone = await receiver.mediaPhone(workspace, owner, id)
+        const entry = linked ?? await store.get(workspace, res.locals.socialId)
+        if (phone !== undefined && entry?.data?.wahaSession === session && await receiver.ownsIntegration(entry, owner)) {
+          const chat = phone.endsWith('@lid') ? phone : phone + '@c.us'
+          const settings = await workspaceConfig(workspace)
+          const imported = await store.wahaRequest(entry, settings, request, async (scoped) => {
+            const remote = await new WahaClient(scoped, request).messageMedia(session, chat, id)
+            return await new WahaMedia(scoped, request).save(session, id, remote)
+          }).catch(() => false)
+          if (imported) file = await media.read(session, id)
+        }
+      }
       if (file === undefined) { res.sendStatus(404); return }
       const details = await media.details(session, id)
       res.setHeader('X-WA-Name', encodeURIComponent(details.name))

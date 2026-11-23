@@ -5,6 +5,8 @@ import { join } from 'path'
 import { WahaKeyRejected } from './waha'
 import type { Config } from './config'
 
+export class WahaMediaTooLarge extends Error {}
+
 /** Media stays on the service volume and is served only after owner authentication. */
 export class WahaMedia {
   constructor (private readonly config: Config, private readonly request: typeof fetch = fetch) {}
@@ -64,7 +66,7 @@ export class WahaMedia {
           const chunk = await reader.read()
           if (chunk.done) break
           size += chunk.value.byteLength
-          if (size > maxBytes) return false
+          if (size > maxBytes) throw new WahaMediaTooLarge()
           chunks.push(chunk.value)
         }
       } finally {
@@ -75,7 +77,7 @@ export class WahaMedia {
       await this.write(session, id, Buffer.concat(chunks), media as { mimetype?: unknown, filename?: unknown })
       return true
     } catch (err) {
-      if (err instanceof WahaKeyRejected) throw err
+      if (err instanceof WahaKeyRejected || err instanceof WahaMediaTooLarge) throw err
       return false
     }
   }

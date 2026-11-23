@@ -74,6 +74,12 @@ export class WorkspaceReceiver {
     return await this.account.findPersonBySocialId(entry.socialId, true) === account
   }
 
+  async mediaPhone (workspace: WorkspaceUuid, owner: AccountUuid, id: string): Promise<string | undefined> {
+    const client = await this.getClient(workspace)
+    const row = await client.findOne(whatsapp.class.Message, { owner, wamid: id, mediaAvailable: true })
+    return row?.phone
+  }
+
   async attachmentRecipient (workspace: WorkspaceUuid, channelId: Ref<Channel>): Promise<string | undefined> {
     const client = await this.getClient(workspace)
     const channel = await client.findOne(contact.class.Channel, { _id: channelId })

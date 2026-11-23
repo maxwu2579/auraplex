@@ -11,6 +11,7 @@
 
   type Employee = { id: string, name: string }
   interface Settings {
+    warning?: boolean
     wahaUrl?: string
     wahaApiKey?: string
     webhookSecret?: string
@@ -215,7 +216,7 @@
           mailImapHost: imap || null, mailImapPort: imapPort ?? null, ...(password === '' ? {} : { mailPassword: password })
         })} />
       </form>
-      {#if saved}<p role="status"><Label label={s.ServiceSaved} /></p>{/if}
+      {#if saved}<p role="status"><Label label={settings.warning ? s.ServiceSavedWarning : s.ServiceSaved} /></p>{/if}
     {:else if section === 'supervision'}
       <label><Label label={s.ChooseEmployee} />
         <select bind:value={employee} on:change={() => loadChat()}>

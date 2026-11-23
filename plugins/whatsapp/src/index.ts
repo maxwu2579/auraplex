@@ -145,6 +145,7 @@ export default plugin(whatsappId, {
     ChooseEmployee: '' as IntlString,
     SupervisionDate: '' as IntlString,
     SupervisionSearch: '' as IntlString,
+    ServiceSavedWarning: '' as IntlString,
     ServiceSaved: '' as IntlString,
 
     WahaAttachment: '' as IntlString,
