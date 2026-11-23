@@ -402,6 +402,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       return { domain, value: (matches ?? []).filter((card) =>
         forms.some((type) => hierarchy.isDerived(card._class, type))).map((card) => card._id) }
     }
+    // Auraplex: direct WhatsApp attachment sending must obey the same module policy as queued sends.
+    if (domain === 'whatsapp-media') {
+      if (ctx.contextData === undefined) forbidden()
+      const access = await this.moduleAccess(ctx)
+      return { domain, value: access === undefined || access('whatsapp') === 'edit' }
+    }
     if (domain !== 'communication' || ctx.contextData === undefined) {
       return await this.provideDomainRequest(ctx, domain, args)
     }

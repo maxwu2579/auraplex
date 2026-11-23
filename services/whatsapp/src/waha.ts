@@ -128,6 +128,20 @@ export class WahaClient implements WhatsAppProvider<string, string, WahaSession 
     if (!remove.ok && remove.status !== 404) throw new Error('WAHA unavailable')
   }
 
+  async sendMedia (session: string, phone: string, bytes: Buffer, mime: string, filename: string, caption: string): Promise<string> {
+    const method = mime === 'image/jpeg' ? 'sendImage' : mime.startsWith('video/') ? 'sendVideo'
+      : mime.startsWith('audio/') ? 'sendVoice' : 'sendFile'
+    const response = await this.call('/api/' + method, 'POST', {
+      session, chatId: phone + '@c.us', caption,
+      file: { data: bytes.toString('base64'), mimetype: mime, filename },
+      ...(method === 'sendVideo' || method === 'sendVoice' ? { convert: true } : {})
+    })
+    if (!response.ok) throw new SendError('WAHA_SEND', '附件发送失败，请检查连接。')
+    const { id } = await response.json() as { id?: string }
+    if (typeof id !== 'string' || id === '') throw new SendError('WAHA_SEND', '附件发送状态未确认。')
+    return id
+  }
+
   async historyChats (session: string, offset: number, limit: number): Promise<Array<{ id: string }>> {
     const res = await this.call('/api/' + session + '/chats?' +
       new URLSearchParams({ offset: String(offset), limit: String(limit), sortBy: 'messageTimestamp', sortOrder: 'desc' }))

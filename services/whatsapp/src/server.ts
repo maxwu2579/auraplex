@@ -15,8 +15,9 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express'
 import cors from 'cors'
-import { AccountRole, type WorkspaceUuid, type AccountUuid, type Ref } from '@hcengineering/core'
+import { AccountRole, type WorkspaceUuid, type AccountUuid, type OperationDomain, type Ref } from '@hcengineering/core'
 import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
+import { createClient, getTransactorEndpoint } from '@hcengineering/server-client'
 import type { Channel } from '@hcengineering/contact'
 import type { WorkspaceReceiver } from './workspaceClient'
 import type { Config } from './config'
@@ -34,7 +35,7 @@ export function createApp (
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
   request: typeof fetch = fetch,
   notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>,
-  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages'>
+  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages' | 'ownsIntegration' | 'attachmentRecipient' | 'getClient' | 'receive'>
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
@@ -49,7 +50,8 @@ export function createApp (
     cors({
       origin: config.allowedOrigins,
       methods: ['GET', 'POST', 'DELETE'],
-      allowedHeaders: ['Authorization', 'Content-Type']
+      allowedHeaders: ['Authorization', 'Content-Type', 'X-WA-Channel', 'X-WA-Name', 'X-WA-Mime', 'X-WA-Caption'],
+      exposedHeaders: ['X-WA-Name', 'X-WA-Mime']
     })
   )
   // The raw bytes belong to this request, not shared state between requests.
@@ -229,6 +231,7 @@ export function createApp (
         res.sendStatus(403)
         return
       }
+      res.locals.token = bearer.slice(7)
       res.locals.actor = login.account
       res.locals.account = account
       res.locals.role = login.role
@@ -332,13 +335,73 @@ export function createApp (
   }
 
   app.post('/api/media', (req, res) => {
-    const id = req.body?.id
-    if (typeof id !== 'string' || id.length === 0 || id.length > 512) { res.sendStatus(400); return }
-    const session = sessionName(res.locals.workspace, res.locals.socialId)
-    void media.read(session, id).then((file) => {
+    void (async () => {
+      const { id, employee, channel } = req.body ?? {}
+      if (typeof id !== 'string' || id.length === 0 || id.length > 512) { res.sendStatus(400); return }
+      const workspace = res.locals.workspace as WorkspaceUuid
+      let session = sessionName(workspace, res.locals.socialId)
+      if (employee !== undefined) {
+        if (typeof employee !== 'string' || typeof channel !== 'string' || receiver === undefined ||
+          !await supervisorAllowed(res)) { res.sendStatus(403); return }
+        const rows = await receiver.supervisionMessages(workspace, employee as AccountUuid, channel as Ref<Channel>)
+        if (!rows.some((row) => row.mediaId === id)) { res.sendStatus(404); return }
+        const candidates = (await store.list()).filter((item) => item.workspaceUuid === workspace)
+        const checks = await Promise.all(candidates.map(async (item) => await receiver.ownsIntegration(item, employee)))
+        const entry = candidates[checks.findIndex(Boolean)]
+        if (entry === undefined) { res.sendStatus(404); return }
+        session = sessionName(workspace, entry.socialId)
+        await receiver.auditAccess(workspace, res.locals.actor, 'WhatsApp supervision · employee ' + employee, channel)
+      }
+      const file = await media.read(session, id)
       if (file === undefined) { res.sendStatus(404); return }
+      const details = await media.details(session, id)
+      res.setHeader('X-WA-Name', encodeURIComponent(details.name))
+      res.setHeader('X-WA-Mime', details.mime)
+      res.setHeader('X-Content-Type-Options', 'nosniff')
       res.attachment('whatsapp-attachment.bin').send(file)
-    }).catch(() => res.sendStatus(503))
+    })().catch(() => res.sendStatus(503))
+  })
+
+  app.post('/api/send-media', express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
+    if (waha === undefined || receiver === undefined) { res.sendStatus(404); return }
+    void (async () => {
+      const workspace = res.locals.workspace as WorkspaceUuid
+      const integration = await store.get(workspace, res.locals.socialId)
+      const session = sessionName(workspace, res.locals.socialId)
+      const ownPhone = integration?.data?.wahaPhone
+      if (integration?.data?.wahaSession !== session || integration.data?.wahaStatus !== 'WORKING' ||
+        typeof ownPhone !== 'string' || !await receiver.ownsIntegration(integration, res.locals.actor)) {
+        res.sendStatus(403)
+        return
+      }
+      const settings = await workspaceConfig(workspace)
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) { res.sendStatus(400); return }
+      if (req.body.length > (settings.mediaLimitMb ?? 20) * 1024 * 1024) { res.sendStatus(413); return }
+      const channel = req.get('X-WA-Channel')
+      if (channel === undefined || channel.length > 512) { res.sendStatus(400); return }
+      const phone = await receiver.attachmentRecipient(workspace, channel as Ref<Channel>)
+      if (phone === undefined || phone === ownPhone) { res.sendStatus(400); return }
+      const endpoint = await getTransactorEndpoint(res.locals.token, 'internal', 5000)
+      const user = await createClient(endpoint, res.locals.token, undefined, 5000)
+      try {
+        const result = await user.domainRequest('whatsapp-media' as OperationDomain, {})
+        if (result.value !== true) { res.sendStatus(403); return }
+      } finally {
+        await user.close()
+      }
+      const mime = req.get('X-WA-Mime') ?? 'application/octet-stream'
+      if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(mime)) { res.sendStatus(400); return }
+      const filename = decodeURIComponent(req.get('X-WA-Name') ?? 'attachment').slice(0, 160)
+      const caption = decodeURIComponent(req.get('X-WA-Caption') ?? '').slice(0, 4096)
+      const id = await store.wahaRequest(integration, settings, request,
+        async (scoped) => await new WahaClient(scoped, request).sendMedia(session, phone, req.body, mime, filename, caption))
+      const stored = await media.write(session, id, req.body, { mimetype: mime, filename }).then(() => true).catch(() => false)
+      await receiver.receive(await receiver.getClient(workspace), integration, {
+        session, outgoing: true, phoneNumberId: ownPhone, phone, wamid: id, name: phone,
+        timestamp: Date.now(), content: caption || '[文件]', mediaAvailable: stored
+      })
+      res.json({ sent: true })
+    })().catch(() => res.status(503).json({ code: 'Failed' }))
   })
 
   app.get('/api/qr', (_req, res) => {

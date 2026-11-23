@@ -74,7 +74,7 @@ export class WahaHistory {
       await pause()
       for (const { id } of chats) {
         if (this.stopped) return
-        if (typeof id !== 'string' || !/^\\d+@(?:c\\.us|lid)$/.test(id)) continue
+        if (typeof id !== 'string' || !/^\d+@(?:c\.us|lid)$/.test(id)) continue
         const peer = id.endsWith('@lid') ? await call(async (waha) => await waha.resolveLid(session, id)) ?? id : id
         for (let at = 0; !this.stopped; at += pageSize) {
           const rows = await call(async (waha) => await waha.historyMessages(session, id, since, until, at, pageSize))

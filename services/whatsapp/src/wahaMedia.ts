@@ -14,13 +14,38 @@ export class WahaMedia {
     return join(this.config.inboxDirectory ?? '/var/lib/whatsapp/inbox', 'media', key)
   }
 
+  async write (session: string, id: string, bytes: Buffer, media: { mimetype?: unknown, filename?: unknown }): Promise<void> {
+    const file = this.file(session, id)
+    const temporary = file + '.' + randomUUID()
+    const value = {
+      mime: typeof media.mimetype === 'string' && /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(media.mimetype)
+        ? media.mimetype : 'application/octet-stream',
+      name: typeof media.filename === 'string' ? media.filename.replace(/[\x00-\x1f\x7f/\\]/g, '_').slice(0, 160) : 'attachment'
+    }
+    await mkdir(join(this.config.inboxDirectory ?? '/var/lib/whatsapp/inbox', 'media'), { recursive: true, mode: 0o700 })
+    try {
+      await writeFile(temporary, bytes, { mode: 0o600 })
+      await rename(temporary, file)
+      await writeFile(file + '.json', JSON.stringify(value), { mode: 0o600 })
+    } finally {
+      await unlink(temporary).catch(() => {})
+    }
+  }
+
+  async details (session: string, id: string): Promise<{ mime: string, name: string }> {
+    try {
+      return JSON.parse(await readFile(this.file(session, id) + '.json', 'utf8'))
+    } catch {
+      return { mime: 'application/octet-stream', name: 'whatsapp-attachment.bin' }
+    }
+  }
+
   async save (session: string, id: string, media: unknown): Promise<boolean> {
     if (!this.config.wahaUrl || !this.config.wahaApiKey || media == null || typeof media !== 'object') return false
     const url = (media as { url?: unknown }).url
     if (typeof url !== 'string') return false
     const maxBytes = (this.config.mediaLimitMb ?? 20) * 1024 * 1024
     const file = this.file(session, id)
-    const temporary = file + '.' + randomUUID()
     try {
       if (await stat(file).then(() => true).catch(() => false)) return true
       const base = new URL(this.config.wahaUrl)
@@ -47,15 +72,11 @@ export class WahaMedia {
         reader.releaseLock()
       }
       if (size === 0) return false
-      await mkdir(join(this.config.inboxDirectory ?? '/var/lib/whatsapp/inbox', 'media'), { recursive: true, mode: 0o700 })
-      await writeFile(temporary, Buffer.concat(chunks), { mode: 0o600 })
-      await rename(temporary, file)
+      await this.write(session, id, Buffer.concat(chunks), media as { mimetype?: unknown, filename?: unknown })
       return true
     } catch (err) {
       if (err instanceof WahaKeyRejected) throw err
       return false
-    } finally {
-      await unlink(temporary).catch(() => {})
     }
   }
 

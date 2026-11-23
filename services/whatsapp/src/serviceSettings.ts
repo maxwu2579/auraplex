@@ -42,7 +42,7 @@ export function changeSettings (
     } else if (key === 'wahaApiKey') {
       if (data === null) delete value.wahaApiKey
       else {
-        if (typeof data !== 'string' || !/^[\\x21-\\x7e]{1,1024}$/.test(data)) throw new Error('Invalid key')
+        if (typeof data !== 'string' || !/^[\x21-\x7e]{1,1024}$/.test(data)) throw new Error('Invalid key')
         value.wahaApiKey = data
       }
     } else if (key === 'regenerateWebhook' && data === true) {

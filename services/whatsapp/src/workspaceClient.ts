@@ -70,6 +70,18 @@ export class WorkspaceReceiver {
   }
 
   // Auraplex: this system client is reached only after the HTTP API authorizes supervision.
+  async ownsIntegration (entry: Integration, account: string): Promise<boolean> {
+    return await this.account.findPersonBySocialId(entry.socialId, true) === account
+  }
+
+  async attachmentRecipient (workspace: WorkspaceUuid, channelId: Ref<Channel>): Promise<string | undefined> {
+    const client = await this.getClient(workspace)
+    const channel = await client.findOne(contact.class.Channel, { _id: channelId })
+    if (channel?.provider !== contact.channelProvider.Whatsapp || channel.value.endsWith('@lid')) return undefined
+    const phone = normalizePhone(channel.value)
+    return /^\d{5,20}$/.test(phone) ? phone : undefined
+  }
+
   async auditAccess (workspace: WorkspaceUuid, actor: string, label: string, customer?: string): Promise<void> {
     const client = await this.getClient(workspace)
     if (!client.getHierarchy().hasClass(auditClass)) return
@@ -97,9 +109,9 @@ export class WorkspaceReceiver {
       })
     })
     const channels = await client.findAll(contact.class.Channel, { _id: { $in: [...new Set(messages.map((msg) => msg.attachedTo as Ref<Channel>))] } })
-    const customers = await client.findAll(contact.class.Contact, { _id: { $in: channels.map((doc) => doc.attachedTo) } })
+    const customers = await client.findAll(contact.class.Contact, { _id: { $in: channels.map((doc) => doc.attachedTo as Ref<Contact>) } })
     const names = new Map(customers.map((customer) => [customer._id, customer.name]))
-    const channelNames = new Map(channels.map((doc) => [doc._id, names.get(doc.attachedTo)]))
+    const channelNames = new Map(channels.map((doc) => [doc._id, names.get(doc.attachedTo as Ref<Contact>)]))
     return messages.sort((a, b) => a.sendOn - b.sendOn).map((msg) => ({
       id: msg._id, channel: msg.attachedTo, phone: msg.phone,
       name: channelNames.get(msg.attachedTo as Ref<Channel>) ?? msg.phone, content: msg.content,
@@ -159,7 +171,13 @@ export class WorkspaceReceiver {
 
   async receive (client: TxOperations, integration: Integration, message: IncomingMessage): Promise<void> {
     const id = stableId<WhatsappMessage>('message', message.session ?? message.phoneNumberId, message.wamid)
-    if ((await client.findOne(whatsapp.class.Message, { _id: id })) !== undefined) return
+    const existing = await client.findOne(whatsapp.class.Message, { _id: id })
+    if (existing !== undefined) {
+      if (message.mediaAvailable === true && existing.mediaAvailable !== true) {
+        await client.update(existing, { mediaAvailable: true })
+      }
+      return
+    }
     const owner = (await this.account.findPersonBySocialId(integration.socialId, true)) as AccountUuid | undefined
     if (owner === undefined) throw new Error('Missing integration owner')
     const employee = await client.findOne(contact.mixin.Employee, { personUuid: owner, active: true })
