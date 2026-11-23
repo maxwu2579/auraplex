@@ -148,6 +148,8 @@
     & > .hulyComponent-content__column.content {
       flex: 1 1 auto;
       width: 100% !important;
+      min-width: 0 !important;
+      max-width: none !important;
       min-height: 0;
     }
   }
