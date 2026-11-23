@@ -4,7 +4,7 @@
     "WahaScan": "用手机打开 WhatsApp → 已关联的设备 → 关联新设备，扫一扫。",
     "WahaWaiting": "等待扫码",
     "WahaDisconnected": "WhatsApp 已断开，请重新扫码。",
-    "WahaSingleSession": "WAHA 只支持一个号，请联系管理员。",
+    "WahaSingleSession": "WAHA 版本太旧，只支持一个号，请联系管理员。",
     "MetaOfficial": "官方接口",
     "Whatsapp": "WhatsApp Business",
     "Description": "连接公司号码，在这里接收和回复客户消息。",

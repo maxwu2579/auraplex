@@ -105,7 +105,8 @@ export function createApp (
     }
     const remote = await waha?.status(session)
     const status = remote?.status ?? 'STOPPED'
-    const phone = status === 'WORKING' ? remote?.me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1] : undefined
+    const me = status === 'WORKING' ? remote?.me ?? await waha?.me(session) : undefined
+    const phone = status === 'WORKING' ? me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1] : undefined
     try {
       if (status === 'WORKING' && phone === undefined) return { status: 'STARTING' }
       if (current?.data?.wahaStatus === 'WORKING' && ['FAILED', 'STOPPED', 'SCAN_QR_CODE'].includes(status)) {
@@ -120,6 +121,7 @@ export function createApp (
     }
   }
 
+  const wahaRequests = new Map<string, number>()
   app.post('/webhook/waha', (req, res) => {
     const raw = (req as Request & { rawBody?: Buffer }).rawBody
     if (waha === undefined || raw === undefined ||
@@ -129,6 +131,24 @@ export function createApp (
     }
     void (async () => {
       const body = req.body
+      const now = Date.now()
+      const fresh = (value: unknown): boolean => Number.isFinite(Number(value)) && Math.abs(now - Number(value)) <= 300_000
+      const requestId = req.get('X-Webhook-Request-Id')
+      if (!fresh(req.get('X-Webhook-Timestamp')) || !fresh(body?.timestamp) || !requestId ||
+        req.get('X-Webhook-Hmac-Algorithm')?.toLowerCase() !== 'sha512') {
+        res.sendStatus(401)
+        return
+      }
+      const unique = JSON.stringify([body?.session, body?.id ?? requestId, req.get('X-Webhook-Hmac')])
+      if ((wahaRequests.get(unique) ?? 0) > now) { res.sendStatus(200); return }
+      const accepted = (): void => {
+        if (wahaRequests.size >= 10_000) {
+          for (const [id, expiry] of wahaRequests) if (expiry <= now) wahaRequests.delete(id)
+          if (wahaRequests.size >= 10_000) wahaRequests.clear()
+        }
+        wahaRequests.set(unique, now + 300_000)
+        res.sendStatus(200)
+      }
       if (typeof body?.session !== 'string' || !/^huly-[a-f0-9]{32}$/.test(body.session) ||
         typeof body.event !== 'string' || body.payload == null || typeof body.payload !== 'object') {
         res.sendStatus(200)
@@ -141,17 +161,19 @@ export function createApp (
       }
       if (body.event === 'session.status') {
         await refreshWaha(body.session)
-        res.sendStatus(200)
+        accepted()
         return
       }
       const phone = integration.data?.wahaPhone
       if (integration.data?.wahaStatus !== 'WORKING' || typeof phone !== 'string') { res.sendStatus(200); return }
-      const batch = parseWahaEvent(body.event, body.session, phone, body.payload)
+      const peer = body.payload.chatId ?? (body.payload.fromMe === true ? body.payload.to ?? body.payload.from : body.payload.from)
+      const mapped = typeof peer === 'string' && peer.endsWith('@lid') ? await waha.resolveLid(body.session, peer) : undefined
+      const batch = parseWahaEvent(body.event, body.session, phone, { ...body.payload, ...(mapped === undefined ? {} : { chatId: mapped }) })
       if (batch.messages.length + batch.statuses.length > 0) {
         if (inbox === undefined) { res.sendStatus(503); return }
         await inbox.enqueue(batch)
       }
-      res.sendStatus(200)
+      accepted()
     })().catch(() => res.sendStatus(503))
   })
 

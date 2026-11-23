@@ -136,6 +136,7 @@ export class OutgoingService {
       if (
         channel?.provider !== contact.channelProvider.Whatsapp ||
         phone === '' ||
+        channel.value.endsWith('@lid') ||
         message.phone !== phone ||
         typeof phoneNumberId !== 'string' ||
         !/^\d+$/.test(phoneNumberId) ||

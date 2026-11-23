@@ -26,13 +26,14 @@ async function read (req: IncomingMessage): Promise<Record<string, any>> {
   return JSON.parse(value || '{}')
 }
 async function push (session: Session, event: string, payload: unknown): Promise<void> {
-  const body = JSON.stringify({ session: session.name, event, payload })
+  const body = JSON.stringify({ id: randomUUID(), timestamp: Date.now(), session: session.name, event, payload })
   for (const hook of session.config.webhooks) {
     const url = new URL(hook.url)
     if (!['127.0.0.1', 'localhost', 'huly.local', 'whatsapp', 'host.docker.internal'].includes(url.hostname) ||
       !['http:', 'https:'].includes(url.protocol)) throw new Error('Local webhook only')
     const response = await fetch(url, { method: 'POST', redirect: 'error', headers: {
-      'Content-Type': 'application/json', 'X-Webhook-Hmac': createHmac('sha512', secret).update(body).digest('hex')
+      'Content-Type': 'application/json', 'X-Webhook-Timestamp': String(Date.now()),
+      'X-Webhook-Request-Id': randomUUID(), 'X-Webhook-Hmac-Algorithm': 'sha512', 'X-Webhook-Hmac': createHmac('sha512', secret).update(body).digest('hex')
     }, body })
     if (!response.ok) throw new Error('Local callback failed')
   }

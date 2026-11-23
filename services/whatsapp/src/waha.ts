@@ -28,7 +28,7 @@ export class WahaClient {
       method,
       redirect: 'error',
       signal: AbortSignal.timeout(10000),
-      headers: { 'X-Api-Key': this.config.wahaApiKey, 'Content-Type': 'application/json' },
+      headers: { 'X-Api-Key': this.config.wahaApiKey, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body)
     })
   }
@@ -40,15 +40,33 @@ export class WahaClient {
     return await res.json() as WahaSession
   }
 
+  async me (session: string): Promise<{ id?: string } | undefined> {
+    const res = await this.call('/api/sessions/' + session + '/me')
+    return res.ok ? (await res.json() as { id?: string } | null) ?? undefined : undefined
+  }
+
+  async resolveLid (session: string, lid: string): Promise<string | undefined> {
+    if (!/^\d+@lid$/.test(lid)) return undefined
+    try {
+      const res = await this.call('/api/' + session + '/lids/' + encodeURIComponent(lid))
+      if (!res.ok) return undefined
+      const { pn } = await res.json() as { pn?: string }
+      return typeof pn === 'string' && /^\d+@c\.us$/.test(pn) ? pn : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   async start (session: string): Promise<void> {
     const existing = await this.status(session)
     if (existing === undefined) {
       const res = await this.call('/api/sessions', 'POST', {
         name: session,
         start: true,
-        config: { webhooks: [{
+        config: { webjs: { tagsEventsOn: true }, webhooks: [{
           url: this.config.wahaWebhookUrl ?? this.config.publicUrl + '/webhook/waha',
-          events: ['message', 'message.any', 'message.ack', 'session.status'],
+          events: ['message.any', 'message.ack', 'session.status'],
+          retries: { policy: 'linear', delaySeconds: 2, attempts: 12 },
           hmac: { key: this.config.wahaWebhookSecret }
         }] }
       })
@@ -98,10 +116,13 @@ export function parseWahaEvent (
   if (typeof payload.id !== 'string' || payload.id === '') return result
   const outgoing = payload.fromMe === true
   const peer = payload.chatId ?? (outgoing && payload.to != null ? payload.to : payload.from)
-  const phone = typeof peer === 'string' ? peer.match(/^(\d+)@c\.us$/)?.[1] : undefined
+  const phone = typeof peer === 'string' ? peer.match(/^(\d+)@c\.us$/)?.[1] ?? (/^\d+@lid$/.test(peer) ? peer : undefined) : undefined
   if (phone === undefined || phone === ownPhone) return result
   if (event === 'message.ack') {
-    const status = ({ 1: 'sent', 2: 'delivered', 3: 'read', 4: 'read' } as const)[Number(payload.ack) as 1 | 2 | 3 | 4]
+    const names: Record<string, 'sent' | 'delivered' | 'read' | 'failed'> = {
+      SERVER: 'sent', DEVICE: 'delivered', READ: 'read', PLAYED: 'read', ERROR: 'failed'
+    }
+    const status = names[String(payload.ackName)] ?? ({ 1: 'sent', 2: 'delivered', 3: 'read', 4: 'read' } as const)[Number(payload.ack) as 1 | 2 | 3 | 4]
     if (outgoing && status !== undefined) result.statuses.push({ session, phoneNumberId: ownPhone, wamid: payload.id, status })
     return result
   }
@@ -112,6 +133,6 @@ export function parseWahaEvent (
   const content = payload.hasMedia === true ? [body, placeholder].filter(Boolean).join(' ') : body
   const timestamp = Number(payload.timestamp) * 1000
   if (content === '' || !Number.isFinite(timestamp) || timestamp <= 0) return result
-  result.messages.push({ session, outgoing, phoneNumberId: ownPhone, wamid: payload.id, phone, name: phone, content, timestamp })
+  result.messages.push({ session, outgoing, phoneNumberId: ownPhone, wamid: payload.id, phone, name: phone.endsWith('@lid') ? 'WhatsApp · ' + phone.slice(-8, -4) : phone, content, timestamp })
   return result
 }
