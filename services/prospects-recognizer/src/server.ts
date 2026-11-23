@@ -112,7 +112,7 @@ export function createApp (config: RecognizerConfig, request: typeof fetch = fet
             redirect: 'error',
             headers: {
               'content-type': 'application/json',
-              ...(config.key !== undefined && config.key !== '' ? { authorization: `Bearer ${config.key}` } : {})
+              ...(active.key !== undefined && active.key !== '' ? { authorization: `Bearer ${active.key}` } : {})
             },
             body: JSON.stringify({
               model: active.model,

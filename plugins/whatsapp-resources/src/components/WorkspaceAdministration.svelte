@@ -17,6 +17,15 @@
     mediaLimitMb: number
     historyDays: number
     supervisors: string[]
+    aiUrl?: string
+    aiModel?: string
+    aiKey?: string
+    mailAddress?: string
+    mailPassword?: string
+    mailSmtpHost?: string
+    mailSmtpPort?: number
+    mailImapHost?: string
+    mailImapPort?: number
     members?: Array<{ person: string, role: AccountRole }>
   }
   interface Conversation {
@@ -42,6 +51,15 @@
   let saved = false
   let url = ''
   let key = ''
+  let aiUrl = ''
+  let aiModel = ''
+  let aiKey = ''
+  let address = ''
+  let password = ''
+  let smtp = ''
+  let smtpPort: number | undefined
+  let imap = ''
+  let imapPort: number | undefined
   let limit = 20
   let days = 0
   let supervisors = new Set<string>()
@@ -67,6 +85,13 @@
       if (value === 'settings') {
         settings = await request<Settings>('service-settings')
         url = settings.wahaUrl ?? ''
+        aiUrl = settings.aiUrl ?? ''
+        aiModel = settings.aiModel ?? ''
+        address = settings.mailAddress ?? ''
+        smtp = settings.mailSmtpHost ?? ''
+        smtpPort = settings.mailSmtpPort
+        imap = settings.mailImapHost ?? ''
+        imapPort = settings.mailImapPort
         limit = settings.mediaLimitMb
         days = settings.historyDays
         supervisors = new Set(settings.supervisors)
@@ -94,6 +119,8 @@
       error = true
     } finally {
       key = ''
+      aiKey = ''
+      password = ''
       busy = false
     }
   }
@@ -160,6 +187,33 @@
           {/each}
         </div>
         <Button label={s.Save} kind="primary" disabled={busy} on:click={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })} />
+      </form>
+      <h3><Label label={s.RecognizerService} /></h3>
+      <form on:submit|preventDefault={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })}>
+        <label><Label label={s.ServiceAddress} /><input type="url" bind:value={aiUrl} /></label>
+        <label><Label label={s.ServiceModel} /><input bind:value={aiModel} /></label>
+        <label><Label label={s.ServiceSecret} /> {settings.aiKey ?? ''}
+          <input type="password" bind:value={aiKey} autocomplete="new-password" />
+        </label>
+        <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ aiKey: null })} />
+        <Button label={s.Save} kind="primary" disabled={busy}
+          on:click={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })} />
+      </form>
+      <h3><Label label={s.MailService} /></h3>
+      <form on:submit|preventDefault={() => save({})}>
+        <label><Label label={s.MailAccount} /><input type="email" bind:value={address} /></label>
+        <label><Label label={s.MailPassword} /> {settings.mailPassword ?? ''}
+          <input type="password" bind:value={password} autocomplete="new-password" />
+        </label>
+        <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ mailPassword: null })} />
+        <label><Label label={s.SmtpHost} /><input bind:value={smtp} /></label>
+        <label><Label label={s.SmtpPort} /><input type="number" min="1" max="65535" bind:value={smtpPort} /></label>
+        <label><Label label={s.ImapHost} /><input bind:value={imap} /></label>
+        <label><Label label={s.ImapPort} /><input type="number" min="1" max="65535" bind:value={imapPort} /></label>
+        <Button label={s.Save} kind="primary" disabled={busy} on:click={() => save({
+          mailAddress: address || null, mailSmtpHost: smtp || null, mailSmtpPort: smtpPort ?? null,
+          mailImapHost: imap || null, mailImapPort: imapPort ?? null, ...(password === '' ? {} : { mailPassword: password })
+        })} />
       </form>
       {#if saved}<p role="status"><Label label={s.ServiceSaved} /></p>{/if}
     {:else if section === 'supervision'}

@@ -115,6 +115,18 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    RecognizerService: '' as IntlString,
+    MailService: '' as IntlString,
+    ServiceAddress: '' as IntlString,
+    ServiceModel: '' as IntlString,
+    ServiceSecret: '' as IntlString,
+    MailAccount: '' as IntlString,
+    MailPassword: '' as IntlString,
+    SmtpHost: '' as IntlString,
+    SmtpPort: '' as IntlString,
+    ImapHost: '' as IntlString,
+    ImapPort: '' as IntlString,
+
     AddWahaAttachment: '' as IntlString,
     WahaLimitError: '' as IntlString,
     HistoryRunning: '' as IntlString,

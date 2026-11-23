@@ -1,5 +1,16 @@
 {
   "string": {
+    "RecognizerService": "Business card AI",
+    "MailService": "Prospect mail",
+    "ServiceAddress": "Service URL",
+    "ServiceModel": "Model",
+    "ServiceSecret": "API key",
+    "MailAccount": "Mailbox address",
+    "MailPassword": "Mailbox password",
+    "SmtpHost": "SMTP host",
+    "SmtpPort": "SMTP port",
+    "ImapHost": "IMAP host",
+    "ImapPort": "IMAP port",
     "AddWahaAttachment": "Attach file",
     "WahaLimitError": "This file exceeds the {limit} MB attachment limit.",
     "HistoryRunning": "Importing older chats… ({count} messages)",

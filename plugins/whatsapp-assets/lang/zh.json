@@ -1,5 +1,16 @@
 {
   "string": {
+    "RecognizerService": "名片 AI",
+    "MailService": "邮件",
+    "ServiceAddress": "服务地址",
+    "ServiceModel": "模型",
+    "ServiceSecret": "钥匙",
+    "MailAccount": "邮箱账号",
+    "MailPassword": "邮箱密码",
+    "SmtpHost": "SMTP 地址",
+    "SmtpPort": "SMTP 端口",
+    "ImapHost": "IMAP 地址",
+    "ImapPort": "IMAP 端口",
     "AddWahaAttachment": "附件",
     "WahaLimitError": "文件超过 {limit} MB 的媒体大小上限。",
     "HistoryRunning": "正在导入旧聊天…（已处理 {count} 条）",
