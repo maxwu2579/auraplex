@@ -15,6 +15,8 @@
 
 import type { AccountClient, Integration } from '@hcengineering/account-client'
 import type { PersonId, WorkspaceUuid } from '@hcengineering/core'
+import { randomBytes } from 'crypto'
+import { sessionName, WahaClient } from '../waha'
 import { ConnectionStore, validIds } from '../integrations'
 
 it('accepts only numeric identifiers', () => {
@@ -98,4 +100,41 @@ it('rejects a WAHA number already reserved by a different connection', async () 
   expect(updateIntegration).toHaveBeenCalledWith(expect.objectContaining({
     socialId: 'owner', data: expect.objectContaining({ wahaStatus: 'CONFLICT' })
   }))
+})
+
+it('replaces a rejected scoped key once and revokes the persisted key on unlink', async () => {
+  const first = randomBytes(16).toString('hex')
+  const second = randomBytes(16).toString('hex')
+  const allocator = randomBytes(16).toString('hex')
+  const name = sessionName('fake', 'fake-social')
+  const entry = { workspaceUuid: 'fake', socialId: 'fake-social', data: { wahaSession: name, wahaStatus: 'WORKING' } } as any
+  let saved = { secret: JSON.stringify({ id: 'old-id', key: first }) }
+  const drop = jest.fn()
+  const account = {
+    listIntegrations: async () => [entry],
+    getIntegrationSecret: async () => saved,
+    updateIntegrationSecret: async (value: typeof saved) => { saved = value },
+    deleteIntegrationSecret: drop
+  }
+  const requests = jest.fn(async (url: URL, init: RequestInit) => {
+    if (url.pathname === '/api/keys' && init.method === 'POST') {
+      return Response.json({ id: 'new-id', key: second })
+    }
+    if (url.pathname.startsWith('/api/keys/') && init.method === 'DELETE') return new Response('', { status: 200 })
+    if (url.pathname === '/api/sendText') {
+      if (new Headers(init.headers).get('X-Api-Key') === first) return new Response('', { status: 401 })
+      return Response.json({ id: 'sent' })
+    }
+    throw new Error('Unexpected synthetic request')
+  })
+  const config = { port: 0, accountsUrl: '', publicUrl: '', secret: '', graphVersion: '',
+    graphUrl: '', allowedOrigins: [], wahaUrl: 'http://127.0.0.1:1', wahaApiKey: allocator }
+  const request = requests as unknown as typeof fetch
+  const store = new ConnectionStore(account as any)
+  expect(await store.wahaRequest(entry, config, request,
+    async (scoped) => await new WahaClient(scoped, request).send(name, '15550100001', 'synthetic'))).toBe('sent')
+  expect(requests.mock.calls.filter(([url]) => url.pathname === '/api/keys')).toHaveLength(1)
+  expect(requests.mock.calls.filter(([url]) => url.pathname === '/api/sendText')).toHaveLength(2)
+  await store.revokeWahaKey(entry, new WahaClient(config, request))
+  expect(drop).toHaveBeenCalledTimes(1)
 })
