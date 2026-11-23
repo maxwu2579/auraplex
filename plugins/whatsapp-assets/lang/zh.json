@@ -1,5 +1,9 @@
 {
   "string": {
+    "AddWahaAttachment": "附件",
+    "WahaLimitError": "文件超过 {limit} MB 的媒体大小上限。",
+    "HistoryRunning": "正在导入旧聊天…（已处理 {count} 条）",
+    "HistoryFailed": "旧聊天导入失败，服务将重试。",
     "ServiceSettings": "服务设置",
     "Supervision": "WhatsApp 监督",
     "SupervisionBindingHint": "公司指定的监督人员可以查看这个号在 Auraplex 里的聊天记录。",

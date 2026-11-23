@@ -32,7 +32,8 @@
     type WhatsappTemplate
   } from '@hcengineering/whatsapp'
 
-  import { downloadWahaAttachment, getConnection, getTemplates, ConnectionError, type ConnectionState } from '../api'
+  import WahaAttachment from './WahaAttachment.svelte'
+  import { sendWahaAttachment, getConnection, getTemplates, ConnectionError, type ConnectionState } from '../api'
   import type { IntlString } from '@hcengineering/platform'
 
   export let channel: Channel
@@ -48,6 +49,8 @@
   let draft = ''
   let busy = false
   let attachmentError = false
+  let attachmentTooLarge = false
+  let fileInput: HTMLInputElement
   let connection: ConnectionState | undefined
   let error: IntlString | undefined
   const client = getClient()
@@ -114,6 +117,24 @@
   function retryTemplates (): void {
     templatesError = undefined
     templates = undefined
+  }
+
+  // Auraplex: both the picker and drag/drop use the authenticated binary attachment endpoint.
+  async function upload (file?: File): Promise<void> {
+    if (file === undefined || busy || connection?.provider !== 'waha' || !connection.connected) return
+    attachmentError = false
+    attachmentTooLarge = file.size > (connection.mediaLimitMb ?? 20) * 1024 * 1024
+    if (attachmentTooLarge) return
+    busy = true
+    try {
+      await sendWahaAttachment(channel._id, file, draft)
+      draft = ''
+    } catch {
+      attachmentError = true
+    } finally {
+      busy = false
+      if (fileInput !== undefined) fileInput.value = ''
+    }
   }
 
   async function send (): Promise<void> {
@@ -203,11 +224,7 @@
           {/if}
           <p>{message.content}</p>
           {#if message.mediaAvailable && message.wamid}
-            {@const id = message.wamid}
-            <Button label={whatsapp.string.WahaAttachment} on:click={() => {
-              attachmentError = false
-              void downloadWahaAttachment(id).catch(() => { attachmentError = true })
-            }} />
+            <WahaAttachment mediaId={message.wamid} />
           {/if}
           {#if message.direction === 'outgoing'}
             <div class="status" aria-live="polite"><Label label={statusLabels[message.status]} /></div>
@@ -227,7 +244,15 @@
     </div>
   </Scroller>
   {#if attachmentError}<p class="error" role="alert"><Label label={whatsapp.string.Failed} /></p>{/if}
-  <form class="composer" on:submit|preventDefault={send}>
+  <form class="composer" on:submit|preventDefault={send} on:dragover|preventDefault
+    on:drop|preventDefault={(event) => upload(event.dataTransfer?.files[0])}>
+    {#if connection?.provider === 'waha' && connection.connected}
+      <input type="file" hidden bind:this={fileInput} on:change={(event) => upload(event.currentTarget.files?.[0])} />
+      <Button label={whatsapp.string.AddWahaAttachment} disabled={busy} on:click={() => fileInput?.click()} />
+    {/if}
+    {#if attachmentTooLarge}<p class="error" role="alert">
+      <Label label={whatsapp.string.WahaLimitError} params={{ limit: connection?.mediaLimitMb ?? 20 }} />
+    </p>{/if}
     {#if !loaded}
       <!-- Wait for the messages so the 24 hour check does not flash the wrong mode. -->
     {:else if connection?.connected !== true}

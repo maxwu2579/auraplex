@@ -1,5 +1,9 @@
 {
   "string": {
+    "AddWahaAttachment": "Attach file",
+    "WahaLimitError": "This file exceeds the {limit} MB attachment limit.",
+    "HistoryRunning": "Importing older chats… ({count} messages)",
+    "HistoryFailed": "History import failed. The service will retry.",
     "ServiceSettings": "Service settings",
     "Supervision": "WhatsApp supervision",
     "SupervisionBindingHint": "Company-designated supervisors can read this number’s conversations in Auraplex.",

@@ -22,6 +22,9 @@ import whatsapp, { type WhatsappTemplate } from '@hcengineering/whatsapp'
 export interface ConnectionState {
   provider?: 'waha' | 'meta'
   status?: string
+  historyState?: string
+  historyCount?: number
+  mediaLimitMb?: number
   qr?: string
   displayPhone?: string
   connected: boolean
@@ -156,4 +159,39 @@ export async function downloadWahaAttachment (id: string): Promise<void> {
   link.download = 'whatsapp-attachment.bin'
   link.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export async function readWahaAttachment (id: string, scope?: { employee: string, channel: string }): Promise<{
+  blob: Blob, mime: string, name: string
+}> {
+  const base = getMetadata(whatsapp.metadata.WhatsappURL)
+  if (!base) throw new ConnectionError(whatsapp.string.Unavailable)
+  const result = await fetch(base.replace(/\/$/, '') + '/api/media', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + (getMetadata(presentation.metadata.Token) ?? ''), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...scope }), cache: 'no-store', signal: AbortSignal.timeout(15000)
+  })
+  if (!result.ok) throw new ConnectionError(whatsapp.string.Failed)
+  const mime = result.headers.get('X-WA-Mime') ?? 'application/octet-stream'
+  return {
+    blob: (await result.blob()).slice(0, undefined, mime),
+    mime,
+    name: decodeURIComponent(result.headers.get('X-WA-Name') ?? 'attachment')
+  }
+}
+
+export async function sendWahaAttachment (channel: string, file: File, caption: string): Promise<void> {
+  const base = getMetadata(whatsapp.metadata.WhatsappURL)
+  if (!base) throw new ConnectionError(whatsapp.string.Unavailable)
+  const result = await fetch(base.replace(/\/$/, '') + '/api/send-media', {
+    method: 'POST', body: file,
+    headers: {
+      Authorization: 'Bearer ' + (getMetadata(presentation.metadata.Token) ?? ''),
+      'Content-Type': 'application/octet-stream', 'X-WA-Channel': channel,
+      'X-WA-Name': encodeURIComponent(file.name), 'X-WA-Mime': file.type || 'application/octet-stream',
+      'X-WA-Caption': encodeURIComponent(caption.slice(0, 1000))
+    },
+    signal: AbortSignal.timeout(45000)
+  })
+  if (!result.ok) throw new ConnectionError(whatsapp.string.Failed)
 }

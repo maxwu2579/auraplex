@@ -53,6 +53,8 @@
       : ['STARTING', 'SCAN_QR_CODE'].includes(state.status ?? '') ? whatsapp.string.WahaWaiting
       : state.status === 'UNCONFIGURED' ? whatsapp.string.Unavailable : whatsapp.string.WahaDisconnected} />
       {state.displayPhone ?? ''}
+      {#if state.historyState === 'running'}<Label label={whatsapp.string.HistoryRunning} params={{ count: state.historyCount ?? 0 }} />{/if}
+      {#if state.historyState === 'failed'}<Label label={whatsapp.string.HistoryFailed} />{/if}
     </p>
   {:else}
   <p><Label label={whatsapp.string.PhoneNumberId} /> — {integration.data?.phoneNumberId}</p>

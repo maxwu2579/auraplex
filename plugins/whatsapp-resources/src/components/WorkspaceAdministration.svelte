@@ -6,6 +6,7 @@
   import { Button, Label, ModernCheckbox, SearchInput } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
   import { onMount } from 'svelte'
+  import WahaAttachment from './WahaAttachment.svelte'
   import { request } from '../api'
 
   type Employee = { id: string, name: string }
@@ -28,6 +29,7 @@
     id: string
     direction: string
     content: string
+    mediaId?: string
   }
 
   const owner = getCurrentAccount().role === AccountRole.Owner
@@ -179,9 +181,12 @@
       {#if chatName}<h3>{chatName}</h3>{/if}
       {#each messages as message (message.id)}
         <article>
-          <Label label={message.direction === 'outgoing' ? s.Sent : s.Received} />
+          <Label label={message.direction === 'outgoing' ? s.Sent : s.Messages} />
           · <time>{new Date(message.sendOn).toLocaleString()}</time>
           <p>{message.content}</p>
+          {#if message.mediaId && employee}
+            <WahaAttachment mediaId={message.mediaId} scope={{ employee, channel: message.channel }} />
+          {/if}
         </article>
       {/each}
     {/if}

@@ -115,6 +115,11 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    AddWahaAttachment: '' as IntlString,
+    WahaLimitError: '' as IntlString,
+    HistoryRunning: '' as IntlString,
+    HistoryFailed: '' as IntlString,
+
     ServiceSettings: '' as IntlString,
     Supervision: '' as IntlString,
     SupervisionBindingHint: '' as IntlString,
