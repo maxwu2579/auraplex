@@ -47,3 +47,29 @@ export function canChangeExecutionStatus (operations: Record<string, unknown>, i
   if (!('status' in operations)) return true
   return isApplicant && operations.status === 'cancelled'
 }
+
+export const applicationRelatedClasses = [
+  executionClass, approveRequestClass, attachmentClass, 'activity:class:ActivityMessage',
+  'process:class:ExecutionLog', 'process:class:ProcessLog'
+]
+
+export function canSeeApplication (application: {
+  id: string
+  type: string
+  createdBy: string | undefined
+  mySocialIds: ReadonlySet<string>
+  myApprovalCards: ReadonlySet<string>
+  myDepartmentTypes: ReadonlySet<string>
+}): boolean {
+  return (application.createdBy !== undefined && application.mySocialIds.has(application.createdBy)) ||
+    application.myApprovalCards.has(application.id) || application.myDepartmentTypes.has(application.type)
+}
+
+export function referencesHiddenApplication (value: unknown, hidden: ReadonlySet<string>): boolean {
+  if (value == null || typeof value !== 'object') return false
+  const record = value as Record<string, unknown>
+  return ['_id', 'card', 'attachedTo', 'objectId'].some((key) => {
+    const id = record[key]
+    return typeof id === 'string' && hidden.has(id)
+  })
+}

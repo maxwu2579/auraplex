@@ -89,7 +89,7 @@ test('indirect queries remove blocked lookup and association targets before read
   const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, { findAll } as unknown as Middleware)
   const options = { lookup: { product: materials }, associations: [['association', 1]] } as any
   const result = await guard.findAll(ctx, contact, {}, options)
-  expect((result[0] as typeof row).$lookup).toEqual({})
+  expect((result[0] as unknown as typeof row).$lookup).toEqual({})
   expect(findAll).toHaveBeenLastCalledWith(ctx, contact, {}, { lookup: {}, associations: [] })
   expect(await guard.findAll(ctx, contact, { '$lookup.product.name': 'secret' } as any, options)).toHaveLength(0)
 })
@@ -176,7 +176,8 @@ test('blocked WhatsApp messages are hidden and writes are rejected before reachi
   const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, { findAll, tx } as unknown as Middleware)
   expect(await guard.findAll(ctx, messageClass, {})).toHaveLength(0)
   expect(findAll.mock.calls.some(([, cls]) => cls === messageClass)).toBe(false)
-  await expect(guard.tx(ctx, [{ ...update({}), objectClass: messageClass, objectSpace: core.space.Workspace }])).rejects.toThrow()
+  const write = { ...update({}), objectClass: messageClass, objectSpace: core.space.Workspace }
+  await expect(guard.tx(ctx, [write])).rejects.toThrow()
   expect(tx).not.toHaveBeenCalled()
 })
 
@@ -193,7 +194,7 @@ test('workspace administrators can create departments with themselves as the onl
     administrators: [admin], supervisors: [], employees: [], readers: [],
     adminPermissions: ['manageMembers'], supervisorPermissions: [], employeePermissions: [], readerPermissions: []
   } })
-  const batch = (...txes: unknown[]) => ({ _class: core.class.TxApplyIf, txes }) as TxCUD<Doc>
+  const batch = (...txes: unknown[]) => ({ _class: core.class.TxApplyIf, txes }) as unknown as TxCUD<Doc>
   await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create, mixin('creator'))])).resolves.toBeDefined()
   await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create, mixin('other'))])).rejects.toThrow()
   await expect(guard.tx(ctx(AccountRole.Maintainer), [batch(create)])).rejects.toThrow()
@@ -256,4 +257,73 @@ test('a department administrator cannot assign application forms; a company main
     attributes: { applicationTypes: ['fake:class:Leave'] } } as unknown as TxCUD<Doc>
   await expect(guard.tx(context(AccountRole.User), [tx])).rejects.toThrow()
   await expect(guard.tx(context(AccountRole.Maintainer), [tx])).resolves.toBeDefined()
+})
+
+test('application reads and writes respect department, author and historical approval visibility', async () => {
+  const card = 'card:class:Card'
+  const leave = 'test:class:Leave'
+  const expense = 'test:class:Expense'
+  const comment = 'activity:class:ActivityMessage'
+  const approval = 'process:class:ApproveRequest'
+  const execution = 'process:class:Execution'
+  const process = 'process:class:Process'
+  const person = 'contact:class:Person'
+  const dept = 'hr:class:Department'
+  let archived = false
+  const cards = [
+    { _id: 'peer-leave', _class: leave, createdBy: 'peer' },
+    { _id: 'own-leave', _class: leave, createdBy: 'worker' },
+    { _id: 'peer-expense', _class: expense, createdBy: 'peer' },
+    { _id: 'normal-card', _class: card, createdBy: 'peer' }
+  ]
+  const request = { _id: 'req', _class: approval, user: 'new-approver', card: 'peer-expense' }
+  const run = { _id: 'run', _class: execution, card: 'peer-expense' }
+  const context = (uuid: string, role = AccountRole.User) => ({
+    contextData: { account: { uuid, role, socialIds: [uuid] }, broadcast: { txes: [] } }
+  }) as unknown as MeasureContext<SessionData>
+  const findAll = jest.fn(async (_ctx, cls, query = {}, options = {}) => {
+    if (cls === dept) return [{ _id: 'production', _class: dept, space: core.space.Workspace,
+      [departmentAccessMixin]: { administrators: ['admin'], supervisors: ['lead'], employees: ['worker'],
+        applicationTypes: [leave], archived } }]
+    if (cls === process) return [{ masterTag: leave }, { masterTag: expense }]
+    if (cls === card) {
+      const rows = query._class === undefined ? cards : cards.filter((row) => query._class.$in.includes(row._class))
+      return rows.slice(0, options.limit ?? rows.length)
+    }
+    if (cls === comment) return [{ _id: 'private-comment', _class: comment, attachedTo: 'peer-leave' }]
+    if (cls === person) return [{ _id: query.personUuid }]
+    if (cls === approval) return query.user === undefined || query.user === 'new-approver' ? [request] : []
+    if (cls === execution) return [run]
+    if (cls === core.class.TxCreateDoc && query['attributes.user'] === 'old-approver') return [{ objectId: 'req' }]
+    return []
+  })
+  const hierarchy = { hasClass: () => true, isMixin: () => false, hasMixin: () => true,
+    getClass: () => ({}), getDescendants: () => [], isDerived: (cls: string, base: string) =>
+      cls === base || (base === card && (cls === leave || cls === expense)) }
+  const next = { findAll, tx: async () => [] } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(context('worker'), { hierarchy } as unknown as PipelineContext, next)
+  const read = async (actor: string, role = AccountRole.User) =>
+    await guard.findAll(context(actor, role), card as Ref<Class<Doc>>, {}, { limit: 1, total: true })
+  const own = await read('worker')
+  expect(own.map((row) => row._id)).toEqual(['own-leave'])
+  expect(own.total).toBe(2)
+  expect((await read('admin')).total).toBe(3)
+  expect((await read('lead')).total).toBe(3)
+  expect((await read('outsider')).map((row) => row._id)).toEqual(['normal-card'])
+  for (const actor of ['old-approver', 'new-approver']) {
+    expect((await read(actor)).map((row) => row._id)).toEqual(['peer-expense'])
+    expect(await guard.findAll(context(actor), execution as Ref<Class<Doc>>, {})).toHaveLength(1)
+  }
+  expect(await guard.findAll(context('worker'), approval as Ref<Class<Doc>>, {})).toHaveLength(0)
+  expect(await guard.findAll(context('worker'), comment as Ref<Class<Doc>>, {})).toHaveLength(0)
+  for (const role of [AccountRole.Owner, AccountRole.Maintainer]) {
+    expect((await read('company-admin', role))[0]?._id).toBe('peer-leave')
+  }
+  const write = { _class: core.class.TxCreateDoc, objectClass: comment, objectSpace: core.space.Workspace,
+    objectId: 'comment', attachedTo: 'peer-leave', attributes: {} } as unknown as TxCUD<Doc>
+  await expect(guard.tx(context('worker'), [write])).rejects.toThrow()
+  archived = true
+  const archive = { ...update({}), objectClass: dept, objectId: 'production' as Ref<Doc>, objectSpace: core.space.Workspace }
+  await guard.tx(context('owner', AccountRole.Owner), [archive])
+  expect((await read('admin')).map((row) => row._id)).toEqual(['normal-card'])
 })

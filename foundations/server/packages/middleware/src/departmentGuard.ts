@@ -13,6 +13,8 @@ import core, {
   toFindResult,
   moduleRoles,
   type ModuleAccess,
+  applicationFormTypes,
+  applicationProcessClass,
   type ModuleExtra,
   type DepartmentModuleException,
   type DocumentQuery,
@@ -57,7 +59,10 @@ import {
 import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type OrderLike, type RoleOf } from './orderPolicy'
 import { isOwner, isSystem } from './utils'
 import {
+  applicationRelatedClasses,
   approveRequestClass,
+  canSeeApplication,
+  referencesHiddenApplication,
   attachmentClass,
   canChangeExecutionStatus,
   canChangeRequest,
@@ -163,6 +168,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   private departments: DepartmentRecord[] = []
   private bySpace = new Map<Ref<Space>, DepartmentRecord>()
   private dirty = true
+  private loadingDepartments?: Promise<void>
   private moduleConfiguration?: Promise<ModuleSettingsDoc | undefined>
   private readonly grants = new Map<string, Promise<DepartmentModuleException | undefined>>()
 
@@ -175,12 +181,28 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   }
 
   private async load (ctx: MeasureContext): Promise<void> {
+    if (this.loadingDepartments !== undefined) {
+      await this.loadingDepartments
+      await this.load(ctx)
+      return
+    }
     if (!this.dirty) return
     this.dirty = false
     if (!this.context.hierarchy.hasClass(departmentClass)) return
-    const docs = (await this.next?.findAll(ctx, departmentClass, {})) ?? []
-    this.departments = docs.flatMap((doc) => readDepartment(doc) ?? [])
-    this.bySpace = new Map(this.departments.flatMap((d) => d.spaces.map((space) => [space, d] as const)))
+    const pending = (async (): Promise<void> => {
+      const docs = (await this.next?.findAll(ctx, departmentClass, {})) ?? []
+      this.departments = docs.flatMap((doc) => readDepartment(doc) ?? [])
+      this.bySpace = new Map(this.departments.flatMap((d) => d.spaces.map((space) => [space, d] as const)))
+    })()
+    this.loadingDepartments = pending
+    try {
+      await pending
+    } catch (err) {
+      this.dirty = true
+      throw err
+    } finally {
+      this.loadingDepartments = undefined
+    }
   }
 
   private moduleDefaults () {
@@ -237,6 +259,62 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (alias === 'materials' || alias === 'prospects') return alias
   }
 
+  // Auraplex: resolve private application IDs once per request, before filtering rows or totals.
+  private async hiddenApplications (ctx: MeasureContext<SessionData>): Promise<Set<string>> {
+    const account = ctx.contextData.account
+    const hierarchy = this.context.hierarchy
+    const cardClass = cardBaseClass as Ref<Class<Doc>>
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer ||
+      !hierarchy.hasClass(applicationProcessClass) || !hierarchy.hasClass(cardClass)) return new Set()
+    const forms = applicationFormTypes(hierarchy, (await this.next?.findAll(ctx, applicationProcessClass, {})) ?? [])
+    if (forms.length === 0) return new Set()
+    const expand = (types: Ref<Class<Doc>>[]): Ref<Class<Doc>>[] =>
+      [...new Set(types.flatMap((type) => [type, ...hierarchy.getDescendants(type) as Ref<Class<Doc>>[]]))]
+    await this.load(ctx)
+    const assignedTypes = new Set(this.departments.flatMap((department) =>
+      !department.archived && (department.members.admin.includes(account.uuid) || department.members.supervisor.includes(account.uuid))
+        ? forms.filter((type) => department.applicationTypes.includes(type))
+        : []))
+    const myDepartmentTypes = new Set(expand([...assignedTypes]))
+    const [cards, person] = await Promise.all([
+      this.next?.findAll(ctx, cardClass, { _class: { $in: expand(forms) } }, {
+        projection: { _id: 1, _class: 1, createdBy: 1 }
+      }),
+      this.next?.findAll(ctx, 'contact:class:Person' as Ref<Class<Doc>>, { personUuid: account.uuid }, { limit: 1 })
+    ])
+    if (cards == null || cards.length === 0) return new Set()
+    const myApprovalCards = new Set<string>()
+    if (person?.[0] !== undefined) {
+      type ApprovalRecord = Doc & { card: Ref<Doc>, user: Ref<Doc> }
+      const requestClass = approveRequestClass as Ref<Class<ApprovalRecord>>
+      const user = person[0]._id
+      const [requests, assigned, reassigned] = await Promise.all([
+        this.next?.findAll(ctx, requestClass, { user }),
+        this.next?.findAll(ctx, core.class.TxCreateDoc, { objectClass: requestClass, 'attributes.user': user }),
+        this.next?.findAll(ctx, core.class.TxUpdateDoc, { objectClass: requestClass, 'operations.user': user })
+      ])
+      for (const request of requests ?? []) myApprovalCards.add(request.card)
+      const previousIds = [...new Set([...(assigned ?? []), ...(reassigned ?? [])].map((tx) => tx.objectId as Ref<ApprovalRecord>))]
+      if (previousIds.length > 0) {
+        const previous = await this.next?.findAll(ctx, requestClass, { _id: { $in: previousIds } })
+        for (const request of previous ?? []) myApprovalCards.add(request.card)
+      }
+    }
+    const mySocialIds = new Set(account.socialIds)
+    return new Set(cards.filter((card) => !canSeeApplication({
+      id: card._id, type: card._class, createdBy: card.createdBy, mySocialIds, myApprovalCards, myDepartmentTypes
+    })).map((card) => card._id))
+  }
+
+  private applicationReadClass (_class: Ref<Class<Doc>>): boolean {
+    const hierarchy = this.context.hierarchy
+    if (!hierarchy.hasClass(_class) || typeof hierarchy.isDerived !== 'function') return false
+    return [cardBaseClass, ...applicationRelatedClasses, core.class.Tx].some((id) => {
+      const base = id as Ref<Class<Doc>>
+      return hierarchy.hasClass(base) && (hierarchy.isDerived(_class, base) || hierarchy.isDerived(base, _class))
+    })
+  }
+
   override async findAll<T extends Doc> (
     ctx: MeasureContext<SessionData>,
     _class: Ref<Class<T>>,
@@ -246,10 +324,15 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     // Internal loads (e.g. space security init) run without a user context.
     if (ctx.contextData === undefined || isSystem(ctx.contextData.account, ctx)) return await this.provideFindAll(ctx, _class, query, options)
     const allowed = await this.moduleAccess(ctx)
-    if (allowed === undefined) return await this.provideFindAll(ctx, _class, query, options)
+    const canSeeAll = isOwner(ctx.contextData.account, ctx) || ctx.contextData.account.role === AccountRole.Maintainer
+    const joins = options?.lookup !== undefined || options?.associations !== undefined
+    const hidden = !canSeeAll && (joins || this.applicationReadClass(_class))
+      ? await this.hiddenApplications(ctx)
+      : new Set<string>()
+    if (allowed === undefined && hidden.size === 0) return await this.provideFindAll(ctx, _class, query, options)
     const canRead = (cls: Ref<Class<Doc>>): boolean => {
       const alias = this.protectedModule(cls)
-      return alias === undefined || allowed(alias) !== 'none'
+      return alias === undefined || allowed?.(alias) !== 'none'
     }
     if (!canRead(_class)) return toFindResult([])
     let deniedLookup = false
@@ -272,7 +355,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     }
     const lookup = filterLookup(options?.lookup) as FindOptions<T>['lookup']
     // A filter or sort on a removed join must not expose matching rows or counts.
-    if (deniedLookup && JSON.stringify([query, options?.sort]).includes('$lookup.')) return toFindResult([])
+    if ((deniedLookup || (hidden.size > 0 && joins)) && /\$(lookup|associations)\./.test(JSON.stringify([query, options?.sort]))) return toFindResult([])
     const filterAssociations = (entries: AssociationQuery[] | undefined): AssociationQuery[] | undefined =>
       entries?.flatMap((entry): AssociationQuery[] => {
         const [id, direction, nested] = entry
@@ -282,16 +365,24 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         return [safeNested === undefined ? [id, direction] : [id, direction, safeNested]]
       })
     const associations = filterAssociations(options?.associations)
+    // Filter before applying the client's limit so a count or empty first page cannot disclose hidden rows.
+    const filterRoot = hidden.size > 0 && this.applicationReadClass(_class)
     const result = await this.provideFindAll(ctx, _class, query,
-      options === undefined ? undefined : { ...options, lookup, associations })
-    if (lookup === undefined && options?.associations === undefined) return result
+      options === undefined ? undefined : {
+        ...options, lookup, associations,
+        ...(filterRoot ? { limit: undefined, projection: undefined } : {})
+      })
+    if (!filterRoot && lookup === undefined && options?.associations === undefined) return result
 
     const clean = (value: unknown): unknown => {
       if (Array.isArray(value)) return value.map(clean).filter((item) => item !== undefined)
       if (value == null || typeof value !== 'object') return value
+      if (referencesHiddenApplication(value, hidden)) return undefined
       const doc = value as WithLookup<Doc>
       if (typeof doc._class === 'string') {
-        if (!canRead(doc._class)) return undefined
+        if (!canRead(doc._class) ||
+          referencesHiddenApplication((doc as unknown as TxCreateDoc<Doc>).attributes, hidden) ||
+          referencesHiddenApplication((doc as unknown as TxUpdateDoc<Doc>).operations, hidden)) return undefined
         return {
           ...doc,
           ...(doc.$lookup === undefined ? {} : { $lookup: clean(doc.$lookup) }),
@@ -303,7 +394,18 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         return safe === undefined ? [] : [[key, safe]]
       }))
     }
-    return toFindResult(result.map((doc) => clean(doc) as T).filter((doc) => doc !== undefined), result.total)
+    const safeLookupMap = clean(result.lookupMap) as typeof result.lookupMap
+    const visible = result.map((doc) => clean(doc) as T).filter((doc) => doc !== undefined)
+    if (!filterRoot) return toFindResult(visible, result.total, safeLookupMap)
+    const page = options?.limit === undefined ? visible : visible.slice(0, options.limit)
+    // Application reads keep the metadata used by the existing client even for projected requests.
+    if (options?.projection !== undefined) {
+      const inclusion = Object.values(options.projection).some((flag) => flag === 1)
+      const keys = new Set(['_id', '_class', ...Object.keys(options.projection)])
+      return toFindResult(page.map((doc) => Object.fromEntries(Object.entries(doc).filter(([key]) =>
+        (!inclusion || keys.has(key)) && options.projection?.[key as keyof T] !== 0)) as T), visible.length, safeLookupMap)
+    }
+    return toFindResult(page, visible.length, safeLookupMap)
   }
 
   override async searchFulltext (
@@ -382,10 +484,9 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       await this.load(ctx)
       for (const tx of txes) await this.check(ctx, tx)
     }
-    if (txes.some((tx) => this.touchesDepartments(tx))) this.dirty = true
     const result = await this.provideTx(ctx, txes)
     // Space ids are written back by the sync trigger as derived transactions.
-    if (ctx.contextData.broadcast.txes.some((tx) => this.touchesDepartments(tx))) this.dirty = true
+    if ([...txes, ...ctx.contextData.broadcast.txes].some((tx) => this.touchesDepartments(tx))) this.dirty = true
     for (const tx of [...txes, ...ctx.contextData.broadcast.txes]) this.invalidateModules(tx)
     return result
   }
@@ -407,6 +508,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const cud = tx as TxCUD<Doc>
     if (cud._class === core.class.TxMixin &&
       (cud as TxMixin<Doc, Doc>).mixin === 'departments:mixin:DepartmentAutoMembers') forbidden()
+    await this.checkApplicationVisibility(ctx, cud)
     await this.checkApplications(ctx, cud)
     if (cud.objectClass === moduleSettings || cud.objectClass === moduleGrant) {
       await this.checkModuleConfiguration(ctx, cud)
@@ -463,6 +565,21 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   ): void {
     const allowed = effectivePermissions(department.members, department.policy, ctx.contextData.account.uuid)
     if (department.archived || !allowed.has(permission)) forbidden()
+  }
+
+  private async checkApplicationVisibility (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    const account = ctx.contextData.account
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return
+    if (!this.applicationReadClass(tx.objectClass) && tx.attachedTo === undefined) return
+    const hidden = await this.hiddenApplications(ctx)
+    if (hidden.size === 0) return
+    const options = tx as TxCUD<Doc> & { attributes?: unknown, operations?: unknown }
+    if (referencesHiddenApplication(tx, hidden) || referencesHiddenApplication(options.attributes, hidden) ||
+      referencesHiddenApplication(options.operations, hidden)) forbidden()
+    if (tx._class !== core.class.TxCreateDoc) {
+      const existing = await this.findOne(ctx, tx.objectClass, tx.objectId)
+      if (referencesHiddenApplication(existing, hidden)) forbidden()
+    }
   }
 
   /** Applications: approved content stays fixed, steps are decided by their own approver, the applicant withdraws. */
@@ -687,8 +804,9 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         next.autoJoin !== undefined || next.archived || next.supervisorsSeeTracking || next.employeesSeeTracking) forbidden()
     }
     const trustedConfiguration = owner || initializing
-    const empty = { admin: [], supervisor: [], employee: [], reader: [] }
-    const old = before ?? { members: empty, policy: empty, archived: false }
+    const members: DepartmentMembers = { admin: [], supervisor: [], employee: [], reader: [] }
+    const policy: DepartmentPolicy = { admin: [], supervisor: [], employee: [], reader: [] }
+    const old = before ?? { members, policy, archived: false }
     if (!owner && next.archived !== old.archived) forbidden()
     // Whether supervisors see tracking is decided by super admins; staff by the department admin.
     const before2 = before ?? { supervisorsSeeTracking: false, employeesSeeTracking: false }

@@ -6,7 +6,7 @@
 // obtain a copy of the License at https://www.eclipse.org/legal/epl-2.0
 //
 
-import {
+import { canSeeApplication,
   canChangeExecutionStatus,
   canChangeRequest,
   isApplicationLocked,
@@ -44,4 +44,14 @@ describe('application policy', () => {
     expect(canChangeExecutionStatus({ status: 'done' }, true)).toBe(false)
     expect(canChangeExecutionStatus({ cancelReason: 'x' }, false)).toBe(true)
   })
+})
+
+test('application visibility comes from its author, an approval assignment or a responsible department', () => {
+  const application = { id: 'leave1', type: 'Leave', createdBy: 'author',
+    mySocialIds: new Set<string>(), myApprovalCards: new Set<string>(), myDepartmentTypes: new Set<string>() }
+  expect(canSeeApplication(application)).toBe(false)
+  expect(canSeeApplication({ ...application, mySocialIds: new Set(['author']) })).toBe(true)
+  expect(canSeeApplication({ ...application, myApprovalCards: new Set(['leave1']) })).toBe(true)
+  expect(canSeeApplication({ ...application, myDepartmentTypes: new Set(['Leave']) })).toBe(true)
+  expect(canSeeApplication({ ...application, myDepartmentTypes: new Set(['Expense']) })).toBe(false)
 })
