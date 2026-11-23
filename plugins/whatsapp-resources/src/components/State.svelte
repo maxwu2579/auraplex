@@ -19,12 +19,13 @@
   import { Label } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
   import { onMount } from 'svelte'
-  import { ConnectionError, getConnection } from '../api'
+  import { ConnectionError, getConnection, type ConnectionState } from '../api'
   export let integration: Integration
   let unavailable = false
+  let state: ConnectionState | undefined
 
   onMount(() => {
-    void getConnection().catch((error) => {
+    void getConnection().then((result) => { state = result }).catch((error) => {
       unavailable = error instanceof ConnectionError && error.label === whatsapp.string.Unavailable
     })
   })
@@ -33,6 +34,12 @@
 <div class="state">
   {#if unavailable}
     <p role="status"><Label label={whatsapp.string.Unavailable} /></p>
+  {:else if state?.provider === 'waha'}
+    <p>WAHA · <Label label={state.connected ? whatsapp.string.Connected
+      : ['STARTING', 'SCAN_QR_CODE'].includes(state.status ?? '') ? whatsapp.string.WahaWaiting
+      : state.status === 'UNCONFIGURED' ? whatsapp.string.Unavailable : whatsapp.string.WahaDisconnected} />
+      {state.displayPhone ?? ''}
+    </p>
   {:else}
   <p><Label label={whatsapp.string.PhoneNumberId} /> — {integration.data?.phoneNumberId}</p>
   <p><Label label={whatsapp.string.WabaId} /> — {integration.data?.wabaId}</p>

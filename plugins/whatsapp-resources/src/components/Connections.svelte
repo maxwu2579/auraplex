@@ -35,7 +35,10 @@
     <ul>
       {#each entries as entry}
         <li>{personNames.get(entry.person) ?? entry.person} · {entry.displayPhone ?? entry.phoneNumberId} · {entry.connectedOn === undefined ? '—' : new Date(entry.connectedOn).toLocaleString()} ·
-          <Label label={entry.status === 'valid' ? whatsapp.string.Connected : entry.status === 'invalid' ? whatsapp.string.Failed : whatsapp.string.ConnectionUnknown} />
+          {#if entry.provider === 'waha'}WAHA{:else}<Label label={whatsapp.string.MetaOfficial} />{/if} ·
+          <Label label={entry.provider === 'waha'
+            ? entry.status === 'WORKING' ? whatsapp.string.Connected : ['STARTING', 'SCAN_QR_CODE'].includes(entry.status ?? '') ? whatsapp.string.WahaWaiting : whatsapp.string.WahaDisconnected
+            : entry.status === 'valid' ? whatsapp.string.Connected : entry.status === 'invalid' ? whatsapp.string.Failed : whatsapp.string.ConnectionUnknown} />
         </li>
       {/each}
     </ul>

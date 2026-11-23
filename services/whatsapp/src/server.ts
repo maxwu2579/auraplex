@@ -248,7 +248,8 @@ export function createApp (
       .then(async (entries) => {
         const summaries = await Promise.all(
           entries
-            .filter((entry) => entry.workspaceUuid === res.locals.workspace)
+            .filter((entry) => entry.workspaceUuid === res.locals.workspace &&
+              (waha === undefined ? entry.data?.phoneNumberId !== undefined : entry.data?.wahaSession !== undefined))
             .map(async (entry) => waha !== undefined ? {
               person: entry.socialId,
               provider: 'waha',
