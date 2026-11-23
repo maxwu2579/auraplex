@@ -15,8 +15,10 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express'
 import cors from 'cors'
-import { AccountRole } from '@hcengineering/core'
+import { AccountRole, type WorkspaceUuid, type AccountUuid, type Ref } from '@hcengineering/core'
 import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
+import type { Channel } from '@hcengineering/contact'
+import type { WorkspaceReceiver } from './workspaceClient'
 import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
@@ -32,7 +34,7 @@ export function createApp (
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
   request: typeof fetch = fetch,
   notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>,
-  audit?: (workspace: string, actor: string, label: string) => Promise<void>
+  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages'>
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
@@ -261,9 +263,52 @@ export function createApp (
       }
       const members = await res.locals.account.getWorkspaceMembers() as Array<{ person: string }>
       const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)))
-      await audit?.(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
+      await receiver?.auditAccess(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
       res.json(publicSettings(result.value))
     })().catch(() => res.status(400).json({ code: 'InvalidParameters' }))
+  })
+
+  const supervisorAllowed = async (res: Response): Promise<boolean> => {
+    const settings = await store.serviceSettings(res.locals.workspace)
+    return settings.supervisors?.includes(res.locals.actor) === true
+  }
+
+  app.get('/api/supervision', (_req, res) => {
+    void supervisorAllowed(res).then((allowed) => res.json({ allowed })).catch(() => res.sendStatus(503))
+  })
+
+  app.get('/api/supervision/employees', (_req, res) => {
+    void (async () => {
+      if (!await supervisorAllowed(res)) { res.sendStatus(403); return }
+      if (receiver === undefined) { res.sendStatus(503); return }
+      res.json(await receiver.supervisionEmployees(res.locals.workspace))
+    })().catch(() => res.sendStatus(503))
+  })
+
+  app.get('/api/supervision/messages', (req, res) => {
+    void (async () => {
+      if (!await supervisorAllowed(res)) { res.sendStatus(403); return }
+      if (receiver === undefined) { res.sendStatus(503); return }
+      const { employee, channel, after, before } = req.query
+      if (typeof employee !== 'string' || typeof channel !== 'string' && channel !== undefined) {
+        res.sendStatus(400)
+        return
+      }
+      const timestamp = (value: unknown): number | undefined =>
+        typeof value === 'string' && /^\d{1,15}$/.test(value) ? Number(value) : undefined
+      const workspace = res.locals.workspace as WorkspaceUuid
+      const rows = await receiver.supervisionMessages(workspace, employee as AccountUuid, channel as Ref<Channel> | undefined,
+        timestamp(after), timestamp(before))
+      if (channel !== undefined) {
+        await receiver.auditAccess(workspace, res.locals.actor, 'WhatsApp supervision · employee ' + employee, channel)
+        res.json(rows)
+        return
+      }
+      // List mode returns only conversation summaries and does not expose any unaudited message body.
+      const summaries = new Map<string, { channel: string, phone: string, name: string, sendOn: number }>()
+      for (const { channel, phone, name, sendOn } of rows) summaries.set(channel, { channel, phone, name, sendOn })
+      res.json([...summaries.values()].reverse())
+    })().catch(() => res.sendStatus(503))
   })
 
   const wahaState = async (res: Response, withQr = false): Promise<unknown> => {

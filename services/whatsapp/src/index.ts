@@ -67,7 +67,7 @@ async function main (): Promise<void> {
     { fromBegining: true }
   )
   outgoing.start()
-  const server = createApp(config, store, inbox, fetch, async (entry) => await receiver.notifyDisconnected(entry)).listen(config.port, () => {
+  const server = createApp(config, store, inbox, fetch, async (entry) => await receiver.notifyDisconnected(entry), receiver).listen(config.port, () => {
     console.log('WhatsApp service started', { port: config.port })
   })
   const shutdown = (): void => {

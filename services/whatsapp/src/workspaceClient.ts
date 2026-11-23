@@ -22,6 +22,7 @@ import core, {
   systemAccountUuid,
   type AccountUuid,
   type Client,
+  type Class,
   type Doc,
   type Ref,
   type WorkspaceUuid,
@@ -37,6 +38,10 @@ import { normalizePhone, type IncomingMessage, type MessageStatusUpdate, type We
 export function stableId<T extends Doc> (kind: string, ...parts: string[]): Ref<T> {
   return ('whatsapp-' + kind + '-' + createHash('sha256').update(JSON.stringify(parts)).digest('hex')) as Ref<T>
 }
+
+const auditClass = 'departments:class:AuditEvent' as Ref<Class<Doc & {
+  kind: 'view', actor: string, label: string, objectId?: string, objectClass?: string, count: number, firstOn: number, lastOn: number
+}>>
 
 export class WorkspaceReceiver {
   private readonly clients = new Map<WorkspaceUuid, Promise<TxOperations>>()
@@ -62,6 +67,44 @@ export class WorkspaceReceiver {
       this.clients.delete(workspace)
       throw err
     }
+  }
+
+  // Auraplex: this system client is reached only after the HTTP API authorizes supervision.
+  async auditAccess (workspace: WorkspaceUuid, actor: string, label: string, customer?: string): Promise<void> {
+    const client = await this.getClient(workspace)
+    if (!client.getHierarchy().hasClass(auditClass)) return
+    const time = Date.now()
+    await client.createDoc(auditClass, core.space.Workspace, {
+      kind: 'view', actor, label, count: 1, firstOn: time, lastOn: time,
+      ...(customer === undefined ? {} : { objectId: customer, objectClass: contact.class.Channel })
+    })
+  }
+
+  async supervisionEmployees (workspace: WorkspaceUuid): Promise<Array<{ id: AccountUuid, name: string }>> {
+    const client = await this.getClient(workspace)
+    const people = await client.findAll(contact.mixin.Employee, {})
+    return people.flatMap((employee) => employee.personUuid == null ? [] : [{ id: employee.personUuid, name: employee.name }])
+  }
+
+  async supervisionMessages (
+    workspace: WorkspaceUuid, owner: AccountUuid, channel?: Ref<Channel>, after?: number, before?: number
+  ): Promise<Array<{ id: string, channel: string, phone: string, name: string, content: string, direction: string, sendOn: number, mediaId?: string }>> {
+    const client = await this.getClient(workspace)
+    const messages = await client.findAll(whatsapp.class.Message, {
+      owner, ...(channel === undefined ? {} : { attachedTo: channel }),
+      ...(after === undefined && before === undefined ? {} : {
+        sendOn: { ...(after === undefined ? {} : { $gte: after }), ...(before === undefined ? {} : { $lte: before }) }
+      })
+    })
+    const channels = await client.findAll(contact.class.Channel, { _id: { $in: [...new Set(messages.map((msg) => msg.attachedTo as Ref<Channel>))] } })
+    const customers = await client.findAll(contact.class.Contact, { _id: { $in: channels.map((doc) => doc.attachedTo) } })
+    const names = new Map(customers.map((customer) => [customer._id, customer.name]))
+    const channelNames = new Map(channels.map((doc) => [doc._id, names.get(doc.attachedTo)]))
+    return messages.sort((a, b) => a.sendOn - b.sendOn).map((msg) => ({
+      id: msg._id, channel: msg.attachedTo, phone: msg.phone,
+      name: channelNames.get(msg.attachedTo as Ref<Channel>) ?? msg.phone, content: msg.content,
+      direction: msg.direction, sendOn: msg.sendOn, mediaId: msg.mediaAvailable === true ? msg.wamid : undefined
+    }))
   }
 
   // Auraplex: send just one inbox notification per disconnected connection, only to its owner.
