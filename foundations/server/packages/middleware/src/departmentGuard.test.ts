@@ -1,5 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import core, { AccountRole, type Class, type Doc, type MeasureContext, type Ref, type SessionData, type TxCUD } from '@hcengineering/core'
+import core, { AccountRole, type Class, type Doc, type MeasureContext, type OperationDomain, type Ref, type SessionData, type TxCUD } from '@hcengineering/core'
 import type { Middleware, PipelineContext } from '@hcengineering/server-core'
 import { DepartmentGuardMiddleware, departmentAccessMixin, isCounterUpdate, readDepartment } from './departmentGuard'
 
@@ -307,6 +307,9 @@ test('application reads and writes respect department, author and historical app
       cls === base || (base === card && (cls === leave || cls === expense)) }
   const next = {
     findAll,
+    domainRequest: jest.fn(async (_ctx, domain) => ({
+      domain, value: [{ cardId: 'peer-leave' }, { cardId: 'own-leave' }]
+    })),
     searchFulltext: async () => ({
       docs: [
         { doc: cards[0], id: cards[0]._id, title: 'Private test application' },
@@ -344,6 +347,23 @@ test('application reads and writes respect department, author and historical app
   const write = { _class: core.class.TxCreateDoc, objectClass: comment, objectSpace: core.space.Workspace,
     objectId: 'comment', attachedTo: 'peer-leave', attributes: {} } as unknown as TxCUD<Doc>
   await expect(guard.tx(context('worker'), [write])).rejects.toThrow()
+  const communication = 'communication' as OperationDomain
+  const list = await guard.domainRequest(context('worker'), communication, { findNotifications: { params: {} } })
+  expect(list.value).toEqual([{ cardId: 'own-leave' }])
+  const messages = await guard.domainRequest(context('worker'), communication, {
+    findMessagesMeta: { params: { cardId: 'peer-leave' } }
+  })
+  expect(messages.value).toEqual([])
+  await expect(guard.domainRequest(context('worker'), communication, { event: { cardId: 'peer-leave' } })).rejects.toThrow()
+  expect((await guard.domainRequest(context('worker'), communication, {
+    subscribeCard: { cardId: 'peer-leave' }
+  })).value).toBeUndefined()
+  expect((await guard.domainRequest(context('worker'), communication, {
+    filterApplicationBroadcast: [{ cardId: 'peer-leave' }, { cardId: 'own-leave' }]
+  })).value).toEqual([{ cardId: 'own-leave' }])
+  const previousCalls = findAll.mock.calls.filter(([, cls]) => cls === process).length
+  await read('admin')
+  expect(findAll.mock.calls.filter(([, cls]) => cls === process)).toHaveLength(previousCalls)
   archived = true
   const archive = { ...update({}), objectClass: dept, objectId: 'production' as Ref<Doc>, objectSpace: core.space.Workspace }
   await guard.tx(context('owner', AccountRole.Owner), [archive])

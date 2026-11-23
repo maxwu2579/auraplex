@@ -262,30 +262,68 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     if (alias === 'materials' || alias === 'prospects') return alias
   }
 
-  // Auraplex: resolve private application IDs once per request, before filtering rows or totals.
+  // Auraplex: coalesce live reads per identity, and keep historical approval reads separate.
+  private readonly hiddenApplicationIds = new Map<string, { expires: number, value: Promise<Set<string>> }>()
+  private readonly approvalCards = new Map<string, { expires: number, value: Promise<Set<string>> }>()
+
+  private async cachedApplicationIds (
+    ctx: MeasureContext<SessionData>, cache: Map<string, { expires: number, value: Promise<Set<string>> }>,
+    calculate: () => Promise<Set<string>>, maxAge = 30_000
+  ): Promise<Set<string>> {
+    const { account, grant } = ctx.contextData
+    const key = JSON.stringify([account.uuid, account.role, account.socialIds, grant?.spaces])
+    let entry = cache.get(key)
+    if (entry === undefined || entry.expires <= Date.now()) {
+      if (cache.size >= 128) cache.clear()
+      entry = { expires: Date.now() + maxAge, value: calculate() }
+      cache.set(key, entry)
+    }
+    try {
+      const value = await entry.value
+      // A write can invalidate this decision while the database reads are in flight.
+      if (cache.get(key) !== entry) return await this.cachedApplicationIds(ctx, cache, calculate, maxAge)
+      return value
+    } catch (err) {
+      if (cache.get(key) === entry) cache.delete(key)
+      throw err
+    }
+  }
+
   private async hiddenApplications (ctx: MeasureContext<SessionData>): Promise<Set<string>> {
-    const account = ctx.contextData.account
-    const hierarchy = this.context.hierarchy
-    const cardClass = cardBaseClass as Ref<Class<Doc>>
-    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer ||
-      !hierarchy.hasClass(applicationProcessClass) || !hierarchy.hasClass(cardClass)) return new Set()
-    const forms = applicationFormTypes(hierarchy, (await this.next?.findAll(ctx, applicationProcessClass, {})) ?? [])
-    if (forms.length === 0) return new Set()
-    const expand = (types: Ref<Class<Doc>>[]): Ref<Class<Doc>>[] =>
-      [...new Set(types.flatMap((type) => [type, ...hierarchy.getDescendants(type) as Ref<Class<Doc>>[]]))]
-    await this.load(ctx)
-    const assignedTypes = new Set(this.departments.flatMap((department) =>
-      !department.archived && (department.members.admin.includes(account.uuid) || department.members.supervisor.includes(account.uuid))
-        ? forms.filter((type) => department.applicationTypes.includes(type))
-        : []))
-    const myDepartmentTypes = new Set(expand([...assignedTypes]))
-    const [cards, person] = await Promise.all([
-      this.next?.findAll(ctx, cardClass, { _class: { $in: expand(forms) } }, {
-        projection: { _id: 1, _class: 1, createdBy: 1 }
-      }),
-      this.next?.findAll(ctx, 'contact:class:Person' as Ref<Class<Doc>>, { personUuid: account.uuid }, { limit: 1 })
-    ])
-    if (cards == null || cards.length === 0) return new Set()
+    const { account } = ctx.contextData
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) return new Set()
+    return await this.cachedApplicationIds(ctx, this.hiddenApplicationIds, () => this.calculateHiddenApplications(ctx))
+  }
+
+  private invalidateApplicationIds (transactions: Tx[]): void {
+    for (const tx of transactions) {
+      if (tx._class === core.class.TxApplyIf) {
+        this.invalidateApplicationIds((tx as TxApplyIf).txes)
+        continue
+      }
+      if (!TxProcessor.isExtendsCUD(tx._class)) continue
+      const { objectClass, objectSpace } = tx as TxCUD<Doc>
+      const approvalChanged = objectClass === approveRequestClass || objectClass === 'contact:class:Person'
+      const hierarchy = this.context.hierarchy
+      const card = cardBaseClass as Ref<Class<Doc>>
+      const cardChanged = typeof hierarchy.isDerived === 'function' && hierarchy.hasClass(card) &&
+        hierarchy.hasClass(objectClass) && hierarchy.isDerived(objectClass, card)
+      if (objectClass === departmentClass) this.dirty = true
+      if (approvalChanged) this.approvalCards.clear()
+      if (approvalChanged || cardChanged || objectClass === departmentClass ||
+        objectClass === applicationProcessClass || objectSpace === core.space.Model) this.hiddenApplicationIds.clear()
+    }
+  }
+
+  override async handleBroadcast (ctx: MeasureContext<SessionData>): Promise<void> {
+    this.invalidateApplicationIds(ctx.contextData.broadcast.txes)
+    await super.handleBroadcast(ctx)
+  }
+
+  private async findApprovalCards (ctx: MeasureContext<SessionData>): Promise<Set<string>> {
+    const person = await this.next?.findAll(ctx, 'contact:class:Person' as Ref<Class<Doc>>, {
+      personUuid: ctx.contextData.account.uuid
+    }, { limit: 1 })
     const myApprovalCards = new Set<string>()
     if (person?.[0] !== undefined) {
       type ApprovalRecord = Doc & { card: Ref<Doc>, user: Ref<Doc> }
@@ -303,6 +341,30 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         for (const request of previous ?? []) myApprovalCards.add(request.card)
       }
     }
+    return myApprovalCards
+  }
+
+  private async calculateHiddenApplications (ctx: MeasureContext<SessionData>): Promise<Set<string>> {
+    const account = ctx.contextData.account
+    const hierarchy = this.context.hierarchy
+    const cardClass = cardBaseClass as Ref<Class<Doc>>
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer ||
+      !hierarchy.hasClass(applicationProcessClass) || !hierarchy.hasClass(cardClass)) return new Set()
+    const forms = applicationFormTypes(hierarchy, (await this.next?.findAll(ctx, applicationProcessClass, {})) ?? [])
+    if (forms.length === 0) return new Set()
+    const expand = (types: Ref<Class<Doc>>[]): Ref<Class<Doc>>[] =>
+      [...new Set(types.flatMap((type) => [type, ...hierarchy.getDescendants(type) as Ref<Class<Doc>>[]]))]
+    await this.load(ctx)
+    const assignedTypes = new Set(this.departments.flatMap((department) =>
+      !department.archived && (department.members.admin.includes(account.uuid) || department.members.supervisor.includes(account.uuid))
+        ? forms.filter((type) => department.applicationTypes.includes(type))
+        : []))
+    const myDepartmentTypes = new Set(expand([...assignedTypes]))
+    const cards = await this.next?.findAll(ctx, cardClass, { _class: { $in: expand(forms) } }, {
+      projection: { _id: 1, _class: 1, createdBy: 1 }
+    })
+    if (cards == null || cards.length === 0) return new Set()
+    const myApprovalCards = await this.cachedApplicationIds(ctx, this.approvalCards, async () => await this.findApprovalCards(ctx), 300_000)
     const mySocialIds = new Set(account.socialIds)
     return new Set(cards.filter((card) => !canSeeApplication({
       id: card._id, type: card._class, createdBy: card.createdBy, mySocialIds, myApprovalCards, myDepartmentTypes
@@ -555,6 +617,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const result = await this.provideTx(ctx, txes)
     // Space ids are written back by the sync trigger as derived transactions.
     if ([...txes, ...ctx.contextData.broadcast.txes].some((tx) => this.touchesDepartments(tx))) this.dirty = true
+    this.invalidateApplicationIds([...txes, ...ctx.contextData.broadcast.txes])
     for (const tx of [...txes, ...ctx.contextData.broadcast.txes]) this.invalidateModules(tx)
     return result
   }
