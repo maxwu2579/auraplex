@@ -21,6 +21,7 @@ import type { Config } from './config'
 import { ConnectionStore, validIds } from './integrations'
 import { TokenEncryption } from './security'
 import { SendError, getPhoneStatus, listTemplates } from './graph'
+import { WahaMedia } from './wahaMedia'
 import { WahaClient, parseWahaEvent, sessionName, verifyWahaSignature } from './waha'
 import { parseWebhook, verifySignature, verifyChallenge, type WebhookBatch } from './webhook'
 
@@ -34,6 +35,7 @@ export function createApp (
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
   const waha = config.provider === 'waha' ? new WahaClient(config, request) : undefined
+  const media = new WahaMedia(config, request)
   const encryption = new TokenEncryption()
   app.disable('x-powered-by')
   app.use(
@@ -171,6 +173,9 @@ export function createApp (
       const batch = parseWahaEvent(body.event, body.session, phone, { ...body.payload, ...(mapped === undefined ? {} : { chatId: mapped }) })
       if (batch.messages.length + batch.statuses.length > 0) {
         if (inbox === undefined) { res.sendStatus(503); return }
+        for (const message of batch.messages) {
+          if (body.payload.hasMedia === true) message.mediaAvailable = await media.save(body.session, message.wamid, body.payload.media)
+        }
         await inbox.enqueue(batch)
       }
       accepted()
@@ -233,6 +238,16 @@ export function createApp (
       qr: withQr && status === 'SCAN_QR_CODE' ? await waha.qr(session) : undefined
     }
   }
+
+  app.post('/api/media', (req, res) => {
+    const id = req.body?.id
+    if (typeof id !== 'string' || id.length === 0 || id.length > 512) { res.sendStatus(400); return }
+    const session = sessionName(res.locals.workspace, res.locals.socialId)
+    void media.read(session, id).then((file) => {
+      if (file === undefined) { res.sendStatus(404); return }
+      res.attachment('whatsapp-attachment.bin').send(file)
+    }).catch(() => res.sendStatus(503))
+  })
 
   app.get('/api/qr', (_req, res) => {
     if (waha === undefined) { res.sendStatus(404); return }

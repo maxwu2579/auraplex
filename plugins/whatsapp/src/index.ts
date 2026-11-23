@@ -26,6 +26,7 @@ export type MessageStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'read
 export interface WhatsappMessage extends AttachedDoc {
   owner?: import('@hcengineering/core').AccountUuid
   content: string
+  mediaAvailable?: boolean
   direction: 'incoming' | 'outgoing'
   status: MessageStatus
   phone: string
@@ -113,6 +114,7 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    WahaAttachment: '' as IntlString,
     WahaRisk: '' as IntlString,
     WahaScan: '' as IntlString,
     WahaWaiting: '' as IntlString,

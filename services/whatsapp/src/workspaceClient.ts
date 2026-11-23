@@ -211,6 +211,7 @@ export class WorkspaceReceiver {
       {
         owner,
         content: message.content,
+        ...(message.mediaAvailable === true ? { mediaAvailable: true } : {}),
         direction: message.outgoing === true ? 'outgoing' : 'incoming',
         status: message.outgoing === true ? 'sent' : 'received',
         phone: message.phone,

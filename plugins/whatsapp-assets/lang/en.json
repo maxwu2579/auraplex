@@ -1,5 +1,6 @@
 {
   "string": {
+    "WahaAttachment": "Download attachment",
     "WahaRisk": "QR pairing uses an unofficial WhatsApp interface. The number may be restricted. Use a work number.",
     "WahaScan": "On your phone, open WhatsApp → Linked devices → Link a device, then scan the QR code.",
     "WahaWaiting": "Waiting for QR pairing",

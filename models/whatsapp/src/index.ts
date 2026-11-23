@@ -14,7 +14,7 @@
 //
 
 import { AccountRole, type Domain, IndexKind } from '@hcengineering/core'
-import { type Builder, Model, Prop, TypeAccountUuid, TypeString, TypeTimestamp, Index } from '@hcengineering/model'
+import { type Builder, Model, Prop, TypeAccountUuid, TypeString, TypeTimestamp, Index, Hidden } from '@hcengineering/model'
 import core, { TAttachedDoc } from '@hcengineering/model-core'
 import setting from '@hcengineering/setting'
 import contact from '@hcengineering/contact'
@@ -31,6 +31,9 @@ export class TWhatsappMessage extends TAttachedDoc implements WhatsappMessage {
     owner?: WhatsappMessage['owner']
   @Prop(TypeString(), whatsapp.string.Content)
     content!: string
+
+  // Auraplex: optional attachment marker; the bytes are served privately by the WhatsApp service.
+  @Hidden() mediaAvailable?: boolean
 
   @Prop(TypeString(), whatsapp.string.Direction)
     direction!: WhatsappMessage['direction']

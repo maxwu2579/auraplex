@@ -18,6 +18,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 export interface IncomingMessage {
   session?: string
   outgoing?: boolean
+  mediaAvailable?: boolean
   phoneNumberId: string
   wamid: string
   phone: string

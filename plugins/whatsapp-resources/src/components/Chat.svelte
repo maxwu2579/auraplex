@@ -32,7 +32,7 @@
     type WhatsappTemplate
   } from '@hcengineering/whatsapp'
 
-  import { getConnection, getTemplates, ConnectionError, type ConnectionState } from '../api'
+  import { downloadWahaAttachment, getConnection, getTemplates, ConnectionError, type ConnectionState } from '../api'
   import type { IntlString } from '@hcengineering/platform'
 
   export let channel: Channel
@@ -47,6 +47,7 @@
   let parameters: string[] = []
   let draft = ''
   let busy = false
+  let attachmentError = false
   let connection: ConnectionState | undefined
   let error: IntlString | undefined
   const client = getClient()
@@ -201,6 +202,13 @@
             <div class="tag"><Label label={whatsapp.string.Template} /> · {message.templateName}</div>
           {/if}
           <p>{message.content}</p>
+          {#if message.mediaAvailable && message.wamid}
+            {@const id = message.wamid}
+            <Button label={whatsapp.string.WahaAttachment} on:click={() => {
+              attachmentError = false
+              void downloadWahaAttachment(id).catch(() => { attachmentError = true })
+            }} />
+          {/if}
           {#if message.direction === 'outgoing'}
             <div class="status" aria-live="polite"><Label label={statusLabels[message.status]} /></div>
             {#if message.errorMessage}
@@ -218,6 +226,7 @@
       {/each}
     </div>
   </Scroller>
+  {#if attachmentError}<p class="error" role="alert"><Label label={whatsapp.string.Failed} /></p>{/if}
   <form class="composer" on:submit|preventDefault={send}>
     {#if !loaded}
       <!-- Wait for the messages so the 24 hour check does not flash the wrong mode. -->
