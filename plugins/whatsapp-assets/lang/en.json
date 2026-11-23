@@ -1,5 +1,7 @@
 {
   "string": {
+    "SecretUnset": "Not set",
+    "RetryHistory": "Retry history import",
     "RecognizerService": "Business card AI",
     "MailService": "Prospect mail",
     "ServiceAddress": "Service URL",

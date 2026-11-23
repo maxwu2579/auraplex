@@ -1,4 +1,4 @@
-// Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+<!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import { AccountRole, getCurrentAccount } from '@hcengineering/core'
   import contact from '@hcengineering/contact'
@@ -78,6 +78,9 @@
   })
 
   async function open (value: 'settings' | 'supervision'): Promise<void> {
+    key = ''
+    aiKey = ''
+    password = ''
     if (section === value) { section = undefined; return }
     section = value
     busy = true
@@ -172,11 +175,11 @@
       <h3>WhatsApp (WAHA)</h3>
       <form on:submit|preventDefault={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })}>
         <label><Label label={s.WahaAddress} /><input type="url" bind:value={url} /></label>
-        <label><Label label={s.WahaAdminKey} /> <span>{settings.wahaApiKey ?? ''}</span>
+        <label><Label label={s.WahaAdminKey} /> <span>{#if settings.wahaApiKey}{settings.wahaApiKey}{:else}<Label label={s.SecretUnset} />{/if}</span>
           <input type="password" bind:value={key} autocomplete="new-password" />
         </label>
         <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ wahaApiKey: null })} />
-        <label><Label label={s.WahaWebhookKey} /> {settings.webhookSecret ?? ''}</label>
+        <label><Label label={s.WahaWebhookKey} /> {#if settings.webhookSecret}{settings.webhookSecret}{:else}<Label label={s.SecretUnset} />{/if}</label>
         <Button label={s.RotateWebhookKey} disabled={busy} on:click={() => save({ regenerateWebhook: true })} />
         <label><Label label={s.WahaMediaLimit} /><input type="number" min="1" max="100" bind:value={limit} /></label>
         <label><Label label={s.WahaHistoryDays} /><input type="number" min="0" max="90" bind:value={days} /></label>
@@ -193,7 +196,7 @@
       <form on:submit|preventDefault={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })}>
         <label><Label label={s.ServiceAddress} /><input type="url" bind:value={aiUrl} /></label>
         <label><Label label={s.ServiceModel} /><input bind:value={aiModel} /></label>
-        <label><Label label={s.ServiceSecret} /> {settings.aiKey ?? ''}
+        <label><Label label={s.ServiceSecret} /> {#if settings.aiKey}{settings.aiKey}{:else}<Label label={s.SecretUnset} />{/if}
           <input type="password" bind:value={aiKey} autocomplete="new-password" />
         </label>
         <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ aiKey: null })} />
@@ -203,7 +206,7 @@
       <h3><Label label={s.MailService} /></h3>
       <form on:submit|preventDefault={() => save({})}>
         <label><Label label={s.MailAccount} /><input type="email" bind:value={address} /></label>
-        <label><Label label={s.MailPassword} /> {settings.mailPassword ?? ''}
+        <label><Label label={s.MailPassword} /> {#if settings.mailPassword}{settings.mailPassword}{:else}<Label label={s.SecretUnset} />{/if}
           <input type="password" bind:value={password} autocomplete="new-password" />
         </label>
         <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ mailPassword: null })} />

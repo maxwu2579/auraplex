@@ -1,4 +1,4 @@
-// Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+<!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { Button, Label } from '@hcengineering/ui'

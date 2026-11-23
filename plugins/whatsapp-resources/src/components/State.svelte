@@ -16,12 +16,13 @@
 -->
 <script lang="ts">
   import type { Integration } from '@hcengineering/account-client'
-  import { Label } from '@hcengineering/ui'
+  import { Button, Label } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
   import { onDestroy, onMount } from 'svelte'
-  import { ConnectionError, getConnection, type ConnectionState } from '../api'
+  import { ConnectionError, getConnection, request, type ConnectionState } from '../api'
   export let integration: Integration
   let unavailable = false
+  let retryError = false
   let state: ConnectionState | undefined
   let timer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
@@ -54,7 +55,14 @@
       : state.status === 'UNCONFIGURED' ? whatsapp.string.Unavailable : whatsapp.string.WahaDisconnected} />
       {state.displayPhone ?? ''}
       {#if state.historyState === 'running'}<Label label={whatsapp.string.HistoryRunning} params={{ count: state.historyCount ?? 0 }} />{/if}
-      {#if state.historyState === 'failed'}<Label label={whatsapp.string.HistoryFailed} />{/if}
+      {#if state.historyState === 'failed'}
+        <Label label={whatsapp.string.HistoryFailed} />
+        <Button label={whatsapp.string.RetryHistory} on:click={() => {
+          retryError = false
+          void request('history/retry', 'POST', {}).catch(() => { retryError = true })
+        }} />
+      {/if}
+      {#if retryError}<Label label={whatsapp.string.Failed} />{/if}
     </p>
   {:else}
   <p><Label label={whatsapp.string.PhoneNumberId} /> — {integration.data?.phoneNumberId}</p>

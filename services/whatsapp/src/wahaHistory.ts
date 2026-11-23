@@ -101,7 +101,7 @@ export class WahaHistory {
       if (chats.length < pageSize) break
     }
     if (this.stopped) return
-    await this.store.saveWahaHistory(entry, { wahaHistoryUntil: until * 1000,
+    await this.store.saveWahaHistory(entry, { wahaHistoryUntil: until * 1000, wahaHistoryState: 'done',
       ...(initial ? { wahaInitialHistory: true, wahaHistoryState: 'done', wahaHistoryCount: processed } : {}) })
   }
 }

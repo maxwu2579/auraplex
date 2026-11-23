@@ -473,6 +473,16 @@ export function createApp (
     })().catch(() => res.status(503).json({ code: 'Failed' }))
   })
 
+  app.post('/api/history/retry', (_req, res) => {
+    void (async () => {
+      const connection = await store.get(res.locals.workspace, res.locals.socialId)
+      if (connection?.data?.wahaSession !== sessionName(res.locals.workspace, res.locals.socialId) ||
+        connection.data?.wahaStatus !== 'WORKING') { res.sendStatus(409); return }
+      onWorking?.()
+      res.json({ scheduled: true })
+    })().catch(() => res.sendStatus(503))
+  })
+
   app.get('/api/qr', (_req, res) => {
     if (waha === undefined) { res.sendStatus(404); return }
     // Only the authenticated user's integration can be loaded. The API accepts no session selector.

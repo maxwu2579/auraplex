@@ -115,6 +115,9 @@ export default plugin(whatsappId, {
   },
   handler: { Disconnect: '' as Handler },
   string: {
+    SecretUnset: '' as IntlString,
+    RetryHistory: '' as IntlString,
+
     RecognizerService: '' as IntlString,
     MailService: '' as IntlString,
     ServiceAddress: '' as IntlString,

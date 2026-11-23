@@ -1,5 +1,7 @@
 {
   "string": {
+    "SecretUnset": "未设置",
+    "RetryHistory": "重试历史导入",
     "RecognizerService": "名片 AI",
     "MailService": "邮件",
     "ServiceAddress": "服务地址",
