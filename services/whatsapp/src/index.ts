@@ -70,7 +70,7 @@ async function main (): Promise<void> {
   outgoing.start()
   const history = new WahaHistory(config, store, receiver)
   history.start()
-  const server = createApp(config, store, inbox, fetch, async (entry) => await receiver.notifyDisconnected(entry), receiver).listen(config.port, () => {
+  const server = createApp(config, store, inbox, fetch, async (entry) => await receiver.notifyDisconnected(entry), receiver, () => history.wake()).listen(config.port, () => {
     console.log('WhatsApp service started', { port: config.port })
   })
   const shutdown = (): void => {

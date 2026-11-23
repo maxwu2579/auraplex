@@ -142,25 +142,6 @@ export async function getWahaQr (): Promise<ConnectionState> {
   return await request<ConnectionState>('qr')
 }
 
-export async function downloadWahaAttachment (id: string): Promise<void> {
-  const base = getMetadata(whatsapp.metadata.WhatsappURL)
-  if (!base) throw new ConnectionError(whatsapp.string.Unavailable)
-  const result = await fetch(base.replace(/\/$/, '') + '/api/media', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + (getMetadata(presentation.metadata.Token) ?? ''), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
-    cache: 'no-store',
-    signal: AbortSignal.timeout(15000)
-  })
-  if (!result.ok) throw new ConnectionError(whatsapp.string.Failed)
-  const url = URL.createObjectURL(await result.blob())
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'whatsapp-attachment.bin'
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 export async function readWahaAttachment (id: string, scope?: { employee: string, channel: string }): Promise<{
   blob: Blob, mime: string, name: string
 }> {

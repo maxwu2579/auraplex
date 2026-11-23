@@ -28,6 +28,10 @@ export class WahaHistory {
     this.schedule()
   }
 
+  wake (): void {
+    this.schedule()
+  }
+
   private schedule (): void {
     if (this.running !== undefined || this.stopped) return
     this.running = this.scan().catch(() => {}).finally(() => { this.running = undefined })

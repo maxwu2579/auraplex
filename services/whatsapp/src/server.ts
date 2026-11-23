@@ -35,7 +35,8 @@ export function createApp (
   inbox?: { enqueue: (batch: WebhookBatch) => Promise<void> },
   request: typeof fetch = fetch,
   notifyDisconnected?: (integration: Awaited<ReturnType<ConnectionStore['findWaha']>>) => Promise<void>,
-  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages' | 'ownsIntegration' | 'attachmentRecipient' | 'mediaPhone' | 'getClient' | 'receive'>
+  receiver?: Pick<WorkspaceReceiver, 'auditAccess' | 'supervisionEmployees' | 'supervisionMessages' | 'ownsIntegration' | 'attachmentRecipient' | 'mediaPhone' | 'getClient' | 'receive'>,
+  onWorking?: () => void
 ): express.Express {
   const app = express()
   // Auraplex: provider selection is server-wide; no connection can override it.
@@ -124,7 +125,12 @@ export function createApp (
       if (current?.data?.wahaStatus === 'WORKING' && ['FAILED', 'STOPPED', 'SCAN_QR_CODE'].includes(status)) {
         await notifyDisconnected?.(current)
       }
-      await store.updateWaha(session, status, phone)
+      const updated = await store.updateWaha(session, status, phone)
+      if (status === 'WORKING' && current?.data?.wahaStatus !== 'WORKING' && updated?.workspaceUuid != null) {
+        const settings = await workspaceConfig(updated.workspaceUuid)
+        await store.wahaRequest(updated, settings, request, async () => {}).catch(() => {})
+        onWorking?.()
+      }
       return { status, phone }
     } catch (err) {
       if (!(err instanceof Error) || err.message !== 'Conflict') throw err
