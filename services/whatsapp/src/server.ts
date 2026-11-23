@@ -136,7 +136,7 @@ export function createApp (
   const wahaRequests = new Map<string, number>()
   app.post('/webhook/waha', (req, res) => {
     const raw = (req as Request & { rawBody?: Buffer }).rawBody
-    if (waha === undefined || raw === undefined) {
+    if (waha === undefined || raw === undefined || !/^[a-f0-9]{128}$/i.test(req.get('X-Webhook-Hmac') ?? '')) {
       res.sendStatus(401)
       return
     }
@@ -162,7 +162,7 @@ export function createApp (
       }
       if (typeof body?.session !== 'string' || !/^huly-[a-f0-9]{32}$/.test(body.session) ||
         typeof body.event !== 'string' || body.payload == null || typeof body.payload !== 'object') {
-        res.sendStatus(200)
+        res.sendStatus(401)
         return
       }
       const integration = await store.findWaha(body.session)

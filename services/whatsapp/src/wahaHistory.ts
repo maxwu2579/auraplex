@@ -60,8 +60,12 @@ export class WahaHistory {
     const now = Date.now()
     const importDays = config.historyDays ?? 0
     const initial = importDays > 0 && entry.data?.wahaInitialHistory !== true
-    const since = Math.floor(Math.max(now - (initial ? importDays : importDays || 3) * dayMs, initial ? 0 :
-      typeof entry.data?.wahaHistoryUntil === 'number' ? entry.data.wahaHistoryUntil : entry.data?.wahaConnectedOn ?? now) / 1000)
+    const lastReceived = initial ? undefined : await this.receiver.lastIncoming(entry)
+    const lastScan = typeof entry.data?.wahaHistoryUntil === 'number' ? entry.data.wahaHistoryUntil : undefined
+    const covered = lastScan === undefined
+      ? lastReceived ?? entry.data?.wahaConnectedOn ?? now
+      : Math.max(lastScan - 60_000, lastReceived ?? 0)
+    const since = Math.floor(Math.max(now - (initial ? importDays : importDays || 3) * dayMs, initial ? 0 : covered) / 1000)
     const until = Math.floor(now / 1000)
     if (since >= until) return
     const call = async <T>(operation: (client: WahaClient) => Promise<T>): Promise<T> =>

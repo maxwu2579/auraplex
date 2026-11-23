@@ -292,3 +292,26 @@ it('never retrieves a WAHA QR from a session owned by someone else, even for an 
     await new Promise<void>((resolve) => waha.close(() => resolve()))
   }
 })
+
+it('keeps supervision opt-in even for owners and audits a granted conversation read', async () => {
+  store.serviceSettings.mockResolvedValue({})
+  const audits = jest.fn().mockResolvedValue(undefined)
+  const rows = [{ channel: 'channel', id: 'id', phone: '15550100001', name: 'Synthetic customer', content: 'synthetic' }]
+  const receiver = { auditAccess: audits, supervisionMessages: jest.fn().mockResolvedValue(rows) }
+  const app = createApp(config, store as unknown as ConnectionStore, inbox, graphRequest, undefined, receiver as any).listen(0, '127.0.0.1')
+  try {
+    await new Promise<void>((resolve) => app.once('listening', resolve))
+    const address = app.address()
+    if (address === null || typeof address === 'string') throw new Error('Missing server address')
+    const url = 'http://127.0.0.1:' + address.port + '/api/supervision/messages?employee=staff&channel=channel'
+    const headers = { Authorization: 'Bearer local-test' }
+    expect((await fetch(url, { headers })).status).toBe(403)
+    expect(receiver.supervisionMessages).not.toHaveBeenCalled()
+    store.serviceSettings.mockResolvedValue({ supervisors: ['owner'] })
+    expect((await fetch(url, { headers })).status).toBe(200)
+    expect(audits).toHaveBeenCalledWith('ws', 'owner', expect.stringContaining('staff'), 'channel')
+  } finally {
+    store.serviceSettings.mockResolvedValue({})
+    await new Promise<void>((resolve) => app.close(() => resolve()))
+  }
+})

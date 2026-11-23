@@ -74,6 +74,15 @@ export class WorkspaceReceiver {
     return await this.account.findPersonBySocialId(entry.socialId, true) === account
   }
 
+  async lastIncoming (entry: Integration): Promise<number | undefined> {
+    if (entry.workspaceUuid == null) return undefined
+    const owner = await this.account.findPersonBySocialId(entry.socialId, true) as AccountUuid | undefined
+    if (owner === undefined) return undefined
+    const client = await this.getClient(entry.workspaceUuid)
+    const row = await client.findOne(whatsapp.class.Message, { owner, direction: 'incoming' }, { sort: { sendOn: -1 } })
+    return row?.sendOn
+  }
+
   async mediaPhone (workspace: WorkspaceUuid, owner: AccountUuid, id: string): Promise<string | undefined> {
     const client = await this.getClient(workspace)
     const row = await client.findOne(whatsapp.class.Message, { owner, wamid: id, mediaAvailable: true })
