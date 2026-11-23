@@ -50,17 +50,17 @@ export class ConnectionStore {
     return { kind: 'auraplex-service-settings' as IntegrationKind, socialId: core.account.System, workspaceUuid }
   }
 
-  async serviceSettings (workspace: WorkspaceUuid): Promise<ServiceSettings> {
-    const record = await this.account.getIntegrationSecret({ ...this.settingsKey(workspace), key: 'settings' })
+  async serviceSettings (workspace: WorkspaceUuid, section = 'settings'): Promise<ServiceSettings> {
+    const record = await this.account.getIntegrationSecret({ ...this.settingsKey(workspace), key: section })
     return record == null ? {} : JSON.parse(record.secret) as ServiceSettings
   }
 
   async saveServiceSettings (
-    workspace: WorkspaceUuid, patch: unknown, members: Set<string>
+    workspace: WorkspaceUuid, patch: unknown, members: Set<string>, section = 'settings'
   ): Promise<{ value: ServiceSettings, fields: string[] }> {
     return await this.serialize(async () => {
       const integration = this.settingsKey(workspace)
-      const key = { ...integration, key: 'settings' }
+      const key = { ...integration, key: section }
       const existing = await this.account.getIntegrationSecret(key)
       const result = changeSettings(existing == null ? {} : JSON.parse(existing.secret), patch, members)
       if (await this.account.getIntegration(integration) == null) await this.account.createIntegration(integration)

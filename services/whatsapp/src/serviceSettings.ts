@@ -9,6 +9,15 @@ export interface ServiceSettings {
   mediaLimitMb?: number
   historyDays?: number
   supervisors?: string[]
+  aiUrl?: string
+  aiModel?: string
+  aiKey?: string
+  mailAddress?: string
+  mailPassword?: string
+  mailSmtpHost?: string
+  mailSmtpPort?: number
+  mailImapHost?: string
+  mailImapPort?: number
 }
 
 export function publicSettings (value: ServiceSettings): Record<string, unknown> {
@@ -18,7 +27,11 @@ export function publicSettings (value: ServiceSettings): Record<string, unknown>
   return {
     wahaUrl: value.wahaUrl, wahaApiKey: mask(value.wahaApiKey), webhookSecret: mask(value.webhookSecret),
     mediaLimitMb: value.mediaLimitMb ?? 20, historyDays: value.historyDays ?? 0,
-    supervisors: value.supervisors ?? []
+    supervisors: value.supervisors ?? [],
+    aiUrl: value.aiUrl, aiModel: value.aiModel, aiKey: mask(value.aiKey),
+    mailAddress: value.mailAddress, mailPassword: mask(value.mailPassword),
+    mailSmtpHost: value.mailSmtpHost, mailSmtpPort: value.mailSmtpPort,
+    mailImapHost: value.mailImapHost, mailImapPort: value.mailImapPort
   }
 }
 
@@ -44,6 +57,19 @@ export function changeSettings (
       else {
         if (typeof data !== 'string' || !/^[\x21-\x7e]{1,1024}$/.test(data)) throw new Error('Invalid key')
         value.wahaApiKey = data
+      }
+    } else if (key === 'aiUrl' || key === 'aiModel' || key === 'aiKey' || key === 'mailAddress' || key === 'mailPassword' ||
+      key === 'mailSmtpHost' || key === 'mailImapHost') {
+      if (data === null) delete value[key]
+      else {
+        if (typeof data !== 'string' || data.length > 2048 || /[\r\n\0]/.test(data)) throw new Error('Invalid parameter')
+        value[key] = data
+      }
+    } else if (key === 'mailSmtpPort' || key === 'mailImapPort') {
+      if (data === null) delete value[key]
+      else {
+        if (typeof data !== 'number' || !Number.isInteger(data) || data < 1 || data > 65535) throw new Error('Invalid port')
+        value[key] = data
       }
     } else if (key === 'regenerateWebhook' && data === true) {
       value.webhookSecret = randomBytes(32).toString('hex')

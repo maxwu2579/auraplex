@@ -249,8 +249,10 @@ export function createApp (
     if (res.locals.role !== AccountRole.Owner) { res.sendStatus(403); return }
     void Promise.all([
       store.serviceSettings(res.locals.workspace),
+      store.serviceSettings(res.locals.workspace, 'recognizer-settings'),
+      store.serviceSettings(res.locals.workspace, 'mail-settings'),
       res.locals.account.getWorkspaceMembers()
-    ]).then(([settings, members]) => res.json({ ...publicSettings(settings), members }))
+    ]).then(([settings, ai, mail, members]) => res.json({ ...publicSettings({ ...settings, ...ai, ...mail }), members }))
       .catch(() => res.sendStatus(503))
   })
 
@@ -264,10 +266,29 @@ export function createApp (
           return
         }
       }
+      if (typeof req.body?.aiUrl === 'string') {
+        const allowed = (process.env.PROSPECTS_AI_ALLOWED_ORIGINS ?? process.env.PROSPECTS_AI_URL ?? '').split(',').filter(Boolean)
+        const url = new URL(req.body.aiUrl)
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+          !allowed.some((origin) => new URL(origin).origin === url.origin)) { res.sendStatus(400); return }
+      }
+      for (const name of ['mailSmtpHost', 'mailImapHost'] as const) {
+        const host = req.body?.[name]
+        const allowed = name === 'mailSmtpHost'
+          ? (process.env.MAIL_ALLOWED_SMTP_HOSTS ?? process.env.MAIL_SMTP_HOST ?? 'smtp.gmail.com')
+          : (process.env.MAIL_ALLOWED_IMAP_HOSTS ?? process.env.MAIL_IMAP_HOST ?? 'imap.gmail.com')
+        if (typeof host === 'string' && !allowed.split(',').map((item) => item.trim()).includes(host)) {
+          res.sendStatus(400); return
+        }
+      }
+      const sections = new Set(Object.keys(req.body ?? {}).map((name) => name.startsWith('ai') ? 'recognizer-settings' :
+        name.startsWith('mail') ? 'mail-settings' : 'settings'))
+      if (sections.size !== 1) { res.sendStatus(400); return }
       const members = await res.locals.account.getWorkspaceMembers() as Array<{ person: string }>
-      const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)))
+      const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)), [...sections][0])
       await receiver?.auditAccess(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
-      res.json(publicSettings(result.value))
+      const [waha, ai, mail] = await Promise.all(['settings', 'recognizer-settings', 'mail-settings'].map((name) => store.serviceSettings(res.locals.workspace, name)))
+      res.json(publicSettings({ ...waha, ...ai, ...mail }))
     })().catch(() => res.status(400).json({ code: 'InvalidParameters' }))
   })
 

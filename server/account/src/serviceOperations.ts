@@ -28,6 +28,7 @@ import {
   type WorkspaceUuid,
   type AccountUuid,
   type UsageStatus,
+  systemAccountUuid,
   readOnlyGuestAccountUuid
 } from '@hcengineering/core'
 import platform, { getMetadata, PlatformError, Severity, Status, unknownError } from '@hcengineering/platform'
@@ -891,9 +892,18 @@ export async function getIntegrationSecret (
   token: string,
   params: IntegrationSecretKey
 ): Promise<IntegrationSecret | null> {
-  const { extra } = decodeTokenVerbose(ctx, token)
-  verifyAllowedServices(integrationServices, extra)
+  const { extra, account, workspace } = decodeTokenVerbose(ctx, token)
   const { socialId, kind, workspaceUuid, key } = params
+  // Auraplex: recognizer and mailbox service identities may read only their own workspace configuration record.
+  const service = extra?.service
+  if (service === 'prospects-recognizer' || service === 'prospect-mail') {
+    const allowedKey = service === 'prospects-recognizer' ? 'recognizer-settings' : 'mail-settings'
+    if (account !== systemAccountUuid || workspace !== workspaceUuid || kind !== 'auraplex-service-settings' || key !== allowedKey) {
+      throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
+    }
+  } else {
+    verifyAllowedServices(integrationServices, extra)
+  }
 
   if (
     kind == null ||
