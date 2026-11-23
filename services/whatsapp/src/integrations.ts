@@ -195,6 +195,15 @@ export class ConnectionStore {
     await this.account.deleteIntegrationSecret(key)
   }
 
+  async saveWahaHistory (entry: Integration, data: Record<string, unknown>): Promise<void> {
+    await this.serialize(async () => {
+      if (entry.workspaceUuid == null) return
+      const latest = await this.get(entry.workspaceUuid, entry.socialId)
+      if (latest?.data?.wahaSession !== entry.data?.wahaSession || latest == null) return
+      await this.account.updateIntegration({ ...latest, data: { ...latest.data, ...data } })
+    })
+  }
+
   async findWaha (session: string): Promise<Integration | undefined> {
     return (await this.list()).find((entry) => entry.data?.wahaSession === session)
   }

@@ -128,6 +128,29 @@ export class WahaClient implements WhatsAppProvider<string, string, WahaSession 
     if (!remove.ok && remove.status !== 404) throw new Error('WAHA unavailable')
   }
 
+  async historyChats (session: string, offset: number, limit: number): Promise<Array<{ id: string }>> {
+    const res = await this.call('/api/' + session + '/chats?' +
+      new URLSearchParams({ offset: String(offset), limit: String(limit), sortBy: 'messageTimestamp', sortOrder: 'desc' }))
+    if (!res.ok) throw new Error('WAHA chats unavailable')
+    const rows: unknown = await res.json()
+    if (!Array.isArray(rows)) throw new Error('Invalid WAHA chats')
+    return rows
+  }
+
+  async historyMessages (
+    session: string, chat: string, after: number, before: number, offset: number, limit: number
+  ): Promise<Array<Record<string, unknown>>> {
+    const res = await this.call('/api/' + session + '/chats/' + encodeURIComponent(chat) + '/messages?' +
+      new URLSearchParams({
+        offset: String(offset), limit: String(limit), downloadMedia: 'false',
+        'filter.timestamp.gte': String(after), 'filter.timestamp.lte': String(before)
+      }))
+    if (!res.ok) throw new Error('WAHA history unavailable')
+    const rows: unknown = await res.json()
+    if (!Array.isArray(rows)) throw new Error('Invalid WAHA history')
+    return rows
+  }
+
   async send (session: string, phone: string, text: string): Promise<string> {
     const res = await this.call('/api/sendText', 'POST', { session, chatId: phone + '@c.us', text })
     if (!res.ok) throw new SendError('WAHA_SEND', '发送失败，请检查号码或重新扫码连接。')

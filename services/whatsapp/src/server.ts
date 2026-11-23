@@ -325,7 +325,8 @@ export function createApp (
     const { status, phone } = await refreshWaha(session, waha)
     return {
       provider: 'waha', connected: status === 'WORKING' && !!phone,
-      status, phoneNumberId: phone, displayPhone: phone === undefined ? undefined : '•••• ' + phone.slice(-4),
+      status, historyState: integration?.data?.wahaHistoryState, historyCount: integration?.data?.wahaHistoryCount,
+      mediaLimitMb: settings.mediaLimitMb ?? 20, phoneNumberId: phone, displayPhone: phone === undefined ? undefined : '•••• ' + phone.slice(-4),
       qr: withQr && status === 'SCAN_QR_CODE' ? await waha.qr(session) : undefined
     }
   }

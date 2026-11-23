@@ -25,6 +25,7 @@ import { ConnectionStore } from './integrations'
 import { createApp } from './server'
 import { PersistentInbox } from './inbox'
 import { WorkspaceReceiver } from './workspaceClient'
+import { WahaHistory } from './wahaHistory'
 import { OutgoingService, outgoingMessageId } from './outgoing'
 
 const config = readConfig()
@@ -67,6 +68,8 @@ async function main (): Promise<void> {
     { fromBegining: true }
   )
   outgoing.start()
+  const history = new WahaHistory(config, store, receiver)
+  history.start()
   const server = createApp(config, store, inbox, fetch, async (entry) => await receiver.notifyDisconnected(entry), receiver).listen(config.port, () => {
     console.log('WhatsApp service started', { port: config.port })
   })
@@ -75,6 +78,7 @@ async function main (): Promise<void> {
       void queue
         .shutdown()
         .then(() => outgoing.close())
+        .then(() => history.close())
         .then(() => inbox.close())
         .then(() => receiver.close())
     })

@@ -264,8 +264,8 @@ export class WorkspaceReceiver {
       },
       id
     )
-    if (message.outgoing !== true) await this.addNotifications(client, ops, owner, customer, channel, message, id)
-    await recordWhatsappExchange(client, ops, owner, message.session === undefined ? message.phone : '•••• ' + message.phone.replace(/\D/g, '').slice(-4), message.timestamp)
+    if (message.outgoing !== true && message.historical !== true) await this.addNotifications(client, ops, owner, customer, channel, message, id)
+    if (message.historical !== true) await recordWhatsappExchange(client, ops, owner, message.session === undefined ? message.phone : '•••• ' + message.phone.replace(/\D/g, '').slice(-4), message.timestamp)
     const result = await ops.commit()
     if (!result.result && (await client.findOne(whatsapp.class.Message, { _id: id })) === undefined) {
       throw new Error('Message transaction was not committed')
