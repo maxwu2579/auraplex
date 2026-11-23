@@ -219,3 +219,18 @@ node services/whatsapp/mock/index.mjs error --mode none
 5. 在集成页使用真实编号和令牌重新连接。到 Meta 后台填入界面显示的 webhook 地址及相同的验证令牌，并配置消息订阅。
 6. 在 Meta 的 WhatsApp 管理工具里建模板并等审核通过。这一版只能发送“正文变量”的模板，模板标题、按钮里不要放变量，也不要用图片标题。
 7. 先用 Meta 测试号码验证收发、状态和模板。正式启用前另行检查权限、模板、客户许可、最新费率、备份及监控。
+
+## WAHA deployment checklist
+
+- Use WAHA 2026.6.1 or later from the official devlikeapro/waha image. The free image supports multiple sessions. This integration targets WEBJS.
+- Set WHATSAPP_PROVIDER=waha (the default), WHATSAPP_WAHA_URL to the internal WAHA URL, WHATSAPP_WAHA_API_KEY to the server-side API key and WHATSAPP_WAHA_WEBHOOK_SECRET to the webhook HMAC secret. Configure these through your deployment secret store.
+- Set WHATSAPP_WAHA_WEBHOOK_URL to a private URL reachable from WAHA, such as http://whatsapp:8098/webhook/waha. Without an override, the service appends /webhook/waha to WHATSAPP_PUBLIC_URL.
+- Keep WAHA and its dashboard off the public internet. Restrict network access and require the API key and a dashboard password.
+- Keep the WhatsApp service volume mounted at /var/lib/whatsapp. It stores the durable inbox and private media. Run a single WhatsApp service writer for the integration registry.
+- For the official Meta API, set WHATSAPP_PROVIDER=meta and retain the current Meta credentials and webhooks.
+
+## Local WAHA simulator
+
+Use the dev stack with the overlay services/whatsapp/mock/compose.waha.mock.yaml alongside the base compose files. Put randomly generated, local-only values for WHATSAPP_WAHA_API_KEY and WHATSAPP_WAHA_WEBHOOK_SECRET in the untracked dev/.env.whatsapp.local file. The simulator listens on loopback port 8099. All simulator API and control requests take the local key in the X-Api-Key header.
+
+Get a test session name from the local WAHA API or derive it from the test workspace ID and the verified test social ID using sessionName. The QR is a fixture. Pair through POST /control/{session}/scan with an unused simulated number in the 155501xxxxx range. POST /control/{session}/event accepts { event, payload } and forwards a signed event. POST /control/{session}/status accepts { status } to test disconnection. Use the Meta overlay compose.mock.yaml to test the legacy adapter separately.

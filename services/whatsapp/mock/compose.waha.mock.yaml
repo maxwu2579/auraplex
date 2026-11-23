@@ -1,0 +1,21 @@
+# Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+services:
+  whatsapp:
+    env_file:
+      - .env.whatsapp.local
+    environment:
+      - WHATSAPP_PROVIDER=waha
+      - WHATSAPP_WAHA_URL=http://whatsapp-waha-mock:8099
+      - WHATSAPP_WAHA_WEBHOOK_URL=http://whatsapp:8098/webhook/waha
+  whatsapp-waha-mock:
+    image: node:22
+    command: ['node', '--experimental-strip-types', '/mock/waha.ts']
+    env_file:
+      - .env.whatsapp.local
+    environment:
+      - MOCK_WAHA_BIND=0.0.0.0
+      - MOCK_WAHA_PORT=8099
+    ports:
+      - '127.0.0.1:8099:8099'
+    volumes:
+      - ../services/whatsapp/mock:/mock:ro

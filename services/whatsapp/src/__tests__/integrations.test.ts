@@ -86,3 +86,16 @@ it('allows different numbers in a workspace and only disconnects the caller', as
   expect(account.deleteIntegration).toHaveBeenCalledTimes(1)
   expect(account.deleteIntegration).toHaveBeenCalledWith(expect.objectContaining({ socialId: a }))
 })
+
+it('rejects a WAHA number already reserved by a different connection', async () => {
+  const entries = [
+    { workspaceUuid: 'ws', socialId: 'someone', data: { wahaSession: 'other', wahaPhone: '15550100001' } },
+    { workspaceUuid: 'ws', socialId: 'owner', data: { wahaSession: 'new', wahaStatus: 'STARTING' } }
+  ]
+  const updateIntegration = jest.fn().mockResolvedValue(undefined)
+  const store = new ConnectionStore({ listIntegrations: async () => entries, updateIntegration } as any)
+  await expect(store.updateWaha('new', 'WORKING', '15550100001')).rejects.toThrow('Conflict')
+  expect(updateIntegration).toHaveBeenCalledWith(expect.objectContaining({
+    socialId: 'owner', data: expect.objectContaining({ wahaStatus: 'CONFLICT' })
+  }))
+})
