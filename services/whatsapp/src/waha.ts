@@ -8,6 +8,7 @@ import type { WhatsAppProvider } from './provider'
 export interface WahaSession {
   status: string
   me?: { id?: string }
+  config?: Record<string, unknown>
 }
 
 export function sessionName (workspace: string, owner: string): string {
@@ -78,19 +79,48 @@ export class WahaClient implements WhatsAppProvider<string, string, WahaSession 
     }
   }
 
+  private sessionConfig (existing: Record<string, unknown> = {}): Record<string, unknown> {
+    const webjs = existing.webjs as Record<string, unknown> | undefined
+    return {
+      ...existing,
+      webjs: { ...webjs, tagsEventsOn: true },
+      webhooks: [{
+        url: this.config.wahaWebhookUrl ?? this.config.publicUrl + '/webhook/waha',
+        events: ['message.any', 'message.ack', 'session.status'],
+        retries: { policy: 'linear', delaySeconds: 2, attempts: 12 },
+        hmac: { key: this.config.wahaWebhookSecret }
+      }]
+    }
+  }
+
+  async checkConnection (): Promise<boolean> {
+    try {
+      return (await this.call('/api/server/version')).ok
+    } catch {
+      return false
+    }
+  }
+
+  async refreshWebhook (session: string): Promise<void> {
+    const existing = await this.status(session)
+    if (existing === undefined) return
+    const result = await this.call('/api/sessions/' + session, 'PUT', {
+      name: session, config: this.sessionConfig(existing.config)
+    })
+    if (!result.ok) throw new Error('WAHA webhook update failed')
+  }
+
+  async messageMedia (session: string, chatId: string, id: string): Promise<unknown> {
+    const result = await this.call('/api/' + session + '/chats/' + encodeURIComponent(chatId) + '/messages/' +
+      encodeURIComponent(id) + '?downloadMedia=true')
+    if (!result.ok) return undefined
+    return ((await result.json()) as { media?: unknown }).media
+  }
+
   async bind (session: string): Promise<void> {
     const existing = await this.status(session)
     if (existing === undefined) {
-      const res = await this.call('/api/sessions', 'POST', {
-        name: session,
-        start: true,
-        config: { webjs: { tagsEventsOn: true }, webhooks: [{
-          url: this.config.wahaWebhookUrl ?? this.config.publicUrl + '/webhook/waha',
-          events: ['message.any', 'message.ack', 'session.status'],
-          retries: { policy: 'linear', delaySeconds: 2, attempts: 12 },
-          hmac: { key: this.config.wahaWebhookSecret }
-        }] }
-      })
+      const res = await this.call('/api/sessions', 'POST', { name: session, start: true, config: this.sessionConfig() })
       if (!res.ok) {
         const detail = (await res.text()).slice(0, 4000)
         if (/only.{0,60}(default|one session)|core.{0,60}(default|session)|default.{0,60}session/i.test(detail)) {

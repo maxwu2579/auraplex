@@ -288,7 +288,24 @@ export function createApp (
       const result = await store.saveServiceSettings(res.locals.workspace, req.body, new Set(members.map((item) => item.person)), [...sections][0])
       await receiver?.auditAccess(res.locals.workspace, res.locals.actor, 'WAHA settings: ' + result.fields.join(', '))
       const [waha, ai, mail] = await Promise.all(['settings', 'recognizer-settings', 'mail-settings'].map((name) => store.serviceSettings(res.locals.workspace, name)))
-      res.json(publicSettings({ ...waha, ...ai, ...mail }))
+      let warning = false
+      if (sections.has('settings') && result.fields.some((key) => ['wahaUrl', 'wahaApiKey', 'regenerateWebhook'].includes(key))) {
+        const active = runtimeConfig(config, waha)
+        const admin = new WahaClient(active, request)
+        warning = !await admin.checkConnection()
+        if (!warning && result.fields.includes('regenerateWebhook')) {
+          for (const entry of await store.list()) {
+            if (entry.workspaceUuid !== res.locals.workspace ||
+              entry.data?.wahaSession !== sessionName(res.locals.workspace, entry.socialId)) continue
+            try {
+              await admin.refreshWebhook(entry.data.wahaSession)
+            } catch {
+              warning = true
+            }
+          }
+        }
+      }
+      res.json({ ...publicSettings({ ...waha, ...ai, ...mail }), warning })
     })().catch(() => res.status(400).json({ code: 'InvalidParameters' }))
   })
 

@@ -82,7 +82,7 @@ export class WahaHistory {
           for (const row of rows) {
             const parsed = parseWahaEvent('message.any', session, phone, { ...row, chatId: peer }).messages[0]
             if (parsed !== undefined) {
-              await this.receiver.receive(client, entry, { ...parsed, historical: true })
+              await this.receiver.receive(client, entry, { ...parsed, historical: true, mediaAvailable: row.hasMedia === true })
               processed++
             }
           }
