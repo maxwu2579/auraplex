@@ -281,7 +281,7 @@ export function createApp (
       if (typeof req.body?.aiUrl === 'string') {
         const allowed = (process.env.PROSPECTS_AI_ALLOWED_ORIGINS ?? process.env.PROSPECTS_AI_URL ?? '').split(',').filter(Boolean)
         const url = new URL(req.body.aiUrl)
-        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash ||
           !allowed.some((origin) => new URL(origin).origin === url.origin)) { res.sendStatus(400); return }
       }
       for (const name of ['mailSmtpHost', 'mailImapHost'] as const) {

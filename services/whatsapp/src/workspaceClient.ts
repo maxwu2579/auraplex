@@ -99,7 +99,7 @@ export class WorkspaceReceiver {
 
   async auditAccess (workspace: WorkspaceUuid, actor: string, label: string, customer?: string): Promise<void> {
     const client = await this.getClient(workspace)
-    if (!client.getHierarchy().hasClass(auditClass)) return
+    if (!client.getHierarchy().hasClass(auditClass)) throw new Error('Audit class unavailable')
     const time = Date.now()
     await client.createDoc(auditClass, core.space.Workspace, {
       kind: 'view', actor, label, count: 1, firstOn: time, lastOn: time,

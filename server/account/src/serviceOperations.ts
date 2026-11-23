@@ -911,7 +911,7 @@ export async function getIntegrationSecret (
     if (account !== systemAccountUuid || workspace !== workspaceUuid || String(socialId) !== '0' || kind !== 'auraplex-service-settings' || key !== allowedKey) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
     }
-  } else {
+  } else if (String(kind) !== 'auraplex-service-settings' || !isWorkspaceServiceSecret(account, service, params)) {
     verifyAllowedServices(integrationServices, extra)
   }
 
@@ -941,7 +941,8 @@ export async function listIntegrationsSecrets (
   verifyAllowedServices(integrationServices, extra)
   const { socialId, kind, workspaceUuid, key } = params
 
-  return await db.integrationSecret.find({ socialId, kind, workspaceUuid, key })
+  return (await db.integrationSecret.find({ socialId, kind, workspaceUuid, key }))
+    .filter((row) => String(row.kind) !== 'auraplex-service-settings')
 }
 
 export async function findFullSocialIdBySocialKey (
