@@ -17,7 +17,7 @@
   // Staff pick a form, fill it in and follow it; approvers see what waits for them.
   import card, { type Card, type CardSpace, type MasterTag } from '@hcengineering/card'
   import contact, { formatName, getCurrentEmployee, type Person } from '@hcengineering/contact'
-  import { AccountRole, SortingOrder, getCurrentAccount, type Ref } from '@hcengineering/core'
+  import { AccountRole, SortingOrder, getCurrentAccount, type Class, type Doc, type Mixin, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Execution, type Process, type State } from '@hcengineering/process'
   import { type IntlString } from '@hcengineering/platform'
@@ -32,6 +32,7 @@
   const myPerson = getCurrentEmployee()
   const isOwner = me.role === AccountRole.Owner
   const createCard = 'card:component:CreateCard' as AnyComponent
+  const userMixin = 'setting:mixin:UserMixin' as Ref<Mixin<Class<Doc>>>
 
   $: L = (zh: string, en: string): string => ($languageStore === 'zh' ? zh : en)
 
@@ -45,6 +46,8 @@
   })
   $: forms = [...new Set(processes.filter((p) => p.automationOnly !== true).map((p) => p.masterTag))]
     .filter((tag) => h.hasClass(tag) && !h.isMixin(tag) && h.isDerived(tag, card.class.Card))
+    // only types an admin made in Settings (built-in ones like user profiles have system processes)
+    .filter((tag) => h.hasMixin(h.getClass(tag), userMixin))
     .map((tag) => h.getClass(tag) as MasterTag)
     .filter((tag) => tag.removed !== true)
   $: formIds = forms.map((it) => it._id)
