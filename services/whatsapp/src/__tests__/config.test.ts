@@ -23,6 +23,7 @@ beforeEach(() => {
   process.env.WHATSAPP_PUBLIC_URL = 'http://localhost'
   process.env.WHATSAPP_GRAPH_VERSION = 'mock'
   delete process.env.WHATSAPP_REPLY_WINDOW_MINUTES
+  delete process.env.WHATSAPP_PROVIDER
 })
 afterAll(() => {
   process.env = saved
@@ -36,4 +37,11 @@ it('uses the real 24 hour window unless a valid shorter test value is given', ()
     process.env.WHATSAPP_REPLY_WINDOW_MINUTES = value
     expect(readConfig().replyWindowMs).toBe(REPLY_WINDOW_MS)
   }
+})
+
+it('defaults to WAHA without a Graph version and still requires it for Meta', () => {
+  delete process.env.WHATSAPP_GRAPH_VERSION
+  expect(readConfig().provider).toBe('waha')
+  process.env.WHATSAPP_PROVIDER = 'meta'
+  expect(() => readConfig()).toThrow()
 })

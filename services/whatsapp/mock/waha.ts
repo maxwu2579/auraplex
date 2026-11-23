@@ -10,9 +10,13 @@ interface Session {
 }
 const sessions = new Map<string, Session>()
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aW6kAAAAASUVORK5CYII=', 'base64')
-const key = process.env.WHATSAPP_WAHA_API_KEY
-const secret = process.env.WHATSAPP_WAHA_WEBHOOK_SECRET
-if (!key || !secret) throw new Error('Local WAHA simulator requires credentials from the environment')
+function requiredEnv (name: string): string {
+  const value = process.env[name]
+  if (!value) throw new Error('Local WAHA simulator requires credentials from the environment')
+  return value
+}
+const key = requiredEnv('WHATSAPP_WAHA_API_KEY')
+const secret = requiredEnv('WHATSAPP_WAHA_WEBHOOK_SECRET')
 
 function json (res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data))
