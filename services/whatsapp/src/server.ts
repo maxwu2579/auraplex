@@ -109,7 +109,8 @@ export function createApp (
     const remote = await waha?.status(session)
     const status = remote?.status ?? 'STOPPED'
     const me = status === 'WORKING' ? remote?.me ?? await waha?.me(session) : undefined
-    const phone = status === 'WORKING' ? me?.id?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1] : undefined
+    const jid = me?.id?.endsWith('@lid') === true ? await waha?.resolveLid(session, me.id) : me?.id
+    const phone = jid?.match(/^(\d+)@(?:c\.us|s\.whatsapp\.net)$/)?.[1]
     try {
       if (status === 'WORKING' && phone === undefined) return { status: 'STARTING' }
       if (current?.data?.wahaStatus === 'WORKING' && ['FAILED', 'STOPPED', 'SCAN_QR_CODE'].includes(status)) {

@@ -43,6 +43,10 @@ async function handle (req: IncomingMessage, res: ServerResponse): Promise<void>
   const path = (req.url ?? '').split('?')[0]
   const parts = path.split('/')
   const method = req.method
+  if (path === '/api/sessions' && method === 'GET') {
+    json(res, 200, [...sessions.values()].map(({ name, status }) => ({ name, status })))
+    return
+  }
   if (path === '/api/sessions' && method === 'POST') {
     const body = await read(req) as unknown as Session
     if (process.env.MOCK_WAHA_CORE === '1' && body.name !== 'default') {
