@@ -52,7 +52,7 @@ async function workspaceSettings (workspace: WorkspaceUuid): Promise<typeof conf
     address: settings.mailAddress ?? config.address,
     password: settings.mailPassword ?? config.password,
     smtp: { ...config.smtp, host: settings.mailSmtpHost ?? config.smtp.host, port: settings.mailSmtpPort ?? config.smtp.port },
-    imap: { ...config.imap, host: settings.mailImapHost ?? active.imap.host, port: settings.mailImapPort ?? active.imap.port }
+    imap: { ...config.imap, host: settings.mailImapHost ?? config.imap.host, port: settings.mailImapPort ?? config.imap.port }
   }
 }
 
