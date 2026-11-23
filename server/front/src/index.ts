@@ -28,6 +28,7 @@ import morgan from 'morgan'
 import { join, normalize, resolve } from 'path'
 import { cwd } from 'process'
 import sharp, { type Sharp } from 'sharp'
+import { canDownloadApplicationAttachment } from '@hcengineering/server-client'
 import { getClient as getAccountClient } from '@hcengineering/account-client'
 import { preConditions } from './utils'
 
@@ -173,6 +174,7 @@ async function getFile (
   res: Response
 ): Promise<void> {
   const etag = stat.etag
+  const responseCacheControl = res.getHeader('Cache-Control')?.toString() ?? cacheControlValue
 
   if (
     preConditions.IfNoneMatch(req.headers, { etag }) === 'notModified' ||
@@ -185,7 +187,7 @@ async function getFile (
       'content-type': stat.contentType,
       etag: stat.etag,
       'last-modified': new Date(stat.modifiedOn).toISOString(),
-      'cache-control': cacheControlValue
+      'cache-control': responseCacheControl
     })
     res.end()
     return
@@ -197,7 +199,7 @@ async function getFile (
       'content-type': stat.contentType,
       etag: stat.etag,
       'last-modified': new Date(stat.modifiedOn).toISOString(),
-      'cache-control': cacheControlValue
+      'cache-control': responseCacheControl
     })
     res.end()
     return
@@ -215,7 +217,7 @@ async function getFile (
           'Content-Length': stat.size,
           Etag: stat.etag,
           'Last-Modified': new Date(stat.modifiedOn).toISOString(),
-          'Cache-Control': cacheControlValue,
+          'Cache-Control': responseCacheControl,
           connection: 'keep-alive',
           'keep-alive': 'timeout=5, max=1000'
         })
@@ -557,6 +559,13 @@ export function start (
             return
           }
 
+          // Auraplex: both normal downloads and range requests need document authorization.
+          const download = await canDownloadApplicationAttachment(config.accountsUrlInternal ?? config.accountsUrl, wsIds.uuid, uuid, token)
+          if (!download.allowed) {
+            res.status(403).send()
+            return
+          }
+          if (download.restricted) res.setHeader('Cache-Control', 'private, no-store')
           let blobInfo = await ctx.with('stat', {}, (ctx) => config.storageAdapter.stat(ctx, wsIds, uuid), {
             workspace: wsIds.uuid
           })

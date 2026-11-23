@@ -15,8 +15,9 @@
 
 import { Analytics } from '@hcengineering/analytics'
 import { getClient } from '@hcengineering/account-client'
-import { MeasureContext, Tx, metricsAggregate } from '@hcengineering/core'
+import { MeasureContext, Tx, metricsAggregate, type WorkspaceUuid } from '@hcengineering/core'
 import { PlatformQueue, QueueTopic, getCPUInfo, getMemoryInfo } from '@hcengineering/server-core'
+import { canDownloadApplicationAttachment, readToken } from '@hcengineering/server-client'
 import { decodeToken, TokenError } from '@hcengineering/server-token'
 
 import cors from 'cors'
@@ -189,10 +190,27 @@ export async function createServer (
 
   app.get('/blob/:workspace', withAdminAuthorization, withWorkspace, wrapRequest(ctx, 'listBlobs', handleBlobList))
 
+  // Auraplex: protect the configured direct blob route as well as the front proxy.
+  const authorizeDownload = (req: RequestWithAuth, res: Response, next: NextFunction): void => {
+    const workspace = req.params.workspace as WorkspaceUuid
+    const token = readToken(req.headers)
+    void canDownloadApplicationAttachment(config.AccountsUrl, workspace, req.params.name, token)
+      .then(({ allowed, restricted }) => {
+        if (!allowed) {
+          res.status(403).send()
+          return
+        }
+        if (restricted) onHeaders(res, () => { res.setHeader('Cache-Control', 'private, no-store') })
+        next()
+      })
+      .catch(next)
+  }
+
   app.head(
     '/blob/:workspace/:name',
     withOptionalAuth(config.Secure),
     withBlob,
+    authorizeDownload,
     wrapRequest(ctx, 'headBlob', handleBlobHead)
   )
 
@@ -200,6 +218,7 @@ export async function createServer (
     '/blob/:workspace/:name/:filename',
     withOptionalAuth(config.Secure),
     withBlob,
+    authorizeDownload,
     wrapRequest(ctx, 'headBlob', handleBlobHead)
   )
 
@@ -207,6 +226,7 @@ export async function createServer (
     '/blob/:workspace/:name',
     withOptionalAuth(config.Secure),
     withBlob,
+    authorizeDownload,
     wrapRequest(ctx, 'getBlob', handleBlobGet)
   )
 
@@ -214,6 +234,7 @@ export async function createServer (
     '/blob/:workspace/:name/:filename',
     withOptionalAuth(config.Secure),
     withBlob,
+    authorizeDownload,
     wrapRequest(ctx, 'getBlob', handleBlobGet)
   )
 

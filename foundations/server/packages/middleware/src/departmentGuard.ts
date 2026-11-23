@@ -322,6 +322,24 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   override async domainRequest (
     ctx: MeasureContext<SessionData>, domain: OperationDomain, args: DomainParams
   ): Promise<DomainResult> {
+    // Auraplex: blob gateways resolve protected attachment parents using a service account.
+    if (domain === 'application-attachment') {
+      if (ctx.contextData === undefined || !isSystem(ctx.contextData.account, ctx)) forbidden()
+      if (typeof args.file !== 'string' || args.file === '') forbidden()
+      const hierarchy = this.context.hierarchy
+      const attachments = attachmentClass as Ref<Class<Doc & { attachedTo: Ref<Doc> }>>
+      const cards = cardBaseClass as Ref<Class<Doc>>
+      if (!hierarchy.hasClass(attachments) || !hierarchy.hasClass(cards) || !hierarchy.hasClass(applicationProcessClass)) {
+        return { domain, value: [] }
+      }
+      const files = await this.next?.findAll(ctx, attachments, { file: args.file })
+      if (files == null || files.length === 0) return { domain, value: [] }
+      const parents = [...new Set(files.map((file) => file.attachedTo))]
+      const forms = applicationFormTypes(hierarchy, (await this.next?.findAll(ctx, applicationProcessClass, {})) ?? [])
+      const matches = await this.next?.findAll(ctx, cards, { _id: { $in: parents } })
+      return { domain, value: (matches ?? []).filter((card) =>
+        forms.some((type) => hierarchy.isDerived(card._class, type))).map((card) => card._id) }
+    }
     if (domain !== 'communication' || ctx.contextData === undefined) {
       return await this.provideDomainRequest(ctx, domain, args)
     }
