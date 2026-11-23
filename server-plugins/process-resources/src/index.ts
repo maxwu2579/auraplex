@@ -142,6 +142,7 @@ import {
   StringFromEnum,
   EnumFromString
 } from './transform'
+import { InitiatorDepartmentSupervisor } from './departmentContext'
 
 async function putEventToQueue (value: Omit<ProcessMessage, 'account'>, control: TriggerControl): Promise<void> {
   if (control.queue === undefined) return
@@ -812,6 +813,7 @@ export default async () => ({
     Offset,
     FirstWorkingDayAfter,
     RoleContext,
+    InitiatorDepartmentSupervisor,
     Insert,
     Remove,
     RemoveFirst,

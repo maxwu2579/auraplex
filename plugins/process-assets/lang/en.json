@@ -122,6 +122,7 @@
     "NewProcessToDo": "New process Action item",
     "EmptyArray": "Empty array",
     "ExecutionInitiator": "Execution initiator",
+    "InitiatorDepartmentSupervisor": "Initiator's department supervisor",
     "ExecutionStarted": "Execution started",
     "Filter": "Filter",
     "AllMatchValue": "All matching values",

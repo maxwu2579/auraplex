@@ -24,6 +24,7 @@
 
   import { createCard, getRootType, isBaseTypeWithSubtypes } from '../utils'
   import { TypeSelector } from '../index'
+  import RequiredCardFields from './RequiredCardFields.svelte'
   import { canCreateObject } from '@hcengineering/view-resources'
 
   export let title: string = ''
@@ -47,7 +48,8 @@
 
   $: extension = getCreateCardExtension(type)
 
-  const data: Partial<Data<TypeCard>> = { title }
+  let data: Partial<Data<TypeCard>> = { title }
+  let requiredFilled = true
   let _space: Ref<CardSpace> | undefined = space
   let selectedSpace: CardSpace | undefined
 
@@ -125,7 +127,7 @@
 <Card
   label={getEmbeddedLabel(label)}
   {okAction}
-  canSave={data.title != null && data.title.trim().length > 0 && _space != null && allowed}
+  canSave={data.title != null && data.title.trim().length > 0 && _space != null && allowed && requiredFilled}
   okLabel={presentation.string.Create}
   on:close={() => dispatch('close')}
   onCancel={handleCancel}
@@ -150,6 +152,7 @@
     <TypeSelector bind:value={type} allowedRootTypes={selectedSpace?.types} excludeBaseTypes />
   </svelte:fragment>
   <ModernEditbox bind:value={data.title} label={view.string.Title} size="medium" kind="ghost" autoFocus />
+  <RequiredCardFields {type} bind:data bind:filled={requiredFilled} />
   <svelte:fragment slot="pool">
     <div slot="afterContent" class="error p-4 flex-row-reverse">
       {#if !allowed}

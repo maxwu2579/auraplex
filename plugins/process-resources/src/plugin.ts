@@ -240,6 +240,7 @@ export default mergeIds(processId, process, {
     EmptyValue: '' as IntlString,
     EmptyArray: '' as IntlString,
     ExecutionInitiator: '' as IntlString,
+    InitiatorDepartmentSupervisor: '' as IntlString,
     ExecutionStarted: '' as IntlString,
     RunProcessPermission: '' as IntlString,
     CancelProcessPermission: '' as IntlString,

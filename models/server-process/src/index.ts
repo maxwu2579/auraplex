@@ -348,6 +348,13 @@ export function createModel (builder: Builder): void {
     func: serverProcess.transform.RoleContext
   })
 
+  builder.mixin(
+    process.function.InitiatorDepartmentSupervisor,
+    process.class.ProcessFunction,
+    serverProcess.mixin.FuncImpl,
+    { func: serverProcess.transform.InitiatorDepartmentSupervisor }
+  )
+
   builder.mixin(process.function.CurrentDate, process.class.ProcessFunction, serverProcess.mixin.FuncImpl, {
     func: serverProcess.transform.CurrentDate
   })

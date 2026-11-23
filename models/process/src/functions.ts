@@ -540,6 +540,19 @@ export function defineFunctions (builder: Builder): void {
     process.function.ExecutionEmployeeInitiator
   )
 
+  // Auraplex: approver from the initiator's department (first supervisor, else first admin)
+  builder.createDoc(
+    process.class.ProcessFunction,
+    core.space.Model,
+    {
+      of: contact.mixin.Employee,
+      category: 'array',
+      label: process.string.InitiatorDepartmentSupervisor,
+      type: 'context'
+    },
+    process.function.InitiatorDepartmentSupervisor
+  )
+
   builder.createDoc(
     process.class.ProcessFunction,
     core.space.Model,
