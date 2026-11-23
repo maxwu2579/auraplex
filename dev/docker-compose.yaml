@@ -298,6 +298,7 @@ services:
     environment:
       - PORT=8101
       - ACCOUNTS_URL=http://account:3000
+      - SERVER_SECRET=secret
     restart: unless-stopped
   prospect-mail:
     # Without .env.mail.local it only answers "邮件未配置" and never connects to a mailbox.
