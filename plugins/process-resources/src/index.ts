@@ -25,6 +25,7 @@ import ExecutionMyToDos from './components/ExecutionMyToDos.svelte'
 import ExecutonPresenter from './components/ExecutonPresenter.svelte'
 import ExecutonProgressPresenter from './components/ExecutonProgressPresenter.svelte'
 import Main from './components/Main.svelte'
+import ApplicationsPage from './components/ApplicationsPage.svelte'
 import SubProcessPresenter from './components/presenters/SubProcessPresenter.svelte'
 import ToDoPresenter from './components/presenters/ToDoPresenter.svelte'
 import UpdateCardPresenter from './components/presenters/UpdateCardPresenter.svelte'
@@ -141,6 +142,7 @@ export default async (): Promise<Resources> => ({
     ExecutionContextSelector,
     FunctionSelector,
     Main,
+    ApplicationsPage,
     RunProcessCardPopup,
     ErrorPresenter,
     RequestUserInput,

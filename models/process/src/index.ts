@@ -461,6 +461,21 @@ export function createModel (builder: Builder): void {
     process.app.Process
   )
 
+  // Auraplex: simple page to apply for something and approve requests
+  builder.createDoc(
+    workbench.class.Application,
+    core.space.Model,
+    {
+      label: process.string.Applications,
+      icon: card.icon.Document,
+      accessLevel: AccountRole.User,
+      alias: 'applications',
+      hidden: false,
+      component: process.component.ApplicationsPage
+    },
+    process.app.Applications
+  )
+
   builder.createDoc(
     presentation.class.PresentationMiddlewareFactory,
     core.space.Model,

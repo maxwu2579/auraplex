@@ -21,7 +21,8 @@ import { type Action, type ViewAction } from '@hcengineering/view'
 
 export default mergeIds(processId, process, {
   app: {
-    Process: '' as Ref<Doc>
+    Process: '' as Ref<Doc>,
+    Applications: '' as Ref<Doc>
   },
   section: {
     CardProcesses: '' as Ref<CardSection>,
