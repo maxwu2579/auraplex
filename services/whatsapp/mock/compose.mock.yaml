@@ -3,6 +3,7 @@
 services:
   whatsapp:
     environment:
+      - WHATSAPP_PROVIDER=meta
       - WHATSAPP_GRAPH_URL=http://whatsapp-mock:8097
   whatsapp-mock:
     image: hardcoreeng/whatsapp
