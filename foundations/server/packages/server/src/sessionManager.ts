@@ -22,6 +22,8 @@ import { Analytics } from '@hcengineering/analytics'
 import core, {
   AccountRole,
   type AccountUuid,
+  type OperationDomain,
+  type TxDomainEvent,
   type Branding,
   type BrandingMap,
   cutObjectArray,
@@ -917,6 +919,7 @@ export class TSessionManager implements SessionManager {
     }
   }
 
+  // Auraplex: check communication events with the receiving session’s identity.
   broadcastSessions (measure: MeasureContext, sessionIds: Record<string, Tx[]>): void {
     const ctx = measure.newChild('📬 broadcast sessions', {})
     const allSessions = Array.from(this.sessions.values())
@@ -925,26 +928,44 @@ export class TSessionManager implements SessionManager {
       txes
     }))
 
-    function send (): void {
-      for (const session of sessions) {
-        if (session.session === undefined) {
-          continue
-        }
-        try {
-          void sendResponse(ctx, session.session.session, session.session.socket, { result: session.txes })
-        } catch (err: any) {
-          Analytics.handleError(err)
-          ctx.error('error during send', { error: err })
-        }
+    void (async () => {
+      try {
+        await Promise.all(sessions.map(async ({ session, txes }) => {
+          if (session === undefined) return
+          const pipeline = await this.workspaces.get(session.session.workspace.uuid)?.pipeline
+          const communicationEvents = txes.filter((tx) =>
+            tx._class === core.class.TxDomainEvent && (tx as TxDomainEvent).domain === 'communication')
+          let visible = txes
+          if (communicationEvents.length > 0) {
+            // Without a receiving workspace pipeline we cannot authorize these events.
+            let permitted: unknown[] = []
+            if (pipeline !== undefined) {
+              const receiver = ctx.newChild('communication recipient', {})
+              try {
+                session.session.includeSessionContext(this.createOpContext(
+                  receiver, ctx, pipeline, undefined, session.session, session.socket, undefined
+                ))
+                const result = await pipeline.domainRequest(receiver, 'communication' as OperationDomain, {
+                  filterApplicationBroadcast: communicationEvents.map((tx) => (tx as TxDomainEvent).event)
+                })
+                if (Array.isArray(result.value)) permitted = result.value
+              } finally {
+                receiver.end()
+              }
+            }
+            const allowed = new Set(permitted)
+            const checked = new Set(communicationEvents)
+            visible = txes.filter((tx) => !checked.has(tx) || allowed.has((tx as TxDomainEvent).event))
+          }
+          if (visible.length > 0) await sendResponse(ctx, session.session, session.socket, { result: visible })
+        }))
+      } catch (err: any) {
+        Analytics.handleError(err)
+        ctx.error('error during send', { error: err })
+      } finally {
+        ctx.end()
       }
-      ctx.end()
-    }
-    if (sessions.length > 0) {
-      // We need to send broadcast after our client response so put it after all IO
-      send()
-    } else {
-      ctx.end()
-    }
+    })()
   }
 
   broadcast (

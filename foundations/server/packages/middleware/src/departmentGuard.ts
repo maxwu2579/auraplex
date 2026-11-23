@@ -18,6 +18,9 @@ import core, {
   type ModuleExtra,
   type DepartmentModuleException,
   type DocumentQuery,
+  type DomainParams,
+  type DomainResult,
+  type OperationDomain,
   type FindOptions,
   type FindResult,
   type WithLookup,
@@ -313,6 +316,49 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const base = id as Ref<Class<Doc>>
       return hierarchy.hasClass(base) && (hierarchy.isDerived(_class, base) || hierarchy.isDerived(base, _class))
     })
+  }
+
+  // Auraplex: communication does not pass through findAll.
+  override async domainRequest (
+    ctx: MeasureContext<SessionData>, domain: OperationDomain, args: DomainParams
+  ): Promise<DomainResult> {
+    if (domain !== 'communication' || ctx.contextData === undefined) {
+      return await this.provideDomainRequest(ctx, domain, args)
+    }
+    const filteringBroadcast = Array.isArray(args.filterApplicationBroadcast)
+    const account = ctx.contextData.account
+    const hidden = await this.hiddenApplications(ctx)
+    const blocked = (value: unknown): boolean => {
+      if (Array.isArray(value)) return value.some(blocked)
+      if (value == null || typeof value !== 'object') return false
+      const record = value as Record<string, unknown>
+      const ids = Array.isArray(record.cardId) ? record.cardId : [record.cardId]
+      return ids.some((id) => typeof id === 'string' && hidden.has(id)) ||
+        ['card', 'message', 'notification', 'context', 'peer', 'thread'].some((key) => blocked(record[key]))
+    }
+    if (filteringBroadcast) {
+      return { domain, value: args.filterApplicationBroadcast.filter((event: unknown) => !blocked(event)) }
+    }
+    if (hidden.size === 0) return await this.provideDomainRequest(ctx, domain, args)
+    if (args.event !== undefined) {
+      if (blocked(args.event)) forbidden()
+      const contextId = args.event.contextId
+      if (typeof contextId === 'string') {
+        const contexts = await this.provideDomainRequest(ctx, domain, {
+          findNotificationContexts: { params: { id: contextId, account: account.uuid } }
+        })
+        if (blocked(contexts.value)) forbidden()
+      }
+    }
+    if (blocked(args.subscribeCard)) return { domain, value: undefined }
+    if (Object.entries(args).some(([key, command]) => key.startsWith('find') && blocked(command?.params))) {
+      return { domain, value: [] }
+    }
+    const result = await this.provideDomainRequest(ctx, domain, args)
+    if (!Array.isArray(result.value)) return result
+    const visible = result.value.filter((row: unknown) => !blocked(row))
+    if ('total' in result.value) Object.assign(visible, { total: visible.length })
+    return { ...result, value: visible }
   }
 
   override async findAll<T extends Doc> (
