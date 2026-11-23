@@ -18,16 +18,30 @@
   import type { Integration } from '@hcengineering/account-client'
   import { Label } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import { ConnectionError, getConnection, type ConnectionState } from '../api'
   export let integration: Integration
   let unavailable = false
   let state: ConnectionState | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
 
-  onMount(() => {
-    void getConnection().then((result) => { state = result }).catch((error) => {
+  // Auraplex: keep checking while WAHA waits for the scan, so the card turns "connected" by itself.
+  const load = (): void => {
+    void getConnection().then((result) => {
+      state = result
+      if (!disposed && result.provider === 'waha' && ['STARTING', 'SCAN_QR_CODE'].includes(result.status ?? '')) {
+        timer = setTimeout(load, 3000)
+      }
+    }).catch((error) => {
       unavailable = error instanceof ConnectionError && error.label === whatsapp.string.Unavailable
     })
+  }
+
+  onMount(load)
+  onDestroy(() => {
+    disposed = true
+    if (timer !== undefined) clearTimeout(timer)
   })
 </script>
 
