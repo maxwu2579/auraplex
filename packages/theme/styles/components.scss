@@ -117,6 +117,41 @@
     color: var(--global-tertiary-TextColor) !important;
   }
 }
+// Auraplex: on phones a page's own side menu (e.g. Guest / Anonymous guest) becomes a row of tabs on top.
+@media screen and (max-width: 680px) {
+  .hulyComponent-content__container.columns {
+    flex-direction: column;
+
+    & > .antiSeparator {
+      display: none;
+    }
+    & > .hulyComponent-content__column.navigation {
+      flex-shrink: 0;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      height: auto;
+      padding: var(--spacing-0_5) 0 !important;
+      border-bottom: 1px solid var(--theme-divider-color);
+
+      .box {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: var(--spacing-0_5);
+      }
+      .hulyNavItem-container {
+        flex: 0 0 auto;
+        width: auto;
+        margin: 0 var(--spacing-0_5);
+      }
+    }
+    & > .hulyComponent-content__column.content {
+      flex: 1 1 auto;
+      width: 100% !important;
+      min-height: 0;
+    }
+  }
+}
 
 /* Avatar */
 .hulyAvatar-container {
