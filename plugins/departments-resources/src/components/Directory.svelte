@@ -3,11 +3,11 @@
   import chunter from '@hcengineering/chunter'
   import { getResource, translate, translateCB, type Asset, type IntlString } from '@hcengineering/platform'
   import contact, { formatName, type Channel, type Employee } from '@hcengineering/contact'
-  import core, { AccountRole, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type CompanyModuleDefaults, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import core, { AccountRole, applicationFormTypes, applicationProcessClass, type ApplicationProcess, departmentModuleSettingsId, departmentAutoJoinClasses, type Space, defaultModuleLevel, moduleRoles, normalizeModuleExtra, type CompanyModuleDefaults, type ModuleAccess, type ModuleExtra, type ModuleLevel, type ModuleRole, generateId, getCurrentAccount, type AccountUuid, type Class, type Doc, type Ref } from '@hcengineering/core'
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, getCurrentLocation, languageStore, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
+  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, ModernCheckbox, getCurrentLocation, languageStore, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
 
   function localize (language: string) {
     return (id: IntlString): string => {
@@ -46,6 +46,39 @@
   const me = getCurrentAccount()
   const owner = me.role === AccountRole.Owner
   const canCreateDepartment = owner || me.role === AccountRole.Maintainer
+  // Auraplex: company-level administrators save application responsibilities separately.
+  let applicationProcesses: ApplicationProcess[] = []
+  createQuery().query(applicationProcessClass, {}, (items) => { applicationProcesses = items })
+  $: applicationForms = applicationFormTypes(hierarchy, applicationProcesses).map((id) => hierarchy.getClass(id))
+
+  type ApplicationFormId = NonNullable<DepartmentAccess['applicationTypes']>[number]
+
+  async function assignApplication (type: Ref<Class<Doc>>, checked: boolean): Promise<void> {
+    if (!canCreateDepartment || live === undefined || busy) return
+    const id = type as ApplicationFormId
+    const types = new Set(live.applicationTypes ?? [])
+    if (checked) types.add(id)
+    else types.delete(id)
+    busy = true
+    error = false
+    try {
+      const operations = client.apply('department-application-assignments')
+      operations.match(hr.class.Department, { _id: live._id, modifiedOn: live.modifiedOn })
+      await operations.updateMixin(live._id, hr.class.Department, live.space, departments.mixin.DepartmentAccess, {
+        applicationTypes: [...types]
+      })
+      if (!(await operations.commit()).result) error = true
+    } catch {
+      error = true
+    } finally {
+      busy = false
+    }
+  }
+
+  function assignedApplication (department: DepartmentAccess | undefined, type: Ref<Class<Doc>>): boolean {
+    return department?.applicationTypes?.includes(type as ApplicationFormId) ?? false
+  }
+
   const rosterQuery = createQuery()
   const departmentQuery = createQuery()
   let channels: Channel[] = []
@@ -661,7 +694,7 @@
         <div class="tabs">
           <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}><Label label={departments.string.DirectoryMembers} /></button>
           <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}><Label label={departments.string.DirectoryModuleAccess} /></button>
-          {#if canEdit}<button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}><Label label={departments.string.DirectorySettings} /></button>{/if}
+          <button aria-pressed={tab === 'settings'} on:click={() => { tab = 'settings' }}><Label label={departments.string.DirectorySettings} /></button>
         </div>
         {#if tab === 'members'}
           <div class="member-toolbar">
@@ -674,7 +707,7 @@
           </div>
           {#each roles as role (role.field)}
             {@const people = members(draft[role.field]).filter((person) => person.personUuid != null &&
-              memberRole(draft, person.personUuid) === role.field && matchesMember(formatName(person.name), memberSearch))}
+              draft !== undefined && memberRole(draft, person.personUuid) === role.field && matchesMember(formatName(person.name), memberSearch))}
             {#if people.length > 0}
               <section>
                 <h4><Label label={role.label} /></h4>
@@ -797,6 +830,21 @@
               </section>
             {/each}
           </div>
+        {/if}
+        {#if tab === 'settings'}
+          <section class="application-assignments">
+            <h3><Label label={departments.string.ApplicationAssignments} /></h3>
+            <p><Label label={departments.string.ApplicationAssignmentsHint} /></p>
+            {#each applicationForms as form (form._id)}
+              <ModernCheckbox labelIntl={form.label}
+                checked={assignedApplication(live, form._id)}
+                disabled={!canCreateDepartment || busy}
+                on:change={() => { void assignApplication(form._id, !assignedApplication(live, form._id)) }} />
+            {:else}
+              <p><Label label={departments.string.ApplicationAssignmentsEmpty} /></p>
+            {/each}
+            {#if error && !canEdit}<p role="alert"><Label label={departments.string.ApplicationAssignmentsError} /></p>{/if}
+          </section>
         {/if}
         {#if canEdit && tab === 'settings'}
           <label><Label label={departments.string.DirectoryContactVisibility} />

@@ -237,3 +237,23 @@ test('only department admins pick the default order owner, and only among the me
   await expect(guard.tx(context('admin'), [tx('lead')])).resolves.toBeDefined()
   await expect(guard.tx(context('admin'), [tx(null)])).resolves.toBeDefined()
 })
+
+test('a department administrator cannot assign application forms; a company maintainer can', async () => {
+  const cls = 'hr:class:Department' as Ref<Class<Doc>>
+  const department = { _id: 'dept', _class: cls, space: core.space.Workspace,
+    [departmentAccessMixin]: { administrators: ['department-admin'] } }
+  const context = (role: AccountRole) => ({
+    contextData: { account: { uuid: 'department-admin', role }, broadcast: { txes: [] } }
+  }) as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: async (_ctx: unknown, objectClass: string) => objectClass === cls ? [department] : [],
+    tx: async () => []
+  } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(context(AccountRole.User), pipeline, next)
+  const tx = { _class: core.class.TxMixin, mixin: departmentAccessMixin, objectClass: cls,
+    objectSpace: core.space.Workspace, objectId: 'dept',
+    attributes: { applicationTypes: ['fake:class:Leave'] } } as unknown as TxCUD<Doc>
+  await expect(guard.tx(context(AccountRole.User), [tx])).rejects.toThrow()
+  await expect(guard.tx(context(AccountRole.Maintainer), [tx])).resolves.toBeDefined()
+})

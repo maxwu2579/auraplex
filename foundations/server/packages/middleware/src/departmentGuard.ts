@@ -97,6 +97,7 @@ export interface DepartmentRecord {
   moduleAccess?: unknown
   autoJoin?: unknown
   orderAssignee?: unknown
+  applicationTypes: string[]
   supervisorsSeeTracking: boolean
   employeesSeeTracking: boolean
 }
@@ -128,6 +129,7 @@ export function readDepartment (doc: Doc): DepartmentRecord | undefined {
     moduleAccess: access.moduleAccess,
     autoJoin: access.autoJoin,
     orderAssignee: access.orderAssignee,
+    applicationTypes: list(access.applicationTypes),
     supervisorsSeeTracking: access.supervisorsSeeTracking === true,
     employeesSeeTracking: access.employeesSeeTracking === true
   }
@@ -662,8 +664,20 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
     const doc =
       (await this.findOne(ctx, departmentClass, tx.objectId)) ??
       ({ _id: tx.objectId, _class: departmentClass, space: tx.objectSpace } as unknown as Doc)
-    const next = readDepartment(TxProcessor.updateMixin4Doc(clone(doc) as Doc, mixinTx))
+    const changedDepartment = TxProcessor.updateMixin4Doc(clone(doc) as Doc, mixinTx)
+    const next = readDepartment(changedDepartment)
     if (next === undefined) forbidden()
+    // Auraplex: company administrators may assign forms without gaining other department settings.
+    const stored = (doc as unknown as Record<string, Record<string, unknown> | undefined>)[departmentAccessMixin]
+    const updated = (changedDepartment as unknown as
+      Record<string, Record<string, unknown>>)[departmentAccessMixin]
+    if (JSON.stringify(stored?.applicationTypes) !== JSON.stringify(updated.applicationTypes)) {
+      if (!owner && account.role !== AccountRole.Maintainer) forbidden()
+      if (!Array.isArray(updated.applicationTypes) ||
+        updated.applicationTypes.some((id: unknown) => typeof id !== 'string' || id === '') ||
+        new Set(updated.applicationTypes).size !== updated.applicationTypes.length) forbidden()
+      if (before !== undefined && Object.keys(attributes).every((key) => key === 'applicationTypes')) return
+    }
     const initializing = !owner && account.role === AccountRole.Maintainer && before === undefined &&
       newDepartments?.has(tx.objectId) === true
     if (initializing) {

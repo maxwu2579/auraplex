@@ -1,5 +1,9 @@
 {
   "string": {
+    "ApplicationAssignmentsError": "未能保存申请表分配。",
+    "ApplicationAssignments": "负责的申请表",
+    "ApplicationAssignmentsHint": "勾上的申请表，这个部门的管理员和主管能看到全公司这类申请。普通员工只能看到自己的。",
+    "ApplicationAssignmentsEmpty": "还没有申请表。",
     "Administrators": "管理员",
     "Supervisors": "主管",
     "Employees": "员工",

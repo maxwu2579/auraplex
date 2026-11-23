@@ -1,4 +1,6 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import type { Class, Doc, Mixin, Ref } from './classes'
+import type { Hierarchy } from './hierarchy'
 
 export const departmentAutoJoinClasses: Record<string, string> = {
   tracker: 'tracker:class:Project',
@@ -107,4 +109,23 @@ export function canChangeDepartmentModuleException (
   return [...before.blocked, ...after.blocked].every((alias) =>
     before.blocked.includes(alias) === after.blocked.includes(alias) ||
     effectiveDepartmentModules(person, false, true, scope)(alias) !== 'none')
+}
+
+// Auraplex: the server and both settings pages classify application forms identically.
+export const applicationProcessClass = 'process:class:Process' as Ref<Class<ApplicationProcess>>
+
+export interface ApplicationProcess extends Doc {
+  masterTag: Ref<Class<Doc>>
+  automationOnly?: boolean
+}
+
+export function applicationFormTypes (hierarchy: Hierarchy, processes: ApplicationProcess[]): Ref<Class<Doc>>[] {
+  const card = 'card:class:Card' as Ref<Class<Doc>>
+  const userMixin = 'setting:mixin:UserMixin' as Ref<Mixin<Class<Doc>>>
+  return [...new Set(processes.filter((process) => process.automationOnly !== true).map((process) => process.masterTag))]
+    .filter((type) => hierarchy.hasClass(type) && !hierarchy.isMixin(type) && hierarchy.isDerived(type, card))
+    .filter((type) => {
+      const tag = hierarchy.getClass(type) as Class<Doc> & { removed?: boolean }
+      return tag.removed !== true && hierarchy.hasMixin(tag, userMixin)
+    })
 }

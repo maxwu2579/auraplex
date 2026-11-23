@@ -1,4 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import type { MasterTag } from '@hcengineering/card'
 import type { CompanyModuleDefaults, AccountUuid, Class, Client, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
 import { plugin, type IntlString, type Plugin, type Resource } from '@hcengineering/platform'
@@ -17,6 +18,8 @@ export interface DepartmentAccess extends Department {
   projectSpace?: Ref<Space>
   documentSpace?: Ref<Space>
   driveSpace?: Ref<Space>
+  /** Application form types managed by this department. */
+  applicationTypes?: Array<Ref<MasterTag>>
   archived: boolean
   contactVisibility?: 'company' | 'department' | 'admins'
   modules?: string[]
@@ -299,6 +302,10 @@ export default plugin(departmentsId, {
     DirectoryDepartment: '' as IntlString,
     DirectoryAdmins: '' as IntlString,
     DirectoryContactHint: '' as IntlString,
+    ApplicationAssignments: '' as IntlString,
+    ApplicationAssignmentsHint: '' as IntlString,
+    ApplicationAssignmentsError: '' as IntlString,
+    ApplicationAssignmentsEmpty: '' as IntlString,
     DirectoryDefaultOwner: '' as IntlString,
     DirectoryAutomaticOwner: '' as IntlString,
     DirectoryArchived: '' as IntlString,
@@ -455,7 +462,6 @@ export default plugin(departmentsId, {
     OrderEscalated: '' as IntlString,
     ApplicationWithdrawn: '' as IntlString,
     ApplicationCancelled: '' as IntlString,
-    OrderReturned: '' as IntlString,
     OrderAssigned: '' as IntlString,
     OrderFinished: '' as IntlString,
     Tracking: '' as IntlString,

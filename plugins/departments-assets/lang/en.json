@@ -1,5 +1,9 @@
 {
   "string": {
+    "ApplicationAssignmentsError": "Could not save the application form assignment.",
+    "ApplicationAssignments": "Application forms this department manages",
+    "ApplicationAssignmentsHint": "Department administrators and supervisors can see all applications from the selected forms. Employees can only see their own applications.",
+    "ApplicationAssignmentsEmpty": "There are no application forms yet.",
     "Administrators": "Administrators",
     "Supervisors": "Supervisors",
     "Employees": "Employees",

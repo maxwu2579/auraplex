@@ -65,6 +65,8 @@ export class TDepartmentAccess extends TDepartment implements DepartmentAccess {
   @Hidden() modules?: string[]
   @Hidden() autoJoin?: DepartmentAccess['autoJoin']
   @Hidden() moduleAccess?: DepartmentAccess['moduleAccess']
+  // Auraplex: optional references to application form types.
+  @Hidden() applicationTypes?: DepartmentAccess['applicationTypes']
   @Hidden() orderAssignee?: DepartmentAccess['orderAssignee']
   @Prop(TypeBoolean(), departments.string.SupervisorsSeeTracking) supervisorsSeeTracking?: boolean
   @Prop(TypeBoolean(), departments.string.EmployeesSeeTracking) employeesSeeTracking?: boolean

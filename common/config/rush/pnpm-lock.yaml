@@ -19660,6 +19660,9 @@ importers:
 
   ../../plugins/departments:
     dependencies:
+      '@hcengineering/card':
+        specifier: workspace:^0.7.0
+        version: link:../card
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
