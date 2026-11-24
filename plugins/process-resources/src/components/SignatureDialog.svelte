@@ -38,6 +38,8 @@
   export let confirmationTitle: IntlString = plugin.string.ConfirmApproval
   export let rejectionTitle: IntlString = plugin.string.ConfirmRejection
   export let isRejection: boolean = false
+  // Auraplex: approving or rejecting does not ask for the password again (the user is already signed in).
+  export let requirePassword: boolean = false
 
   const dispatch = createEventDispatcher()
   const account = getCurrentAccount()
@@ -62,11 +64,18 @@
 
   const accountsUrl = getMetadata(login.metadata.AccountsUrl) ?? ''
   $: disableEmailField = object.email !== ''
-  $: canSubmit = object.email !== '' && object.password !== '' && (!isRejection || rejectionNote.trim().length > 0)
+  $: canSubmit =
+    (!requirePassword || (object.email !== '' && object.password !== '')) &&
+    (!isRejection || rejectionNote.trim().length > 0)
 
   let status = OK
 
   async function submit (): Promise<void> {
+    if (!requirePassword) {
+      if (isRejection && rejectionNote.trim().length === 0) return
+      dispatch('close', { rejectionNote: isRejection ? rejectionNote : undefined })
+      return
+    }
     if (object.email === '' || object.password === '') {
       return
     }
@@ -105,7 +114,7 @@
   }
 
   async function validate (): Promise<void> {
-    for (const field of Object.keys(object)) {
+    for (const field of requirePassword ? Object.keys(object) : []) {
       const k = field as keyof LoginInfo
       if (object[k] === '') {
         status = new Status(Severity.INFO, plugin.string.FieldIsEmpty, {
@@ -136,6 +145,7 @@
   className={'signature-dialog'}
 >
   <div class="flex-col flex-gap-2">
+    {#if requirePassword}
     <StylishEdit
       label={login.string.Email}
       name={login.string.Email}
@@ -153,6 +163,7 @@
       on:input={validate}
       on:blur={() => object.email.trim()}
     />
+    {/if}
     {#if isRejection}
       <div class="mt-2">
         <EditBox
