@@ -153,6 +153,23 @@
       min-height: 0;
     }
   }
+
+  // Auraplex: a detail panel (contact, card) must not be wider than the screen.
+  .popupPanel-body__main {
+    min-width: 0 !important;
+  }
+
+  // Auraplex: centred dialogs (fixed 720px etc.) fill the screen width instead of sticking out on both sides.
+  .popup[style*='calc(50% -'] {
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+
+    & > * {
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: 100% !important;
+    }
+  }
 }
 
 /* Avatar */
