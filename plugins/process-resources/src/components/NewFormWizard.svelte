@@ -370,5 +370,12 @@
     .field {
       grid-template-columns: 1fr 1fr;
     }
+    /* Auraplex: phones - fit the dialog so long hints wrap instead of being cut off. */
+    .wizard {
+      min-width: 0;
+    }
+    .radio {
+      align-items: flex-start;
+    }
   }
 </style>

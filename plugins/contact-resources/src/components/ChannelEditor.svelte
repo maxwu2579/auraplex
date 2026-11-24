@@ -311,4 +311,17 @@
       transform: rotate(180deg);
     }
   }
+  // Auraplex: phones are too narrow to centre the editor under the icon; keep it fully on screen.
+  @media (max-width: 680px) {
+    .editor-container.top,
+    .editor-container.bottom {
+      transform: none;
+    }
+    .editor-container.top::before,
+    .editor-container.top::after,
+    .editor-container.bottom::before,
+    .editor-container.bottom::after {
+      display: none;
+    }
+  }
 </style>

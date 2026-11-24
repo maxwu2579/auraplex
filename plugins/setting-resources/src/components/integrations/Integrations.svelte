@@ -253,7 +253,7 @@
   }
 </script>
 
-<div class="hulyComponent">
+<div class="hulyComponent integrations-page">
   <Header adaptive={'disabled'}>
     <Breadcrumb icon={setting.icon.Integrations} label={setting.string.Integrations} size={'large'} isCurrent />
     <svelte:fragment slot="extra">
@@ -299,6 +299,16 @@
     grid-gap: 1.5rem;
     padding: 1.5rem;
     overflow: auto;
+  }
+  // Auraplex: phones - one scroll for the whole page (service settings + cards).
+  @media (max-width: 680px) {
+    .integrations-page {
+      overflow-y: auto;
+    }
+    .cards_grid {
+      flex-shrink: 0;
+      overflow: visible;
+    }
   }
   .loading-container {
     display: flex;

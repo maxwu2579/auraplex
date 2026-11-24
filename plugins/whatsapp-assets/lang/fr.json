@@ -40,7 +40,7 @@
     "Read": "Read",
     "SendFailed": "Failed",
     "SaveMessageFailed": "Could not save the message. Your draft is kept. Please try again.",
-    "ConnectionRequired": "You have not linked WhatsApp. Link your own WhatsApp Business number in Settings → Integrations.",
+    "ConnectionRequired": "You have not linked WhatsApp. Link your own WhatsApp number in Settings → Integrations.",
     "WindowClosed": "The customer's last message was more than 24 hours ago. WhatsApp only allows approved template messages now. Once the customer replies, you can type freely again.",
     "NeverWrote": "This customer has not messaged you yet. WhatsApp only allows an approved template message to start the chat.",
     "Template": "Template",

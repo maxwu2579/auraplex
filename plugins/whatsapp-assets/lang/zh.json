@@ -80,7 +80,7 @@
     "Read": "已读",
     "SendFailed": "发送失败",
     "SaveMessageFailed": "消息保存失败，输入内容已保留，请重试。",
-    "ConnectionRequired": "你还没有绑定 WhatsApp，到设置 → 集成里绑定自己的 WhatsApp Business 号。",
+    "ConnectionRequired": "你还没有绑定 WhatsApp，到设置 → 集成里绑定自己的 WhatsApp 号。",
     "WindowClosed": "客户最后一条消息已超过 24 小时，WhatsApp 现在只允许发送已审核的模板消息。客户回复后，就可以正常打字回复。",
     "NeverWrote": "这个客户还没有给你发过消息，WhatsApp 只允许先发送一条已审核的模板消息。",
     "Template": "模板",

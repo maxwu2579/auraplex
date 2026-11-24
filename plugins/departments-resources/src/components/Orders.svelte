@@ -144,6 +144,12 @@
   export let focusId: Ref<Order> | undefined = undefined
   let selectedId: Ref<Order> | undefined = focusId
   let detailEl: HTMLElement | undefined
+  // Auraplex: on phones the detail sits under the list, so bring it into view when an order is opened or created.
+  $: if (selectedId !== undefined && detailEl !== undefined) scrollDetailOnPhone(selectedId)
+  function scrollDetailOnPhone (_id: Ref<Order>): void {
+    if (!window.matchMedia('(max-width: 720px)').matches) return
+    void tick().then(() => detailEl?.scrollIntoView({ block: 'start' }))
+  }
   type OrderFilter = 'todo' | 'mine' | 'late' | 'all'
   const filterKey = 'auraplex.orders.filter'
   let filter: OrderFilter = 'mine'
@@ -289,10 +295,6 @@
     adjusting = false
     openStage = ''
     void recordAudit('view', `${it.number} ${it.title}`, it)
-    // Auraplex: on phones the detail sits under the list, so bring it into view.
-    if (window.matchMedia('(max-width: 720px)').matches) {
-      void tick().then(() => detailEl?.scrollIntoView({ block: 'start' }))
-    }
   }
 
   async function createOrder (): Promise<void> {
