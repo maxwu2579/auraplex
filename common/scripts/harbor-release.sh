@@ -8,12 +8,20 @@
 #   bash common/scripts/harbor-release.sh push v3 --yes    # same, without the confirmation question
 #
 # Log in first (in a normal terminal): docker login <harbor host>
+# Pushing uses regctl, which uploads in 50 MB pieces (the Harbor address goes through
+# Cloudflare, which refuses requests over 100 MB). Set REGCTL or keep it in ../tools/regctl/.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 # The Harbor address stays out of this public repo: it is read from a local, git-ignored file.
 REGISTRY="${HARBOR_REGISTRY:-$(tr -d '\r\n ' < common/scripts/harbor-registry.local 2> /dev/null || true)}"
 [ -n "$REGISTRY" ] || { echo "Missing common/scripts/harbor-registry.local (one line: <harbor host>:<port>/<project>)"; exit 1; }
+REGCTL="${REGCTL:-}"
+if [ -z "$REGCTL" ]; then
+  for c in regctl ../tools/regctl/regctl-windows-amd64.exe ../tools/regctl/regctl; do
+    if command -v "$c" > /dev/null 2>&1 || [ -x "$c" ]; then REGCTL="$c"; break; fi
+  done
+fi
 
 # local image             | name in Harbor        | rush package                         | must carry the version
 IMAGES=(
@@ -89,11 +97,13 @@ check () {
 push () {
   local tag="${1:-}" yes="${2:-}"
   [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || fail "请给一个新标签，例如：push v3"
+  [ -n "$REGCTL" ] || fail "找不到 regctl（分块上传工具）。放到 ../tools/regctl/ 或设置 REGCTL。"
   check
+  "$REGCTL" registry set "${REGISTRY%%/*}" --blob-chunk 52428800 --blob-max 52428800 > /dev/null
   echo "== 检查 Harbor 里还没有 :$tag =="
   for line in "${IMAGES[@]}"; do
     read -r _ remote _ _ <<< "$line"
-    if docker manifest inspect "$REGISTRY/$remote:$tag" > /dev/null 2>&1; then
+    if "$REGCTL" manifest head "$REGISTRY/$remote:$tag" > /dev/null 2>&1; then
       fail "Harbor 里已经有 $remote:$tag。标签不能重复使用，请换一个新的。"
     fi
   done
@@ -104,10 +114,13 @@ push () {
   fi
   for line in "${IMAGES[@]}"; do
     read -r local remote _ _ <<< "$line"
-    docker tag "$local:$COMMIT" "$REGISTRY/$remote:$tag"
     echo "推送 $remote:$tag ……"
-    docker push -q "$REGISTRY/$remote:$tag" > /dev/null || fail "$remote:$tag 推送失败（检查登录和权限），后面的没有推送。"
-    docker manifest inspect "$REGISTRY/$remote:$tag" > /dev/null || fail "$remote:$tag 推送后在 Harbor 里找不到。"
+    local tmp
+    tmp="$(mktemp -d)"
+    docker save "$local:$COMMIT" -o "$tmp/image.tar" || { rm -rf "$tmp"; fail "$local:$COMMIT 导出失败。"; }
+    "$REGCTL" image import "$REGISTRY/$remote:$tag" "$tmp/image.tar" --name "$COMMIT" > /dev/null       || { rm -rf "$tmp"; fail "$remote:$tag 推送失败（检查登录和权限），后面的没有推送。"; }
+    rm -rf "$tmp"
+    "$REGCTL" manifest head "$REGISTRY/$remote:$tag" > /dev/null || fail "$remote:$tag 推送后在 Harbor 里找不到。"
     green "✓ $remote:$tag"
   done
   echo
