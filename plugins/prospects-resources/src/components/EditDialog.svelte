@@ -87,6 +87,7 @@
   onDestroy(() => {
     if (frontPreview !== '') URL.revokeObjectURL(frontPreview)
     if (backPreview !== '') URL.revokeObjectURL(backPreview)
+  })
   function localizer (language: string): (id: IntlString) => string {
     return (id) => {
       let value = ''
@@ -100,7 +101,6 @@
     if (language === $languageStore) local = localizer(language)
   }
   $: void updateLanguage($languageStore)
-  })
   let fields: Array<{ key: keyof typeof draft, label: string }>
   $: fields = [
     { key: 'name', label: local(prospects.string.PageName) },

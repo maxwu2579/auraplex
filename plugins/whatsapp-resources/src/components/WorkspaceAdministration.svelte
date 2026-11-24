@@ -255,6 +255,10 @@
 
 <style>
   .administration { padding: var(--spacing-3); max-height: 65vh; overflow: auto; color: var(--theme-content-color); }
+  @media (max-width: 680px) {
+    /* Phones: let the settings page scroll as a whole instead of a small inner box. */
+    .administration { max-height: none; overflow: visible; }
+  }
   form, .roster, label { display: flex; flex-direction: column; align-items: flex-start; gap: var(--spacing-1); }
   .buttons, .conversations { display: flex; flex-wrap: wrap; gap: var(--spacing-1); }
   input, select { max-width: 100%; color: var(--theme-content-color); background: var(--theme-popup-color); border: 1px solid var(--theme-divider-color); }

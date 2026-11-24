@@ -17,6 +17,7 @@
   import { getResource, translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import OrderFlowChart from './OrderFlowChart.svelte'
+  import { tick } from 'svelte'
   import StatusTag from './StatusTag.svelte'
   import QrScanner from './QrScanner.svelte'
   import OrderLinks from './OrderLinks.svelte'
@@ -142,6 +143,7 @@
   /** Opened from the inbox or a link: show just this order. */
   export let focusId: Ref<Order> | undefined = undefined
   let selectedId: Ref<Order> | undefined = focusId
+  let detailEl: HTMLElement | undefined
   type OrderFilter = 'todo' | 'mine' | 'late' | 'all'
   const filterKey = 'auraplex.orders.filter'
   let filter: OrderFilter = 'mine'
@@ -287,6 +289,10 @@
     adjusting = false
     openStage = ''
     void recordAudit('view', `${it.number} ${it.title}`, it)
+    // Auraplex: on phones the detail sits under the list, so bring it into view.
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      void tick().then(() => detailEl?.scrollIntoView({ block: 'start' }))
+    }
   }
 
   async function createOrder (): Promise<void> {
@@ -483,7 +489,7 @@
     </table>
 
     {#if selected !== undefined}
-      <div class="detail">
+      <div class="detail" bind:this={detailEl}>
         {#if focusId === undefined}<button class="detail-close" title={L('关闭', 'Close')} on:click={closeDetail}>✕</button>{/if}
         {#if editing}
           <div class="edit-info">

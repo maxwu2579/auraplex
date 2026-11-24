@@ -884,6 +884,17 @@
   defineSeparators('main', mainSeparators)
 
   $: mainNavigator = currentApplication && navigatorModel && $deviceInfo.navigator.visible
+
+  // Auraplex: on phones an app opened at its root shows an empty page; open its menu once so a page can be picked.
+  let navAutoOpenedFor: string | undefined
+  $: nothingSelected =
+    currentApplication?.component === undefined && specialComponent === undefined && currentSpace === undefined
+  $: if ($deviceInfo.navigator.float && navigatorModel !== undefined && nothingSelected && currentAppAlias !== navAutoOpenedFor) {
+    navAutoOpenedFor = currentAppAlias
+    setTimeout(() => {
+      if (nothingSelected && $deviceInfo.navigator.float) $deviceInfo.navigator.visible = true
+    }, 500)
+  }
   $: elementPanel = $deviceInfo.replacedPanel ?? contentPanel
 
   $: deactivated =

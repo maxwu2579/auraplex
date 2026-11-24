@@ -852,5 +852,14 @@
     .directory {
       padding: 0.8rem;
     }
+    /* Auraplex: on phones the wide button column would cover the whole table, so let it scroll with the rest. */
+    .actions-col {
+      position: static;
+      box-shadow: none;
+    }
+    th.actions-col {
+      position: sticky;
+      right: auto;
+    }
   }
 </style>

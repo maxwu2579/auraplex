@@ -607,7 +607,7 @@
     {/if}
     <svelte:fragment slot="extra">
   {#if owner && selected === undefined}
-    <label>
+    <label class="module-control">
       <input type="checkbox" checked={moduleSettings?.enabled === true} disabled={busy}
         on:change={(event) => {
           const enabled = event.currentTarget.checked
@@ -1070,5 +1070,10 @@
   }
   .error {
     color: var(--theme-error-color);
+  }
+  @media (max-width: 680px) {
+    /* Auraplex: phones - keep the page title readable next to the toggle and button. */
+    .module-control small { display: none; }
+    .module-control { font-size: 0.75rem; }
   }
 </style>
