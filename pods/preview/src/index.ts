@@ -18,6 +18,7 @@ import { configureAnalytics, createOpenTelemetryMetricsContext, SplitLogger } fr
 import { newMetrics } from '@hcengineering/core'
 import { setMetadata } from '@hcengineering/platform'
 import { initStatisticsContext } from '@hcengineering/server-core'
+import serverClient from '@hcengineering/server-client'
 import serverToken from '@hcengineering/server-token'
 import { join } from 'path'
 
@@ -29,7 +30,8 @@ const application = config.ServiceID
 const setupMetadata = (): void => {
   setMetadata(serverToken.metadata.Secret, config.Secret)
   setMetadata(serverToken.metadata.Service, config.ServiceID)
-  // setMetadata(serverClient.metadata.Endpoint, config.AccountsUrl)
+  // Auraplex: needed to check workspace membership for cookie (no-workspace) tokens.
+  if (process.env.ACCOUNTS_URL !== undefined) setMetadata(serverClient.metadata.Endpoint, process.env.ACCOUNTS_URL)
   // setMetadata(serverClient.metadata.UserAgent, config.ServiceID)
 }
 

@@ -22,8 +22,12 @@ import { HttpError } from '../error'
 import { type RequestWithAuth, withAuthorization, withBlob } from '../middleware'
 
 jest.mock('@hcengineering/server-client', () => ({
-  extractToken: jest.fn()
+  extractToken: jest.fn(),
+  readToken: jest.fn(() => 'raw-token'),
+  getAccountClient: jest.fn(() => ({ getUserWorkspaces: getUserWorkspacesMock }))
 }))
+
+const getUserWorkspacesMock = jest.fn()
 
 const extractTokenMock = extractToken as jest.MockedFunction<typeof extractToken>
 
@@ -136,5 +140,34 @@ describe('withBlob', () => {
     withBlob(makeRequest(workspaceA, 'blob'), res, next)
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 401 }))
+  })
+  // Auraplex: cookie tokens carry no workspace; membership is checked with the account service.
+  describe('cookie token without workspace', () => {
+    const flush = async (): Promise<void> => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    beforeEach(() => {
+      process.env.ACCOUNTS_URL = 'http://account'
+      getUserWorkspacesMock.mockReset()
+    })
+    afterAll(() => {
+      delete process.env.ACCOUNTS_URL
+    })
+
+    it('allows a member of the workspace', async () => {
+      getUserWorkspacesMock.mockResolvedValue([{ uuid: workspaceB }])
+      const next = jest.fn()
+      withBlob(makeRequest(workspaceB, 'blob', makeToken({ workspace: undefined, account: 'member-1' as AccountUuid })), {} as unknown as Response, next)
+      await flush()
+      expect(next).toHaveBeenCalledWith(undefined)
+    })
+
+    it('rejects an account that is not a member', async () => {
+      getUserWorkspacesMock.mockResolvedValue([{ uuid: workspaceA }])
+      const next = jest.fn()
+      withBlob(makeRequest(workspaceB, 'blob', makeToken({ workspace: undefined, account: 'member-2' as AccountUuid })), {} as unknown as Response, next)
+      await flush()
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ code: 401 }))
+    })
   })
 })

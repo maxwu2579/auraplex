@@ -37,6 +37,7 @@ services:
       - SECRET=secret
       - STORAGE_CONFIG=${STORAGE_CONFIG}
       - CACHE_PATH=/data/cache
+      - ACCOUNTS_URL=http://huly.local:3000
     ports:
       - 4040:4040
     restart: unless-stopped

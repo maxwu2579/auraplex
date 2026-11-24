@@ -15,7 +15,7 @@
 
 import { Analytics } from '@hcengineering/analytics'
 import { MeasureContext, systemAccountUuid } from '@hcengineering/core'
-import { extractToken } from '@hcengineering/server-client'
+import { extractToken, getAccountClient, readToken } from '@hcengineering/server-client'
 import { Token } from '@hcengineering/server-token'
 import { type Response, type Request, type NextFunction, type RequestHandler, type ErrorRequestHandler } from 'express'
 import { HttpError } from './error'
@@ -71,6 +71,32 @@ export const withAuthorization = (req: RequestWithAuth, res: Response, next: Nex
  * the workspace taken from the URL. Must run after `withAuthorization`, which
  * guarantees a token is present.
  */
+// Auraplex: the login cookie never carries a workspace (account service strips it), so a
+// browser <img> request would always fail the check below. In that case ask the account
+// service whether the account is a member of the workspace; the answer is cached briefly.
+const memberCache = new Map<string, { ok: boolean, until: number }>()
+const MEMBER_CACHE_MS = 5 * 60 * 1000
+
+async function isWorkspaceMember (req: Request, token: Token, workspace: string): Promise<boolean> {
+  if (process.env.ACCOUNTS_URL === undefined || process.env.ACCOUNTS_URL === '') return false
+  if (token.workspace !== undefined && (token.workspace as string) !== '') return false
+  const raw = readToken(req.headers)
+  if (raw === undefined) return false
+  const key = `${token.account}:${workspace}`
+  const cached = memberCache.get(key)
+  if (cached !== undefined && cached.until > Date.now()) return cached.ok
+  let ok = false
+  try {
+    const workspaces = await getAccountClient(raw).getUserWorkspaces()
+    ok = workspaces.some((it) => (it.uuid as string) === workspace)
+  } catch {
+    ok = false
+  }
+  if (memberCache.size > 10000) memberCache.clear()
+  memberCache.set(key, { ok, until: Date.now() + MEMBER_CACHE_MS })
+  return ok
+}
+
 export const withBlob = (req: RequestWithAuth, res: Response, next: NextFunction): void => {
   try {
     const workspace = req.params.workspace
@@ -91,6 +117,12 @@ export const withBlob = (req: RequestWithAuth, res: Response, next: NextFunction
     const hasWorkspaceAccess =
       (token.workspace as string) === workspace || token.account === systemAccountUuid || token.extra?.admin === 'true'
     if (!hasWorkspaceAccess) {
+      if (token.workspace === undefined || (token.workspace as string) === '') {
+        void isWorkspaceMember(req, token, workspace).then((ok) => {
+          next(ok ? undefined : new HttpError(401, 'Unauthorized'))
+        })
+        return
+      }
       throw new HttpError(401, 'Unauthorized')
     }
 
