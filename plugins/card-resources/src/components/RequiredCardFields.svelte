@@ -17,12 +17,16 @@
   import core, { type AnyAttribute, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, getClient, type KeyedAttribute } from '@hcengineering/presentation'
   import { isEmptyMarkup } from '@hcengineering/text'
+  import { Label, ModernEditbox } from '@hcengineering/ui'
+  import view from '@hcengineering/view'
 
   // Shows the type's required fields in the create dialog, so a new card
   // starts with them filled in (processes may rely on them right away).
   export let type: Ref<MasterTag> | null
   export let data: Record<string, any>
   export let filled: boolean = true
+  // When set, the title is shown as the first row, styled like the other required fields.
+  export let withTitle: boolean = false
 
   const hierarchy = getClient().getHierarchy()
   const skip = new Set(['title', 'content', 'parent'])
@@ -44,8 +48,15 @@
   $: filled = keys.every((k) => isFilled(data[k.key], k.attr))
 </script>
 
-{#if type != null && keys.length > 0}
+{#if withTitle || (type != null && keys.length > 0)}
   <div class="required-fields">
+    {#if withTitle}
+      <span class="labelOnPanel" class:required-empty={(data.title ?? '').trim() === ''}>
+        <Label label={view.string.Title} />
+        <span class="required-asterisk">*</span>
+      </span>
+      <ModernEditbox bind:value={data.title} label={view.string.Title} size="medium" kind="default" autoFocus />
+    {/if}
     {#each keys as key (key.key)}
       <AttributeBarEditor
         {key}
@@ -69,5 +80,11 @@
     align-items: center;
     gap: 0.5rem 1rem;
     margin-top: 0.75rem;
+  }
+  .labelOnPanel.required-empty {
+    color: var(--theme-error-color, #eb5757);
+  }
+  .required-asterisk {
+    margin-left: 0.125rem;
   }
 </style>

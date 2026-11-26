@@ -17,7 +17,7 @@
   import { createEventDispatcher } from 'svelte'
   import core, { Data, generateId, Ref, Markup, getCurrentAccount } from '@hcengineering/core'
   import { getResource, translate, getEmbeddedLabel } from '@hcengineering/platform'
-  import { Label, Modal, ModernEditbox, languageStore } from '@hcengineering/ui'
+  import { Label, Modal, languageStore } from '@hcengineering/ui'
   import { EmptyMarkup } from '@hcengineering/text'
   import { permissionsStore } from '@hcengineering/contact-resources'
   import view from '@hcengineering/view'
@@ -151,8 +151,7 @@
     />
     <TypeSelector bind:value={type} allowedRootTypes={selectedSpace?.types} excludeBaseTypes />
   </svelte:fragment>
-  <ModernEditbox bind:value={data.title} label={view.string.Title} size="medium" kind="ghost" autoFocus />
-  <RequiredCardFields {type} bind:data bind:filled={requiredFilled} />
+  <RequiredCardFields {type} bind:data bind:filled={requiredFilled} withTitle />
   <svelte:fragment slot="pool">
     <div slot="afterContent" class="error p-4 flex-row-reverse">
       {#if !allowed}
