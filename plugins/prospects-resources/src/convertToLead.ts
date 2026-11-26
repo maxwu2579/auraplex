@@ -26,17 +26,17 @@ import prospects, {
 import task, { makeRank } from '@hcengineering/task'
 import { jsonToMarkup, MarkupNodeType } from '@hcengineering/text-core'
 
-function channelsOf(prospect: Prospect): Array<AttachedData<Channel>> {
+function channelsOf (prospect: Prospect): Array<AttachedData<Channel>> {
   const channels: Array<AttachedData<Channel>> = []
   const email = normalizeEmail(prospect.email)
   if (email !== '') channels.push({ provider: contact.channelProvider.Email, value: email })
   for (const value of new Set([prospect.mobile?.trim(), prospect.phone?.trim()])) {
-    if (value) channels.push({ provider: contact.channelProvider.Phone, value })
+    if (value !== undefined && value !== '') channels.push({ provider: contact.channelProvider.Phone, value })
   }
   return channels
 }
 
-export async function convertToLead(
+export async function convertToLead (
   client: TxOperations,
   prospectId: Ref<Prospect>,
   actor: AccountUuid
@@ -74,7 +74,7 @@ export async function convertToLead(
   // Guard the whole transaction, including contacts, against concurrent conversions or edits.
   ops.match(prospects.class.Prospect, {
     _id: prospectId,
-    $or: [{ lead: { $exists: false } }, { lead: null }],
+    lead: { $exists: false },
     modifiedOn: prospect.modifiedOn
   })
   const funnelId = funnel?._id ?? generateId<Funnel>()
@@ -125,7 +125,7 @@ export async function convertToLead(
   }
 
   const contactChannels = channelsOf(prospect)
-  const personName = combineName(name || company, '')
+  const personName = combineName(name !== '' ? name : company, '')
   const matches = (await findPerson(client, personName, contactChannels)).filter((match) =>
     client.getHierarchy().isDerived(match._class, contact.class.Person)
   )

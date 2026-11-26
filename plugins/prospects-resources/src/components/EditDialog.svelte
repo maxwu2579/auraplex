@@ -260,7 +260,7 @@
         )
       } else {
         if (value.lead == null && status !== 'converted') {
-          ops.match(prospects.class.Prospect, { _id: id, $or: [{ lead: { $exists: false } }, { lead: null }] })
+          ops.match(prospects.class.Prospect, { _id: id, lead: { $exists: false } })
         }
         const unset = {
           ...(sourceDate === '' ? { sourceDate: true } : {}),

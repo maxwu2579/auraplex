@@ -8,7 +8,7 @@ import process, { ExecutionStatus, type Execution } from '@hcengineering/process
 import type { TriggerControl } from '@hcengineering/server-core'
 import { OnHrCalendar } from '../hrCalendar'
 
-function fixture(status = ExecutionStatus.Done, approved = true) {
+function fixture (status = ExecutionStatus.Done, approved = true) {
   const execution = { _id: 'execution', card: 'application', process: 'leave', status }
   const application = {
     _id: 'application',
@@ -37,7 +37,7 @@ function fixture(status = ExecutionStatus.Done, approved = true) {
     core.space.Workspace,
     'execution' as Ref<Execution>,
     { status }
-  ) as TxUpdateDoc<Execution>
+  )
   return { control, records, tx, execution, application }
 }
 

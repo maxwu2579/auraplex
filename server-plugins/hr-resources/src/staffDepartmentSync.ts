@@ -6,7 +6,7 @@ import departments, { primaryStaffDepartments } from '@hcengineering/departments
 import hr, { type Department, type Staff } from '@hcengineering/hr'
 import type { TriggerControl } from '@hcengineering/server-core'
 
-export async function syncStaffDepartments(
+export async function syncStaffDepartments (
   control: TriggerControl,
   changed: ReadonlySet<Ref<Department>>
 ): Promise<Tx[]> {
@@ -50,7 +50,7 @@ export async function syncStaffDepartments(
 }
 
 /** The HR calendar reads the department's member list, including inherited members. */
-export async function syncDepartmentMembers(control: TriggerControl, changed: ReadonlySet<Ref<Staff>>): Promise<Tx[]> {
+export async function syncDepartmentMembers (control: TriggerControl, changed: ReadonlySet<Ref<Staff>>): Promise<Tx[]> {
   if (changed.size === 0) return []
   const [staff, departmentList] = await Promise.all([
     control.findAll(control.ctx, hr.mixin.Staff, { _id: { $in: [...changed] } }),

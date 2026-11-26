@@ -12,7 +12,7 @@ import core, {
 import { getEmbeddedLabel } from '@hcengineering/platform'
 import type { HrCalendarFields } from '@hcengineering/process'
 
-export async function addHrCalendarFields(
+export async function addHrCalendarFields (
   ops: ApplyOperations,
   tag: Ref<MasterTag | Tag>,
   chinese: boolean

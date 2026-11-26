@@ -22,7 +22,7 @@ const leaveTypes = new Map<string, Request['type']>([
   ['Other', hr.ids.PTO2]
 ])
 
-function toCalendarDate(value: unknown): TzDate | undefined {
+function toCalendarDate (value: unknown): TzDate | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return
@@ -30,7 +30,7 @@ function toCalendarDate(value: unknown): TzDate | undefined {
   return { ...timeToTzDate(localDay.getTime()), offset: 0 }
 }
 
-export async function OnHrCalendar(txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+export async function OnHrCalendar (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
   const result: Tx[] = []
   const handled = new Set<Ref<Request>>()
   for (const entry of txes) {
@@ -62,8 +62,7 @@ export async function OnHrCalendar(txes: Tx[], control: TriggerControl): Promise
     }
     if (existing !== undefined || (execution.error?.length ?? 0) > 0) continue
     const decisions = await control.findAll(control.ctx, process.class.ApproveRequest, { execution: execution._id })
-    if (decisions.length === 0 || decisions.some((decision) => decision.approved !== true || decision.doneOn == null))
-      continue
+    if (decisions.length === 0 || decisions.some((decision) => decision.approved !== true || decision.doneOn == null)) { continue }
 
     const [application] = await control.findAll(control.ctx, card.class.Card, { _id: execution.card }, { limit: 1 })
     if (application?.createdBy === undefined) continue
@@ -107,6 +106,13 @@ export async function OnHrCalendar(txes: Tx[], control: TriggerControl): Promise
         }
       ]
     })
+    const data: Partial<Data<Request>> = {
+      department: staff.department,
+      type,
+      tzDate,
+      tzDueDate,
+      description
+    }
     result.push(
       control.txFactory.createTxCollectionCUD(
         staff._class,
@@ -116,13 +122,7 @@ export async function OnHrCalendar(txes: Tx[], control: TriggerControl): Promise
         control.txFactory.createTxCreateDoc(
           hr.class.Request,
           core.space.Workspace,
-          {
-            department: staff.department,
-            type,
-            tzDate,
-            tzDueDate,
-            description
-          } as Data<Request>,
+          data as Data<Request>,
           requestId
         )
       )

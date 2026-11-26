@@ -10,7 +10,7 @@ import { convertToLead } from '../convertToLead'
 const actor = 'salesperson' as AccountUuid
 const id = 'card' as Ref<Prospect>
 
-function fixture(company: string, options: { organization?: boolean; converted?: boolean; funnel?: boolean } = {}) {
+function fixture (company: string, options: { organization?: boolean, converted?: boolean, funnel?: boolean } = {}) {
   const prospect = {
     _id: id,
     name: 'Max Wu',
@@ -46,10 +46,8 @@ function fixture(company: string, options: { organization?: boolean; converted?:
   const findOne = jest.fn(async (cls: string) => {
     if (cls === prospects.class.Prospect) return prospect
     if (cls === contact.mixin.Employee) return { _id: 'employee-owner' }
-    if (cls === lead.class.Funnel && options.funnel !== false)
-      return { _id: 'active-funnel', type: lead.template.DefaultFunnel }
-    if (cls === task.class.ProjectType)
-      return { _id: lead.template.DefaultFunnel, tasks: ['kind'], targetClass: 'funnel-type-mixin' }
+    if (cls === lead.class.Funnel && options.funnel !== false) { return { _id: 'active-funnel', type: lead.template.DefaultFunnel } }
+    if (cls === task.class.ProjectType) { return { _id: lead.template.DefaultFunnel, tasks: ['kind'], targetClass: 'funnel-type-mixin' } }
     if (cls === task.class.TaskType) return { _id: 'kind', statuses: ['new-status'] }
     if (cls === core.class.Sequence) return { _id: 'counter', sequence: 41 }
   })
@@ -197,7 +195,7 @@ test('a concurrent conversion returns the lead saved by the winning transaction'
   expect(await convertToLead(client, id, actor)).toBe('winner')
   expect(ops.match).toHaveBeenCalledWith(prospects.class.Prospect, {
     _id: id,
-    $or: [{ lead: { $exists: false } }, { lead: null }],
+    lead: { $exists: false },
     modifiedOn: 123
   })
 })

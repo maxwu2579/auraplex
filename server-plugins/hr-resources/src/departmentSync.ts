@@ -88,8 +88,10 @@ async function reconcileAutoMembership (control: TriggerControl, result: Tx[], o
       if (next === undefined && state === undefined) continue
       const required = new Set([...(managed.get(space._id) ?? []), ...(space.owners ?? [])])
       const base = managed.get(space._id)
-      const current = base === undefined ? space.members : [...new Set([...base,
-        ...(state?.departmentAdded ?? []).filter((person) => space.members.includes(person))])]
+      const current = base === undefined
+        ? space.members
+        : [...new Set([...base,
+            ...(state?.departmentAdded ?? []).filter((person) => space.members.includes(person))])]
       const plan = planAutoMembership(current, state?.departmentAdded ?? [], next ?? new Set(), required)
       if (!sameMembers(space.members, plan.members)) {
         result.push(control.txFactory.createTxUpdateDoc(space._class, space.space, space._id, { members: plan.members }))
