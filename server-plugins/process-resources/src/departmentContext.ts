@@ -21,6 +21,7 @@ import { ProcessControl } from '@hcengineering/server-process'
 // Ids of the Auraplex department data (kept as strings so this package does not depend on it).
 const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
 const departmentAccess = 'departments:mixin:DepartmentAccess' as Ref<Mixin<Doc>>
+const cardClass = 'card:class:Card' as Ref<Class<Doc>>
 
 export interface DepartmentRoles {
   archived?: boolean
@@ -28,6 +29,8 @@ export interface DepartmentRoles {
   supervisors?: AccountUuid[]
   employees?: AccountUuid[]
   readers?: AccountUuid[]
+  // Form types (card master tags) this department is responsible for.
+  applicationTypes?: string[]
 }
 
 export type ApproverRole = 'admin' | 'supervisor'
@@ -40,6 +43,13 @@ export type ApproverRole = 'admin' | 'supervisor'
  * When nobody else fits, the step goes back to the person, who can pass it directly or hand it
  * to someone else on the Applications page. A person outside every department also gets it back.
  */
+function pickInDepartment (initiator: AccountUuid, dep: DepartmentRoles, role: ApproverRole): AccountUuid {
+  const isAdmin = dep.administrators?.includes(initiator) === true
+  const pool = role === 'admin' ? dep.administrators ?? [] : dep.supervisors ?? []
+  const other = role === 'admin' && isAdmin ? undefined : pool.find((it) => it !== initiator)
+  return other ?? initiator
+}
+
 export function pickDepartmentApprovers (
   initiator: AccountUuid,
   departments: DepartmentRoles[],
@@ -48,19 +58,33 @@ export function pickDepartmentApprovers (
   const result = new Set<AccountUuid>()
   for (const dep of departments) {
     if (dep.archived === true) continue
-    const isAdmin = dep.administrators?.includes(initiator) === true
     const isMember =
-      isAdmin ||
+      dep.administrators?.includes(initiator) === true ||
       dep.supervisors?.includes(initiator) === true ||
       dep.employees?.includes(initiator) === true ||
       dep.readers?.includes(initiator) === true
     if (!isMember) continue
-    const pool = role === 'admin' ? dep.administrators ?? [] : dep.supervisors ?? []
-    const other = role === 'admin' && isAdmin ? undefined : pool.find((it) => it !== initiator)
-    result.add(other ?? initiator)
+    result.add(pickInDepartment(initiator, dep, role))
   }
   if (result.size === 0) result.add(initiator)
   return [...result]
+}
+
+/**
+ * A form with a responsible department (e.g. leave -> HR) goes to that department, whoever applies;
+ * the applicant's own department is not asked. Returns undefined when no active department is
+ * responsible for any of the given types, so the caller falls back to the applicant's department.
+ */
+export function pickResponsibleApprovers (
+  initiator: AccountUuid,
+  departments: DepartmentRoles[],
+  types: readonly string[],
+  role: ApproverRole = 'supervisor'
+): AccountUuid[] | undefined {
+  const responsible = departments.filter((dep) => dep.archived !== true &&
+    dep.applicationTypes?.some((type) => types.includes(type)) === true)
+  if (responsible.length === 0) return undefined
+  return [...new Set(responsible.map((dep) => pickInDepartment(initiator, dep, role)))]
 }
 
 async function departmentApprovers (
@@ -83,7 +107,9 @@ async function departmentApprovers (
     .filter((doc) => hierarchy.hasMixin(doc, departmentAccess))
     .map((doc) => hierarchy.as(doc, departmentAccess) as unknown as DepartmentRoles)
 
-  const accounts = pickDepartmentApprovers(initiator, roles, role)
+  const card = await control.client.findOne(cardClass, { _id: execution.card as Ref<Doc> })
+  const types = card === undefined ? [] : hierarchy.getAncestors(card._class).map((it) => it as string)
+  const accounts = pickResponsibleApprovers(initiator, roles, types, role) ?? pickDepartmentApprovers(initiator, roles, role)
   if (accounts.length === 0) return []
   const employees = await control.client.findAll(contact.mixin.Employee, { personUuid: { $in: accounts } })
   // Keep the department order.

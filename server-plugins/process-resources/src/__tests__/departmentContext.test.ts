@@ -7,7 +7,7 @@
 //
 
 import { AccountUuid } from '@hcengineering/core'
-import { pickDepartmentApprovers } from '../departmentContext'
+import { pickDepartmentApprovers, pickResponsibleApprovers } from '../departmentContext'
 
 const a = (s: string): AccountUuid => s as AccountUuid
 
@@ -40,5 +40,29 @@ describe('pickDepartmentApprovers', () => {
     const prod = { administrators: [a('admin2')], supervisors: [a('sup3')], employees: [a('emp1')] }
     expect(pickDepartmentApprovers(a('emp1'), [sales, prod, { ...prod, archived: true }], 'admin')).toEqual(['admin1', 'admin2'])
     expect(pickDepartmentApprovers(a('nobody'), [sales, prod], 'admin')).toEqual(['nobody'])
+  })
+})
+
+describe('pickResponsibleApprovers', () => {
+  const hr = { administrators: [a('hrAdmin')], supervisors: [a('hrSup')], employees: [a('hrEmp')], applicationTypes: ['leave'] }
+
+  it('a form with a responsible department goes to its admin, whoever applies', () => {
+    expect(pickResponsibleApprovers(a('emp1'), [sales, hr], ['leave'], 'admin')).toEqual(['hrAdmin'])
+    expect(pickResponsibleApprovers(a('admin1'), [sales, hr], ['leave'], 'admin')).toEqual(['hrAdmin'])
+    expect(pickResponsibleApprovers(a('hrEmp'), [sales, hr], ['leave'], 'admin')).toEqual(['hrAdmin'])
+  })
+
+  it('matches parent types, and the responsible admin gets his own request back', () => {
+    expect(pickResponsibleApprovers(a('emp1'), [hr], ['sickLeave', 'leave'], 'admin')).toEqual(['hrAdmin'])
+    expect(pickResponsibleApprovers(a('hrAdmin'), [hr], ['leave'], 'admin')).toEqual(['hrAdmin'])
+  })
+
+  it('second step uses the responsible department supervisor', () => {
+    expect(pickResponsibleApprovers(a('emp1'), [sales, hr], ['leave'], 'supervisor')).toEqual(['hrSup'])
+  })
+
+  it('no responsible department (or only archived): falls back', () => {
+    expect(pickResponsibleApprovers(a('emp1'), [sales, hr], ['expense'], 'admin')).toBeUndefined()
+    expect(pickResponsibleApprovers(a('emp1'), [{ ...hr, archived: true }], ['leave'], 'admin')).toBeUndefined()
   })
 })
