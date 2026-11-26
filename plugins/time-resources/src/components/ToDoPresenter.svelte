@@ -21,6 +21,7 @@
   import { CheckBox, Label } from '@hcengineering/ui'
   import time from '../plugin'
   import WorkItemPresenter from './WorkItemPresenter.svelte'
+  import ToDoTitle from './ToDoTitle.svelte'
 
   export let value: ToDo
   export let withoutSpace: boolean = false
@@ -61,7 +62,7 @@
     <div class="ml-2 flex-col">
       <div class="overflow-label flex-no-shrink">
         {#if visible}
-          {value.title}
+          <ToDoTitle title={value.title} />
         {:else}
           <Label label={calendar.string.Busy} />
         {/if}
@@ -77,7 +78,7 @@
   <div class="flex-col flex-gap-1">
     <div class="overflow-label flex-no-shrink">
       {#if visible}
-        {value.title}
+        <ToDoTitle title={value.title} />
       {:else}
         <Label label={calendar.string.Busy} />
       {/if}

@@ -22,6 +22,7 @@
   import plugin from '../plugin'
   import ToDoDuration from './ToDoDuration.svelte'
   import WorkItemPresenter from './WorkItemPresenter.svelte'
+  import ToDoTitle from './ToDoTitle.svelte'
   import ToDoCheckbox from './ToDoCheckbox.svelte'
   import ToDoPriorityPresenter from './ToDoPriorityPresenter.svelte'
 
@@ -89,7 +90,7 @@
     </div>
     <WorkItemPresenter {todo} kind={'todo-line'} withoutSpace />
     <div class="hulyToDoLine-title text-left font-regular-14 line-height-auto overflow-label">
-      {todo.title}
+      <ToDoTitle title={todo.title} />
     </div>
   </div>
   <div class="flex-row-top flex-no-shrink flex-gap-2">

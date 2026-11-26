@@ -94,6 +94,42 @@
       item.name.toLocaleLowerCase().includes(query)
   )
 
+  // Auraplex: group the directory by department; spaces that come with the system go last, folded.
+  const departmentClass = 'hr:class:Department' as Ref<Class<Doc>>
+  const departmentAccess = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
+  let departmentSpaces: Array<{ name: string, ids: Array<Ref<Space>> }> = []
+  if (hierarchy.hasClass(departmentClass) && hierarchy.hasClass(departmentAccess)) {
+    createQuery().query(departmentClass, {}, (res) => {
+      departmentSpaces = res
+        .filter((doc) => hierarchy.hasMixin(doc, departmentAccess as any))
+        .map((doc) => {
+          const access = hierarchy.as(doc, departmentAccess as any) as any
+          const ids = [access.projectSpace, access.documentSpace, access.driveSpace].filter((id) => id != null)
+          return { name: (doc as any).name as string, ids }
+        })
+        .sort((a, b) => a.name.localeCompare(b.name))
+    })
+  }
+  // Spaces defined by the system have readable ids such as "tracker:project:DefaultProject".
+  const isBuiltIn = (item: Space): boolean => item._id.includes(':')
+  $: groups = [
+    ...departmentSpaces.map(({ name, ids }) => ({
+      key: 'dep:' + name,
+      name,
+      items: visibleSpaces.filter((item) => ids.includes(item._id))
+    })),
+    {
+      key: 'other',
+      name: undefined,
+      items: visibleSpaces.filter(
+        (item) => !isBuiltIn(item) && !departmentSpaces.some(({ ids }) => ids.includes(item._id))
+      )
+    }
+  ].filter(({ items }) => items.length > 0)
+  $: builtIn = visibleSpaces.filter(
+    (item) => isBuiltIn(item) && !departmentSpaces.some(({ ids }) => ids.includes(item._id))
+  )
+
   let space: TypedSpace
   let spaceType: WithLookup<SpaceType>
 
@@ -206,8 +242,20 @@
           {:else if visibleSpaces.length === 0}
             <p class="empty"><Label label={setting.string.SpaceDirectoryEmpty} /></p>
           {:else}
+            {#each [...groups.map((group) => ({ ...group, folded: false })), ...(builtIn.length > 0 ? [{ key: 'builtin', name: undefined, items: builtIn, folded: true }] : [])] as section (section.key)}
+            <details class="space-group" open={!section.folded}>
+              <summary>
+                {#if section.key === 'builtin'}
+                  <Label label={setting.string.SpaceDirectoryBuiltInGroup} params={{ count: section.items.length }} />
+                {:else if section.name !== undefined}
+                  <Label label={setting.string.SpaceDirectoryDepartmentGroup} params={{ name: section.name }} />
+                {:else}
+                  <Label label={setting.string.SpaceDirectoryOtherGroup} />
+                {/if}
+              </summary>
+              {#if section.key === 'builtin'}<p><Label label={setting.string.SpaceDirectoryBuiltInHint} /></p>{/if}
             <div class="space-grid">
-              {#each visibleSpaces as item (item._id)}
+              {#each section.items as item (item._id)}
                 {@const spaceClass = hierarchy.getClass(item._class)}
                 <Button
                   icon={spaceClass.icon ?? setting.icon.Views}
@@ -247,6 +295,8 @@
                 </Button>
               {/each}
             </div>
+            </details>
+            {/each}
           {/if}
         </section>
       </div>
@@ -291,6 +341,17 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .space-group summary {
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    color: var(--theme-caption-color);
+    font-weight: 600;
+  }
+
+  .space-group + .space-group {
+    margin-top: 0.75rem;
   }
 
   .space-grid {

@@ -30,7 +30,7 @@
 
 {#if $location.path[0] === workbenchId || $location.path[0] === workbenchRes.component.WorkbenchApp}
   {#key $location.path[1]}
-    {#await connect(getMetadata(workbenchRes.metadata.PlatformTitle) ?? 'Platform')}
+    {#await connect(getMetadata(workbenchRes.metadata.PlatformTitle) ?? 'Auraplex')}
       <AppLoading>
         {#if ($workspaceCreating ?? -1) >= 0}
           <div class="ml-1">

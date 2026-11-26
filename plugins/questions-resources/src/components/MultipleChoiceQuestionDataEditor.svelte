@@ -38,7 +38,8 @@
   let draft: string = ''
 
   function onOptionLabelKeyDown (event: KeyboardEvent, index: number): void {
-    if (submit === undefined) {
+    // Auraplex: Enter that confirms a Chinese/Japanese input candidate must not move or add options.
+    if (submit === undefined || event.isComposing) {
       return
     }
     switch (event.key) {
@@ -52,6 +53,7 @@
       case 'Enter': {
         event.preventDefault()
         if (index < 0) {
+          appendDraft()
           return
         }
         const nextInput = index === inputs.length - 1 ? draftInput : inputs[index + 1]
@@ -73,6 +75,10 @@
     }
   }
 
+  function appendDraft (): void {
+    if (draft.trim() !== '') appendOption()
+  }
+
   function appendOption (): void {
     if (submit === undefined) {
       return
@@ -80,8 +86,8 @@
     questionData.options = [...questionData.options, { label: draft }]
     void submit({ questionData })
     setTimeout(() => {
-      inputs[questionData.options.length - 1].focus()
       draft = ''
+      draftInput?.focus()
     })
   }
 
@@ -197,7 +203,7 @@
     <LabelEditor
       bind:this={draftInput}
       bind:value={draft}
-      on:input={appendOption}
+      on:change={appendDraft}
       on:keydown={(event) => {
         onOptionLabelKeyDown(event, -1)
       }}

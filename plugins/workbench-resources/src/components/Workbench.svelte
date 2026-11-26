@@ -398,7 +398,7 @@
     if (docTitle !== undefined && docTitle !== '') {
       document.title = wsUrl == null ? docTitle : `${docTitle} - ${wsUrl}`
     } else {
-      const title = getMetadata(workbench.metadata.PlatformTitle) ?? 'Platform'
+      const title = getMetadata(workbench.metadata.PlatformTitle) ?? 'Auraplex'
       document.title = wsUrl == null ? title : `${wsUrl} - ${title}`
     }
     void broadcastEvent(workbench.event.NotifyTitle, document.title)
@@ -595,6 +595,17 @@
             return
           }
         }
+      }
+      // Auraplex: on a computer, an app opened for the first time shows its first page instead of an empty area.
+      const first = space === undefined && !$deviceInfo.navigator.float
+        ? navigatorModel?.specials?.find((it) => it.position !== 'bottom' && it.visibleIf === undefined &&
+            it.checkIsDisabled === undefined && (it.accessLevel === undefined || hasAccountRole(account, it.accessLevel)))
+        : undefined
+      if (first !== undefined && fragment === undefined) {
+        loc.path[3] = first.id
+        loc.path.length = 4
+        navigate(loc)
+        return
       }
     }
 

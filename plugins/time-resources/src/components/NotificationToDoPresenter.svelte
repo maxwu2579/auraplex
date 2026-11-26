@@ -14,6 +14,7 @@
 -->
 <script lang="ts">
   import { Label } from '@hcengineering/ui'
+  import ToDoTitle from './ToDoTitle.svelte'
   import { ToDo } from '@hcengineering/time'
   import time from '../plugin'
 
@@ -25,6 +26,6 @@
     <Label label={time.string.CreateToDo} />
   </div>
   <div>
-    {value.title}
+    <ToDoTitle title={value.title} />
   </div>
 </div>
