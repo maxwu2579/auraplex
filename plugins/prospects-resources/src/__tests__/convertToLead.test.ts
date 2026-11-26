@@ -5,7 +5,7 @@ import core, { type AccountUuid, type Ref, type TxOperations } from '@hcengineer
 import lead from '@hcengineering/lead'
 import prospects, { type Prospect } from '@hcengineering/prospects'
 import task from '@hcengineering/task'
-import { convertToLead } from '../convertToLead'
+import { convertToLead, LeadConversionTimeout } from '../convertToLead'
 
 const actor = 'salesperson' as AccountUuid
 const id = 'card' as Ref<Prospect>
@@ -73,6 +73,10 @@ test('creates company, person with channels, and a lead for the assigned employe
     expect.objectContaining({ name: '销售漏斗', archived: false }),
     expect.any(String)
   )
+  const funnelId = ops.createDoc.mock.calls.find(([cls]) => cls === lead.class.Funnel)?.[3]
+  expect(rawClient.findOne.mock.calls.some(([cls]) => cls === lead.class.Lead)).toBe(false)
+  expect(ops.createMixin).toHaveBeenCalledWith(funnelId, lead.class.Funnel, core.space.Space, 'funnel-type-mixin', {})
+  expect(ops.notMatch).toHaveBeenCalledWith(lead.class.Funnel, { archived: false })
   expect(ops.createDoc).toHaveBeenCalledWith(
     contact.class.Organization,
     contact.space.Contacts,
@@ -108,7 +112,7 @@ test('creates company, person with channels, and a lead for the assigned employe
   )
   expect(ops.addCollection).toHaveBeenCalledWith(
     lead.class.Lead,
-    expect.any(String),
+    funnelId,
     expect.any(String),
     lead.mixin.Customer,
     'leads',
@@ -126,11 +130,15 @@ test('creates company, person with channels, and a lead for the assigned employe
     status: 'converted',
     mailStatus: 'do-not-send'
   })
+  expect(ops.commit).toHaveBeenCalledTimes(1)
 })
 
 test('uses the person as customer when the card has no company', async () => {
-  const { client, ops } = fixture('')
+  const { client, ops, rawClient } = fixture('')
   await convertToLead(client, id, actor)
+  expect(ops.createDoc.mock.calls.some(([cls]) => cls === lead.class.Funnel)).toBe(false)
+  expect(rawClient.findOne).toHaveBeenCalledWith(lead.class.Lead, { space: 'active-funnel', status: 'new-status' },
+    { sort: { rank: -1 } })
   const personId = ops.createDoc.mock.calls.find(([cls]) => cls === contact.class.Person)?.[3]
   expect(ops.createDoc).not.toHaveBeenCalledWith(
     contact.class.Organization,
@@ -198,4 +206,37 @@ test('a concurrent conversion returns the lead saved by the winning transaction'
     lead: { $exists: false },
     modifiedOn: 123
   })
+})
+
+test('a stalled read times out and cannot start writes after it returns', async () => {
+  jest.useFakeTimers()
+  try {
+    const { client, rawClient, ops, prospect } = fixture('')
+    let finishRead!: (value: typeof prospect) => void
+    rawClient.findOne.mockImplementationOnce(async () => await new Promise<typeof prospect>((resolve) => { finishRead = resolve }))
+    const result = expect(convertToLead(client, id, actor)).rejects.toBeInstanceOf(LeadConversionTimeout)
+    await jest.advanceTimersByTimeAsync(20_000)
+    await result
+
+    finishRead(prospect)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(rawClient.update).not.toHaveBeenCalled()
+    expect(ops.commit).not.toHaveBeenCalled()
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
+test('a stalled commit times out instead of leaving the conversion pending', async () => {
+  jest.useFakeTimers()
+  try {
+    const { client, ops } = fixture('')
+    ops.commit.mockImplementation(async () => await new Promise(() => {}))
+    const result = expect(convertToLead(client, id, actor)).rejects.toBeInstanceOf(LeadConversionTimeout)
+    await jest.advanceTimersByTimeAsync(20_000)
+    await result
+    expect(ops.commit).toHaveBeenCalledTimes(1)
+  } finally {
+    jest.useRealTimers()
+  }
 })

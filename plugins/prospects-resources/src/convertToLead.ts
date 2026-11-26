@@ -36,10 +36,38 @@ function channelsOf (prospect: Prospect): Array<AttachedData<Channel>> {
   return channels
 }
 
+export class LeadConversionTimeout extends Error {
+  constructor () {
+    super('Lead conversion timed out')
+  }
+}
+
 export async function convertToLead (
   client: TxOperations,
   prospectId: Ref<Prospect>,
   actor: AccountUuid
+): Promise<Ref<Lead>> {
+  const controller = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new LeadConversionTimeout()
+      controller.abort(error)
+      reject(error)
+    }, 20_000)
+  })
+  try {
+    return await Promise.race([convert(client, prospectId, actor, controller.signal), timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function convert (
+  client: TxOperations,
+  prospectId: Ref<Prospect>,
+  actor: AccountUuid,
+  signal: AbortSignal
 ): Promise<Ref<Lead>> {
   const prospect = await client.findOne(prospects.class.Prospect, { _id: prospectId })
   if (prospect === undefined) throw new Error('Business card is unavailable')
@@ -178,11 +206,11 @@ export async function convertToLead (
       { customerDescription: null }
     )
   }
-  const last = await client.findOne(
-    lead.class.Lead,
-    { space: funnelId, status },
-    { sort: { rank: SortingOrder.Descending } }
-  )
+  const last = funnel === undefined
+    ? undefined
+    : await client.findOne(lead.class.Lead, { space: funnel._id, status }, { sort: { rank: SortingOrder.Descending } })
+  // Do not start writes if a stalled read finishes after the UI has already timed out.
+  if (signal.aborted) throw new LeadConversionTimeout()
   const incremented = await client.update(sequence, { $inc: { sequence: 1 } }, true)
   const number = (incremented as { object?: { sequence: number } }).object?.sequence
   if (typeof number !== 'number') throw new Error('Lead number could not be allocated')
@@ -222,6 +250,7 @@ export async function convertToLead (
     leadId
   )
   await ops.update(prospect, { lead: leadId, status: 'converted', mailStatus: prospectMailStatus(prospect) })
+  if (signal.aborted) throw new LeadConversionTimeout()
   if ((await ops.commit()).result) return leadId
   const current = await client.findOne(prospects.class.Prospect, { _id: prospectId })
   if (current?.lead != null) return current.lead

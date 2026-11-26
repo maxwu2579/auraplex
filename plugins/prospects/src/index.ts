@@ -101,6 +101,7 @@ export default plugin(prospectsId, {
     PageConvertToLead: '' as IntlString,
     PageOpenLead: '' as IntlString,
     PageLeadFailed: '' as IntlString,
+    PageLeadTimeout: '' as IntlString,
     PageSourceDate: '' as IntlString,
     PageLastEmail: '' as IntlString,
     PageSendCount: '' as IntlString,

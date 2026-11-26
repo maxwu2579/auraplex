@@ -28,7 +28,7 @@ import { BaseMiddleware } from '@hcengineering/server-core'
  * @public
  */
 export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
-  scopes = new Map<string, Promise<any>>()
+  private readonly scopes = new Map<string, Promise<void>>()
 
   static async create (ctx: MeasureContext, context: PipelineContext, next?: Middleware): Promise<Middleware> {
     return new ApplyTxMiddleware(context, next)
@@ -45,11 +45,10 @@ export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
           result.push(await this.provideTx(ctx, part))
         }
         const applyIf = tx as TxApplyIf
-        // Wait for scope promise if found
-        const passed =
-          applyIf.scope != null ? await this.verifyApplyIf(ctx, applyIf) : { passed: true, onEnd: () => {} }
+        const release = applyIf.scope == null ? undefined : await this.acquireScope(applyIf.scope)
         try {
-          if (passed.passed) {
+          const check = applyIf.scope == null ? { passed: true } : await this.verifyApplyIf(ctx, applyIf)
+          if (check.passed) {
             const applyResult: TxApplyResult = {
               success: true,
               serverTime: 0
@@ -65,7 +64,7 @@ export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
           } else {
             ctx.warn('TxApplyIf failed', {
               scope: applyIf.scope,
-              reason: passed.reason,
+              reason: check.reason,
               measureName: applyIf.measureName,
               matchCount: applyIf.match?.length ?? 0,
               notMatchCount: applyIf.notMatch?.length ?? 0,
@@ -76,7 +75,7 @@ export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
             })
           }
         } finally {
-          passed.onEnd()
+          release?.()
         }
       } else {
         part.push(tx)
@@ -91,38 +90,20 @@ export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
     return result
   }
 
-  /**
-   * Verify if apply if is possible to apply.
-   */
-  async verifyApplyIf (
-    ctx: MeasureContext,
-    applyIf: TxApplyIf
-  ): Promise<{
-      onEnd: () => void
-      passed: boolean
-      reason?: string
-    }> {
-    if (applyIf.scope == null) {
-      return { passed: true, onEnd: () => {} }
+  private async acquireScope (scope: string): Promise<() => void> {
+    const previous = this.scopes.get(scope)
+    let finish!: () => void
+    const current = new Promise<void>((resolve) => { finish = resolve })
+    // Enqueue before waiting so callers arriving together cannot acquire the same scope.
+    this.scopes.set(scope, current)
+    await previous
+    return () => {
+      if (this.scopes.get(scope) === current) this.scopes.delete(scope)
+      finish()
     }
-    // Wait for synchronized.
-    const scopePromise = this.scopes.get(applyIf.scope)
+  }
 
-    if (scopePromise != null) {
-      await scopePromise
-    }
-
-    let onEnd = (): void => {}
-    // Put sync code
-    this.scopes.set(
-      applyIf.scope,
-      new Promise((resolve) => {
-        onEnd = () => {
-          this.scopes.delete(applyIf.scope as unknown as string)
-          resolve(null)
-        }
-      })
-    )
+  private async verifyApplyIf (ctx: MeasureContext, applyIf: TxApplyIf): Promise<{ passed: boolean, reason?: string }> {
     let passed = true
     let reason: string | undefined
     if (applyIf.match != null) {
@@ -145,6 +126,6 @@ export class ApplyTxMiddleware extends BaseMiddleware implements Middleware {
         }
       }
     }
-    return { passed, onEnd, reason }
+    return { passed, reason }
   }
 }

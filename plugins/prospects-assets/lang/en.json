@@ -42,6 +42,7 @@
     "PageConvertToLead": "Convert to lead",
     "PageOpenLead": "Open lead",
     "PageLeadFailed": "Action failed. Check permissions or reload and try again.",
+    "PageLeadTimeout": "Conversion timed out. Reload to check the result before trying again.",
     "PageSourceDate": "Source date",
     "PageLastEmail": "Last email time",
     "PageSendCount": "Emails sent",

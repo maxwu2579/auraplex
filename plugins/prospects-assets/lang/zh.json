@@ -42,6 +42,7 @@
     "PageConvertToLead": "转成线索",
     "PageOpenLead": "打开线索",
     "PageLeadFailed": "操作失败，请检查权限或刷新后重试。",
+    "PageLeadTimeout": "转换超时。请刷新确认结果后再重试。",
     "PageSourceDate": "来源日期",
     "PageLastEmail": "最后发邮件时间",
     "PageSendCount": "发送次数",
