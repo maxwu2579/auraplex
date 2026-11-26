@@ -321,6 +321,10 @@
     }
   }
 
+  function hasHrCalendar (form: MasterTag, list: typeof processes): boolean {
+    return list.some((process) => process.masterTag === form._id && process.hrCalendar !== undefined)
+  }
+
   // Auraplex: form options live in a small menu on the card (admins), not as a checkbox on every card.
   function formMenu (event: MouseEvent, form: MasterTag, enabled: boolean): void {
     const items = [{
@@ -425,12 +429,11 @@
               <span class="form-icon"><Icon icon={form.icon ?? card.icon.MasterTag} size="medium" /></span>
               <span class="form-name"><Label label={form.label} /></span>
             </button>
-            {@const enabled = processes.some((process) => process.masterTag === form._id && process.hrCalendar !== undefined)}
             {#if canBuildForms}
               <button class="form-more" title={L('表单设置', 'Form settings')} aria-label={L('表单设置', 'Form settings')}
-                disabled={calendarSaving === form._id} on:click={(event) => { formMenu(event, form, enabled) }}>⋯</button>
+                disabled={calendarSaving === form._id} on:click={(event) => { formMenu(event, form, hasHrCalendar(form, processes)) }}>⋯</button>
             {/if}
-            {#if enabled}<div class="form-tag">{L('进人事日历', 'HR calendar')}</div>{/if}
+            {#if hasHrCalendar(form, processes)}<div class="form-tag">{L('进人事日历', 'HR calendar')}</div>{/if}
             {#if canBuildForms}
               {#if calendarError === form._id}
                 <div role="alert">{L('保存失败，请刷新后重试。', 'Could not save. Reload and try again.')}</div>
