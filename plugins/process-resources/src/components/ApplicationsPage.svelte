@@ -20,7 +20,7 @@
   import { AccountRole, SortingOrder, applicationFormTypes, getCurrentAccount, type AccountUuid, type Class, type Doc, type Mixin, type Ref } from '@hcengineering/core'
   import { AttributeBarEditor, createQuery, getClient } from '@hcengineering/presentation'
   import { type ApproveRequest, type Execution, type Process, type State } from '@hcengineering/process'
-  import { Button, DropdownLabelsIntl, Header, Icon, Label, Scroller, eventToHTMLElement, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
+  import { Button, DropdownLabelsIntl, Header, Icon, Label, Scroller, SelectPopup, eventToHTMLElement, languageStore, showPopup, type AnyComponent } from '@hcengineering/ui'
   import { PersonIdPresenter, openDoc } from '@hcengineering/view-resources'
   import { UserBox } from '@hcengineering/contact-resources'
   import { getEmbeddedLabel, type IntlString } from '@hcengineering/platform'
@@ -321,6 +321,17 @@
     }
   }
 
+  // Auraplex: form options live in a small menu on the card (admins), not as a checkbox on every card.
+  function formMenu (event: MouseEvent, form: MasterTag, enabled: boolean): void {
+    const items = [{
+      id: 'hr',
+      text: enabled ? L('✓ 批准后记入人事日历（已开启）', '✓ Added to the HR calendar after approval') : L('批准后记入人事日历（请假用）', 'Add to the HR calendar after approval (leave)')
+    }]
+    showPopup(SelectPopup, { value: items }, eventToHTMLElement(event), (result: string | undefined) => {
+      if (result === 'hr' && !enabled) void enableHrCalendar(form)
+    })
+  }
+
   function newForm (): void {
     showPopup(NewFormWizard, { space: adminSpace(spaces) }, 'top')
   }
@@ -414,16 +425,13 @@
               <span class="form-icon"><Icon icon={form.icon ?? card.icon.MasterTag} size="medium" /></span>
               <span class="form-name"><Label label={form.label} /></span>
             </button>
+            {@const enabled = processes.some((process) => process.masterTag === form._id && process.hrCalendar !== undefined)}
             {#if canBuildForms}
-              {@const enabled = processes.some((process) => process.masterTag === form._id && process.hrCalendar !== undefined)}
-              <label class="form-off">
-                <input type="checkbox" checked={enabled} disabled={enabled || calendarSaving === form._id}
-                  on:change={(event) => {
-                    event.currentTarget.checked = false
-                    void enableHrCalendar(form)
-                  }} />
-                {L('批准后记入人事日历（请假用）', 'Add to the HR calendar after approval')}
-              </label>
+              <button class="form-more" title={L('表单设置', 'Form settings')} aria-label={L('表单设置', 'Form settings')}
+                disabled={calendarSaving === form._id} on:click={(event) => { formMenu(event, form, enabled) }}>⋯</button>
+            {/if}
+            {#if enabled}<div class="form-tag">{L('进人事日历', 'HR calendar')}</div>{/if}
+            {#if canBuildForms}
               {#if calendarError === form._id}
                 <div role="alert">{L('保存失败，请刷新后重试。', 'Could not save. Reload and try again.')}</div>
               {/if}
@@ -616,6 +624,7 @@
     gap: 0.75rem;
   }
   .form {
+    position: relative;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--theme-divider-color);
@@ -645,6 +654,27 @@
   .form-icon {
     display: flex;
     color: var(--theme-primary-default, var(--primary-button-default));
+  }
+  .form-more {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    padding: 0 0.4rem;
+    border-radius: 0.375rem;
+    color: var(--theme-dark-color);
+    font-size: 1rem;
+    line-height: 1.25rem;
+    &:hover {
+      background: var(--theme-button-hovered);
+      color: var(--theme-caption-color);
+    }
+  }
+  .form-tag {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    text-align: center;
+    color: var(--theme-dark-color);
+    border-top: 1px solid var(--theme-divider-color);
   }
   .form-off {
     padding: 0.375rem 0.5rem;

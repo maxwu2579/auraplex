@@ -16,12 +16,13 @@
   import { AccountRole, Class, Doc, getCurrentAccount, Ref } from '@hcengineering/core'
   import notification, { BrowserNotification } from '@hcengineering/notification'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { addNotification, getCurrentResolvedLocation, Location, NotificationSeverity } from '@hcengineering/ui'
+  import { addNotification, getCurrentResolvedLocation, languageStore, Location, NotificationSeverity } from '@hcengineering/ui'
   import view from '@hcengineering/view'
   import { parseLinkId } from '@hcengineering/view-resources'
   import { Analytics } from '@hcengineering/analytics'
   import workbench, { Application } from '@hcengineering/workbench'
-  import { getResource } from '@hcengineering/platform'
+  import { getResource, translate, type IntlString } from '@hcengineering/platform'
+  import { get } from 'svelte/store'
 
   import { checkPermission, pushAllowed, subscribePush } from '../utils'
   import Notification from './Notification.svelte'
@@ -78,6 +79,16 @@
     }
   }
 
+  // Auraplex: some server-made popups carry fixed English text; show them in the user's language.
+  const knownTexts: Record<string, IntlString> = {
+    'Action Item': 'time:string:ToDo' as IntlString,
+    'Approve request': 'process:string:ApproveRequest' as IntlString
+  }
+  async function localize (text: string): Promise<string> {
+    const id = knownTexts[text]
+    return id === undefined ? text : await translate(id, {}, get(languageStore))
+  }
+
   async function notify (value: BrowserNotification): Promise<void> {
     const _id: Ref<Doc> | undefined = value.objectId
 
@@ -95,6 +106,7 @@
       await removeNotification(value)
       return
     }
+    value = { ...value, title: await localize(value.title), body: await localize(value.body) }
     addNotification(
       value.title,
       value.body,
