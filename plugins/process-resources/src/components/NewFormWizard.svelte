@@ -24,6 +24,7 @@
   import { Label, ModernCheckbox, getColorNumberByText, languageStore } from '@hcengineering/ui'
   import { createEventDispatcher } from 'svelte'
   import plugin from '../plugin'
+  import { addHrCalendarFields } from '../hrCalendarFields'
 
   export let space: CardSpace | undefined = undefined
 
@@ -70,6 +71,7 @@
   let name = ''
   let fields: Field[] = [{ name: '', kind: 'text', required: true }]
   let twoSteps = true
+  let recordLeave = false
   let saving = false
   let error = ''
 
@@ -94,7 +96,7 @@
   }
 
   $: filled = fields.filter((it) => it.name.trim() !== '')
-  $: canSave = !saving && name.trim() !== '' && filled.length > 0
+  $: canSave = !saving && name.trim() !== '' && (recordLeave || filled.length > 0)
 
   async function save (): Promise<void> {
     if (!canSave) return
@@ -128,6 +130,8 @@
           required: field.required
         } as unknown as Data<AnyAttribute>)
       }
+
+      const hrCalendar = recordLeave ? await addHrCalendarFields(ops, tag, $languageStore === 'zh') : undefined
 
       // The approval process.
       const proc = generateId<Process>()
@@ -168,7 +172,8 @@
           description: '',
           autoStart: true,
           parallelExecutionForbidden: true,
-          context
+          context,
+          ...(hrCalendar !== undefined ? { hrCalendar } : {})
         } as unknown as Data<Process>,
         proc
       )
@@ -279,6 +284,13 @@
         </div>
       {/each}
       <button class="add" on:click={addField}>+ {L('再加一项', 'Add a field')}</button>
+      <label class="check">
+        <input type="checkbox" bind:checked={recordLeave} />
+        {L('批准后记入人事日历（请假用）', 'Add to the HR calendar after approval')}
+      </label>
+      {#if recordLeave}
+        <div class="hint">{L('自动添加必填的开始日期、结束日期和假期类型。', 'Start date, end date, and leave type will be required.')}</div>
+      {/if}
     </div>
 
     <div class="step">

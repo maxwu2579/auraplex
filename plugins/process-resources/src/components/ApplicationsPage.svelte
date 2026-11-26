@@ -29,6 +29,7 @@
   import EditApplicationPopup from './EditApplicationPopup.svelte'
   import StopApplicationPopup from './StopApplicationPopup.svelte'
   import plugin from '../plugin'
+  import { addHrCalendarFields } from '../hrCalendarFields'
 
   const client = getClient()
   const h = client.getHierarchy()
@@ -292,6 +293,34 @@
     showPopup(StopApplicationPopup, { execution: exec, title: doc.title, approved }, 'top')
   }
 
+  let calendarSaving: Ref<MasterTag> | undefined
+  let calendarError: Ref<MasterTag> | undefined
+
+  async function enableHrCalendar (form: MasterTag): Promise<void> {
+    if (calendarSaving !== undefined) return
+    calendarSaving = form._id
+    calendarError = undefined
+    try {
+      const candidates = processes.filter((process) => process.masterTag === form._id && process.autoStart === true)
+      const approvals = await client.findAll(plugin.class.Transition, {
+        process: { $in: candidates.map((process) => process._id) },
+        trigger: plugin.trigger.OnApproveRequestApproved
+      })
+      const process = candidates.find((candidate) => approvals.some((entry) => entry.process === candidate._id))
+      if (process === undefined) throw new Error('Form has no approval process')
+      if (process.hrCalendar !== undefined) return
+      const ops = client.apply('auraplex-enable-hr-calendar')
+      ops.match(plugin.class.Process, { _id: process._id, hrCalendar: { $exists: false } })
+      const hrCalendar = await addHrCalendarFields(ops, form._id, $languageStore === 'zh')
+      await ops.update(process, { hrCalendar })
+      if (!(await ops.commit()).result) throw new Error('Application form changed before saving')
+    } catch {
+      calendarError = form._id
+    } finally {
+      calendarSaving = undefined
+    }
+  }
+
   function newForm (): void {
     showPopup(NewFormWizard, { space: adminSpace(spaces) }, 'top')
   }
@@ -385,6 +414,20 @@
               <span class="form-icon"><Icon icon={form.icon ?? card.icon.MasterTag} size="medium" /></span>
               <span class="form-name"><Label label={form.label} /></span>
             </button>
+            {#if canBuildForms}
+              {@const enabled = processes.some((process) => process.masterTag === form._id && process.hrCalendar !== undefined)}
+              <label class="form-off">
+                <input type="checkbox" checked={enabled} disabled={enabled || calendarSaving === form._id}
+                  on:change={(event) => {
+                    event.currentTarget.checked = false
+                    void enableHrCalendar(form)
+                  }} />
+                {L('批准后记入人事日历（请假用）', 'Add to the HR calendar after approval')}
+              </label>
+              {#if calendarError === form._id}
+                <div role="alert">{L('保存失败，请刷新后重试。', 'Could not save. Reload and try again.')}</div>
+              {/if}
+            {/if}
             {#if space === undefined}
               <div class="form-off">
                 {#if isOwner && adminSpace(spaces) !== undefined}

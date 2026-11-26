@@ -16,6 +16,7 @@
   import { TypeDate } from '@hcengineering/core'
   import { IntlString } from '@hcengineering/platform'
   import { DateRangePresenter } from '@hcengineering/ui'
+  import { displayCalendarDate, storeCalendarDate } from '../calendarDate'
 
   export let value: number | null | undefined
   export let type: TypeDate | undefined
@@ -28,7 +29,7 @@
 </script>
 
 <DateRangePresenter
-  {value}
+  value={type?.calendarDate && value != null ? displayCalendarDate(value) : value}
   labelNull={label}
   mode={type?.mode}
   noShift={!type?.withShift}
@@ -37,6 +38,8 @@
   {kind}
   {size}
   on:change={(res) => {
-    if (res.detail !== undefined) onChange(res.detail)
+    if (res.detail !== undefined) {
+      onChange(type?.calendarDate && res.detail !== null ? storeCalendarDate(res.detail) : res.detail)
+    }
   }}
 />

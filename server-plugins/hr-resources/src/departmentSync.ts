@@ -13,6 +13,7 @@ import core, {
   type Tx,
   type TxCUD,
   type TxMixin,
+  type TxUpdateDoc,
   type Doc
 } from '@hcengineering/core'
 import departments, { type DepartmentAccess } from '@hcengineering/departments'
@@ -22,6 +23,8 @@ import hr, { type Department } from '@hcengineering/hr'
 import { type TriggerControl } from '@hcengineering/server-core'
 import { generateToken } from '@hcengineering/server-token'
 import tracker, { TimeReportDayType, type Project } from '@hcengineering/tracker'
+
+import { syncStaffDepartments } from './staffDepartmentSync'
 
 type SpaceField = 'projectSpace' | 'documentSpace' | 'driveSpace'
 
@@ -222,6 +225,17 @@ export async function OnDepartmentAccess (txes: Tx[], control: TriggerControl): 
       }
     }
   }
+  const staffChanges = new Set<Ref<Department>>()
+  for (const tx of relevant) {
+    if (tx._class === core.class.TxMixin) {
+      const update = tx as TxMixin<Doc, DepartmentAccess>
+      if (update.mixin !== departments.mixin.DepartmentAccess) continue
+    } else if (tx._class === core.class.TxUpdateDoc && !('archived' in (tx as TxUpdateDoc<DepartmentAccess>).operations)) {
+      continue
+    }
+    staffChanges.add((tx as TxCUD<Department>).objectId)
+  }
+  if (staffChanges.size > 0) result.push(...await syncStaffDepartments(control, staffChanges))
   if (ids.size > 0) await reconcileAutoMembership(control, result, owners ?? await workspaceOwners(control))
   return result
 }

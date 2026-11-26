@@ -11,7 +11,7 @@
   import { SortingOrder, type AccountUuid } from '@hcengineering/core'
   import { getMetadata } from '@hcengineering/platform'
   import presentation, { createQuery, getClient } from '@hcengineering/presentation'
-  import prospects, { type Prospect, type ProspectMail } from '@hcengineering/prospects'
+  import prospects, { prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type Prospect, type ProspectMail } from '@hcengineering/prospects'
   import { onMount } from 'svelte'
 
   /** Mail for one customer: owner, sending, history and forwarding replies to the owner. */
@@ -130,15 +130,16 @@
   async function resolve (mail: ProspectMail, delivered: boolean): Promise<void> {
     error = ''
     try {
-      const ops = client.apply('prospect-mail-resolve')
+      const ops = client.apply(prospectWriteScope)
       ops.match(prospects.class.ProspectMail, { _id: mail._id, delivery: mail.delivery })
       await ops.update(mail, { delivery: delivered ? 'sent' : 'failed' })
       if (delivered && mail.direction === 'outgoing') {
         const current = await client.findOne(prospects.class.Prospect, { _id: value._id })
         if (current !== undefined) {
+          ops.match(prospects.class.Prospect, { _id: current._id, modifiedOn: current.modifiedOn })
           await ops.update(current, {
             lastEmailAt: Math.max(current.lastEmailAt ?? 0, mail.sentAt),
-            ...(current.status === 'new' ? { status: 'sent' } : {})
+            ...(prospectMailStatus(current) === 'new' ? updateProspectMailStatus(current, 'sent') : {})
           })
           await ops.update(current, { $inc: { emailCount: 1 } })
         }
@@ -158,7 +159,8 @@
     uncertain: $t('结果不确定'),
     received: $t('已收到')
   }
-  $: canSend = configured && value.status !== 'do-not-send' && value.status !== 'bounced'
+  $: mailStatus = prospectMailStatus(value)
+  $: canSend = configured && mailStatus !== 'do-not-send' && mailStatus !== 'bounced'
   $: ownerPerson = owner === '' ? undefined : employees.find((it) => it.personUuid === owner)
   $: ownerLabel = ownerPerson === undefined ? $t('负责人') : formatName(ownerPerson.name)
   function localizer (language: string): (id: IntlString) => string {

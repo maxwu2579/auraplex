@@ -5,6 +5,8 @@ import type { Department } from '@hcengineering/hr'
 import { plugin, type IntlString, type Plugin, type Resource } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
 
+export { primaryStaffDepartments } from './staffDepartment'
+
 export type DepartmentPermission = 'create' | 'update' | 'delete' | 'comment' | 'invite' | 'manageMembers'
 export interface DepartmentAccess extends Department {
   administrators: AccountUuid[]

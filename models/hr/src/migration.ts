@@ -23,6 +23,7 @@ import {
   type TxCUD
 } from '@hcengineering/core'
 import contact, { type Employee, type Person } from '@hcengineering/contact'
+import departments, { primaryStaffDepartments } from '@hcengineering/departments'
 import { type Department, type Staff } from '@hcengineering/hr'
 import {
   migrateSpace,
@@ -136,7 +137,7 @@ async function rebuildDepartmentMembersFromStaff (client: MigrationClient): Prom
   const persons = await client.find<Person>(DOMAIN_CONTACT, { _class: contact.class.Person })
   for (const person of persons) {
     const staff = client.hierarchy.asIf<Person, Staff>(person, hr.mixin.Staff)
-    if (staff?.department === undefined) {
+    if (staff?.department == null) {
       continue
     }
 
@@ -148,6 +149,24 @@ async function rebuildDepartmentMembersFromStaff (client: MigrationClient): Prom
   for (const department of departments) {
     const members = Array.from(membersByDepartment.get(department._id) ?? [])
     await client.update(DOMAIN_HR, { _id: department._id }, { members })
+  }
+}
+
+async function backfillStaffDepartments (client: MigrationUpgradeClient): Promise<void> {
+  const hierarchy = client.getHierarchy()
+  if (!hierarchy.hasClass(departments.mixin.DepartmentAccess)) return
+  const all = await client.findAll(hr.class.Department, {})
+  const managed = all.flatMap((department) => hierarchy.asIf(department, departments.mixin.DepartmentAccess) ?? [])
+  const primary = primaryStaffDepartments(managed)
+  const managedIds = new Set<Ref<Department>>(managed.map((department) => department._id))
+  const ops = new TxOperations(client, core.account.System)
+  const employees = await client.findAll(contact.mixin.Employee, {})
+  for (const employee of employees) {
+    const current = hierarchy.asIf(employee, hr.mixin.Staff)?.department
+    const desired = employee.personUuid === undefined ? undefined : primary.get(employee.personUuid)
+    if (desired === current || (desired === undefined && (current == null || !managedIds.has(current)))) continue
+    await ops.updateMixin(employee._id, employee._class, employee.space, hr.mixin.Staff,
+      { department: desired ?? null })
   }
 }
 
@@ -187,6 +206,10 @@ export const hrOperation: MigrateOperation = {
           const tx = new TxOperations(client, core.account.System)
           await createDepartment(tx)
         }
+      },
+      {
+        state: 'sync-auraplex-department-staff',
+        func: backfillStaffDepartments
       }
     ])
   }

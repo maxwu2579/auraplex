@@ -28,12 +28,14 @@ import core, {
   TxRemoveDoc,
   TxUpdateDoc
 } from '@hcengineering/core'
+import departments from '@hcengineering/departments'
 import gmail from '@hcengineering/gmail'
 import hr, { Department, fromTzDate, PublicHoliday, Request, Staff, tzDateEqual } from '@hcengineering/hr'
 import notification, { NotificationType } from '@hcengineering/notification'
 import { translate } from '@hcengineering/platform'
 import { TriggerControl } from '@hcengineering/server-core'
 import { OnDepartmentAccess } from './departmentSync'
+import { syncDepartmentMembers } from './staffDepartmentSync'
 import { getEmployee, getSocialStrings } from '@hcengineering/server-contact'
 import { sendEmailNotification } from '@hcengineering/server-gmail-resources'
 import {
@@ -41,28 +43,6 @@ import {
   getNotificationProviderControl,
   isAllowed
 } from '@hcengineering/server-notification-resources'
-
-async function getOldDepartment (
-  currentTx: TxMixin<Employee, Staff>,
-  control: TriggerControl
-): Promise<Ref<Department> | undefined> {
-  const txes = await control.findAll<TxMixin<Employee, Staff>>(
-    control.ctx,
-    core.class.TxMixin,
-    {
-      objectId: currentTx.objectId
-    },
-    { sort: { modifiedOn: SortingOrder.Ascending } }
-  )
-  let lastDepartment: Ref<Department> | undefined
-  for (const tx of txes) {
-    if (tx._id === currentTx._id) continue
-    if (tx.attributes?.department !== undefined) {
-      lastDepartment = tx.attributes.department
-    }
-  }
-  return lastDepartment
-}
 
 async function getOldDepartmentParent (
   currentTx: TxUpdateDoc<Department>,
@@ -121,17 +101,6 @@ async function buildHierarchy (_id: Ref<Department>, control: TriggerControl): P
   }
 }
 
-function exclude (first: Ref<Department>[], second: Ref<Department>[]): Ref<Department>[] {
-  const set = new Set(first)
-  const res: Ref<Department>[] = []
-  for (const department of second) {
-    if (!set.has(department)) {
-      res.push(department)
-    }
-  }
-  return res
-}
-
 function getTxes (
   factory: TxFactory,
   employees: Ref<Employee>[],
@@ -166,43 +135,10 @@ function getTxes (
  * @public
  */
 export async function OnDepartmentStaff (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
-  const result: Tx[] = []
-  for (const tx of txes) {
-    const ctx = tx as TxMixin<Employee, Staff>
-    const employee = ctx.objectId
-
-    if (ctx.attributes.department !== undefined) {
-      const lastDepartment = await getOldDepartment(ctx, control)
-
-      const departmentId = ctx.attributes.department
-      if (departmentId === null) {
-        if (lastDepartment !== undefined) {
-          const removed = await buildHierarchy(lastDepartment, control)
-          result.push(
-            ...getTxes(
-              control.txFactory,
-              [employee],
-              [],
-              removed.map((p) => p._id)
-            )
-          )
-        }
-        continue
-      }
-      const push = await buildHierarchy(departmentId, control)
-
-      if (lastDepartment === undefined) {
-        result.push(...getTxes(control.txFactory, [employee], push))
-      } else {
-        const removedDepartments = await buildHierarchy(lastDepartment, control)
-        const removed = removedDepartments.map((p) => p._id)
-        const pushIds = push.map((p) => p._id)
-        const removedIds = exclude(pushIds, removed)
-        result.push(...getTxes(control.txFactory, [employee], push, removedIds))
-      }
-    }
-  }
-  return result
+  const changed = (txes as Array<TxMixin<Employee, Staff>>)
+    .filter((tx) => tx.attributes.department !== undefined)
+    .map((tx) => tx.objectId as Ref<Staff>)
+  return await syncDepartmentMembers(control, new Set(changed))
 }
 
 /**
@@ -252,6 +188,7 @@ export async function OnDepartmentRemove (txes: Tx[], control: TriggerControl): 
     for (const dep of nested) {
       result.push(control.txFactory.createTxRemoveDoc(dep._class, dep.space, dep._id))
     }
+    if (control.hierarchy.hasMixin(department, departments.mixin.DepartmentAccess)) continue
     const employeeIds = department.members
     const employees = await control.findAll(control.ctx, contact.mixin.Employee, {
       _id: { $in: employeeIds }

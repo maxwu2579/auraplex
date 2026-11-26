@@ -25,53 +25,63 @@ export const defaultLeadStatuses = [
   {
     id: plugin.taskTypeStatus.Backlog,
     color: PaletteColorIndexes.Coin,
-    name: 'Backlog',
+    name: '新线索',
+    legacyName: 'Backlog',
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.UnStarted
   },
   {
     id: plugin.taskTypeStatus.Incoming,
     color: PaletteColorIndexes.Coin,
-    name: 'Incoming',
-    ofAttribute: plugin.attribute.State,
-    category: task.statusCategory.Active
-  },
-  {
-    id: plugin.taskTypeStatus.Negotiation,
-    color: PaletteColorIndexes.Arctic,
-    name: 'Negotiation',
+    name: '初次联系',
+    legacyName: 'Incoming',
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Active
   },
   {
     id: plugin.taskTypeStatus.OfferPreparing,
     color: PaletteColorIndexes.Watermelon,
-    name: 'Offer preparing',
+    name: '报价',
+    legacyName: 'Offer preparing',
+    ofAttribute: plugin.attribute.State,
+    category: task.statusCategory.Active
+  },
+  {
+    id: plugin.taskTypeStatus.Negotiation,
+    color: PaletteColorIndexes.Arctic,
+    name: '谈判',
+    legacyName: 'Negotiation',
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Active
   },
   {
     id: plugin.taskTypeStatus.MakeADecision,
     color: PaletteColorIndexes.Orange,
-    name: 'Make a decision',
+    name: '等待决定',
+    legacyName: 'Make a decision',
+    legacyOnly: true,
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Active
   },
   {
     id: plugin.taskTypeStatus.ContractConclusion,
     color: PaletteColorIndexes.Ocean,
-    name: 'Contract conclusion',
+    name: '签订合同',
+    legacyName: 'Contract conclusion',
+    legacyOnly: true,
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Active
   },
   {
-    name: 'Won',
+    name: '成交',
+    legacyName: 'Won',
     id: plugin.taskTypeStatus.Won,
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Won
   },
   {
-    name: 'Lost',
+    name: '丢单',
+    legacyName: 'Lost',
     id: plugin.taskTypeStatus.Lost,
     ofAttribute: plugin.attribute.State,
     category: task.statusCategory.Lost
@@ -120,7 +130,7 @@ export function defineSpaceType (builder: Builder): void {
       throw new Error('Status id is required when creating in static model. Missing for: ' + name)
     }
 
-    defaultStatuses.push(id)
+    if (status.legacyOnly !== true) defaultStatuses.push(id)
 
     builder.createDoc(
       core.class.Status,

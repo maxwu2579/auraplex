@@ -3,7 +3,7 @@ import { createHash } from 'crypto'
 import contact, { type PersonSpace } from '@hcengineering/contact'
 import { type AccountUuid, type Doc, type Ref, type TxOperations } from '@hcengineering/core'
 import notification, { type DocNotifyContext } from '@hcengineering/notification'
-import prospects, { matchReply, type ProspectMail } from '@hcengineering/prospects'
+import prospects, { matchReply, prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type ProspectMail } from '@hcengineering/prospects'
 import { stableMailId } from './sender'
 
 export interface ParsedReply {
@@ -46,7 +46,7 @@ export class Receiver {
     const matched = matchReply(reply.from, reply.references, earlier, customers)
     if (matched.kind !== 'matched') return 'unmatched'
     const user = matched.outgoing.actor
-    const ops = this.client.apply('prospect-mail-receive')
+    const ops = this.client.apply(prospectWriteScope)
     ops.notMatch(prospects.class.ProspectMail, { _id: id })
     if (reply.messageId !== '') {
       ops.notMatch(prospects.class.ProspectMail, { direction: 'incoming', messageId: reply.messageId })
@@ -71,9 +71,10 @@ export class Receiver {
       id
     )
     // Keep a prior opt-out or bounce in force; receiving a reply must not re-enable marketing mail.
-    if (matched.prospect.status !== 'do-not-send' && matched.prospect.status !== 'bounced') {
-      ops.match(prospects.class.Prospect, { _id: matched.prospect._id, status: matched.prospect.status })
-      await ops.update(matched.prospect, { status: 'replied' })
+    const mailStatus = prospectMailStatus(matched.prospect)
+    if (mailStatus !== 'do-not-send' && mailStatus !== 'bounced') {
+      ops.match(prospects.class.Prospect, { _id: matched.prospect._id, modifiedOn: matched.prospect.modifiedOn })
+      await ops.update(matched.prospect, updateProspectMailStatus(matched.prospect, 'replied'))
     }
     if (user !== undefined) await this.addNotification(ops, matched.prospect, user, id, reply.sentAt)
     if (!(await ops.commit()).result) throw new Error('Reply was concurrently processed or customer changed')

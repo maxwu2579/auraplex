@@ -1,13 +1,24 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import { normalizeEmail } from './rules'
-import type { Prospect, ProspectMail } from './index'
+import type { Prospect, ProspectMail, ProspectStatus } from './index'
+
+export function prospectMailStatus (prospect: Pick<Prospect, 'status' | 'mailStatus'>): Exclude<ProspectStatus, 'converted'> {
+  return prospect.status === 'converted' ? prospect.mailStatus ?? 'new' : prospect.status
+}
+
+export function updateProspectMailStatus (
+  prospect: Pick<Prospect, 'status'>, status: 'sent' | 'replied'
+): Partial<Pick<Prospect, 'status' | 'mailStatus'>> {
+  return prospect.status === 'converted' ? { mailStatus: status } : { status }
+}
 
 export const SEND_COOLDOWN_MS = 60000
 export function canSendMail (
-  prospect: Pick<Prospect, 'email' | 'status' | 'lastEmailAt'>,
+  prospect: Pick<Prospect, 'email' | 'status' | 'mailStatus' | 'lastEmailAt'>,
   now: number
 ): string | undefined {
-  if (prospect.status === 'do-not-send' || prospect.status === 'bounced') return '该客户不能发送邮件'
+  const status = prospectMailStatus(prospect)
+  if (status === 'do-not-send' || status === 'bounced') return '该客户不能发送邮件'
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(prospect.email.trim())) return '客户邮箱无效'
   if (prospect.lastEmailAt !== undefined && now - prospect.lastEmailAt < SEND_COOLDOWN_MS) { return '发送过于频繁，请稍后再试' }
   return undefined

@@ -142,6 +142,7 @@ import {
   StringFromEnum,
   EnumFromString
 } from './transform'
+import { OnHrCalendar } from './hrCalendar'
 import { InitiatorDepartmentAdmin, InitiatorDepartmentSupervisor } from './departmentContext'
 
 async function putEventToQueue (value: Omit<ProcessMessage, 'account'>, control: TriggerControl): Promise<void> {
@@ -860,6 +861,7 @@ export default async () => ({
     OnProcessToDoRemove,
     OnExecutionContinue,
     OnExecutionDone,
+    OnHrCalendar,
     OnCustomEvent,
     OnExecutionRemove,
     OnCardCreate,

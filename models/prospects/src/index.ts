@@ -3,6 +3,7 @@ import { type Domain, IndexKind } from '@hcengineering/core'
 import {
   type Builder,
   Model,
+  Hidden,
   Prop,
   Index,
   UX,
@@ -16,6 +17,7 @@ import {
 } from '@hcengineering/model'
 import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
 import attachment from '@hcengineering/model-attachment'
+import lead from '@hcengineering/lead'
 import workbench from '@hcengineering/model-workbench'
 import prospects, {
   prospectsId,
@@ -46,6 +48,8 @@ export class TProspect extends TDoc implements Prospect {
   @Prop(TypeTimestamp(), prospects.string.Prospects) sourceDate?: number
   @Prop(TypeString(), prospects.string.Prospects) notes!: string
   @Prop(TypeString(), prospects.string.Prospects) status!: ProspectStatus
+  @Prop(TypeRef(lead.class.Lead), prospects.string.PageOpenLead) lead?: Prospect['lead']
+  @Hidden() @Prop(TypeString(), prospects.string.Prospects) mailStatus?: Prospect['mailStatus']
   @Prop(Collection(attachment.class.Photo), prospects.string.Prospects) photos?: number
   @Prop(TypeTimestamp(), prospects.string.Prospects) lastEmailAt?: number
   @Prop(TypeNumber(), prospects.string.Prospects) emailCount!: number

@@ -1,7 +1,7 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
 import { createHash } from 'crypto'
 import { type AccountUuid, type Ref, type TxOperations } from '@hcengineering/core'
-import prospects, { canSendMail, type Prospect, type ProspectMail } from '@hcengineering/prospects'
+import prospects, { canSendMail, prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type Prospect, type ProspectMail } from '@hcengineering/prospects'
 import type { Transporter } from 'nodemailer'
 import { MailUserError } from './errors'
 
@@ -32,8 +32,8 @@ export class Sender {
     if (refusal !== undefined) throw new MailUserError(refusal)
     const now = Date.now()
     const messageId = `<${requestId}@auraplex.local>`
-    const ops = this.client.apply('prospect-mail-send')
-    ops.match(prospects.class.Prospect, { _id: prospect._id, email: prospect.email, status: prospect.status })
+    const ops = this.client.apply(prospectWriteScope)
+    ops.match(prospects.class.Prospect, { _id: prospect._id, email: prospect.email, modifiedOn: prospect.modifiedOn })
     ops.notMatch(prospects.class.ProspectMail, { _id: id })
     // An unresolved SMTP result may have been delivered. Never start another
     // attempt for this customer until that result has been investigated.
@@ -88,19 +88,22 @@ export class Sender {
       }
       throw new Error('SMTP result uncertain')
     }
-    const record = await this.client.findOne(prospects.class.ProspectMail, { _id: id })
-    const latest = await this.client.findOne(prospects.class.Prospect, { _id: prospect._id })
-    if (record === undefined || latest === undefined) throw new Error('Cannot save delivery result')
-    const result = this.client.apply('prospect-mail-finish')
-    result.match(prospects.class.ProspectMail, { _id: id, delivery: 'sending' })
-    await result.update(record, { delivery: 'sent' })
-    await result.update(latest, {
-      lastEmailAt: now,
-      ...(latest.status === 'do-not-send' || latest.status === 'bounced' || latest.status === 'replied'
-        ? {}
-        : { status: 'sent' })
-    })
-    await result.update(latest, { $inc: { emailCount: 1 } })
-    if (!(await result.commit()).result) throw new Error('Cannot save delivery result')
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const record = await this.client.findOne(prospects.class.ProspectMail, { _id: id })
+      const latest = await this.client.findOne(prospects.class.Prospect, { _id: prospect._id })
+      if (record?.delivery === 'sent') return
+      if (record === undefined || latest === undefined) break
+      const result = this.client.apply(prospectWriteScope)
+      result.match(prospects.class.ProspectMail, { _id: id, delivery: 'sending' })
+      result.match(prospects.class.Prospect, { _id: latest._id, modifiedOn: latest.modifiedOn })
+      await result.update(record, { delivery: 'sent' })
+      await result.update(latest, {
+        lastEmailAt: now,
+        ...(prospectMailStatus(latest) === 'new' ? updateProspectMailStatus(latest, 'sent') : {})
+      })
+      await result.update(latest, { $inc: { emailCount: 1 } })
+      if ((await result.commit()).result) return
+    }
+    throw new Error('Cannot save delivery result')
   }
 }

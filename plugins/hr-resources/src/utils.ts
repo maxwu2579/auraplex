@@ -21,7 +21,7 @@ export async function addMember (client: TxOperations, employee?: Employee, valu
   } else {
     const staff = hierarchy.as(employee, hr.mixin.Staff)
     if (staff.department === value._id) return
-    const current = await client.findOne(hr.class.Department, {
+    const current = staff.department == null ? undefined : await client.findOne(hr.class.Department, {
       _id: staff.department
     })
     if (current !== undefined) {
@@ -144,13 +144,12 @@ export function getRequestDates (
   holidays: Date[] | undefined
 ): number[] {
   const type = types.get(request.type)
-  const startDate = request.tzDate.month === month ? fromTzDate(request.tzDate) : new Date().setFullYear(year, month, 1)
-  const endDate =
-    request.tzDueDate.month === month ? fromTzDate(request.tzDueDate) : new Date().setFullYear(year, month + 1, 0)
-  const days = Math.floor(Math.abs((1 + endDate - startDate) / 1000 / 60 / 60 / 24)) + 1
-  const stDate = new Date(startDate)
-  const stDateDate = stDate.getDate()
-  let ds = Array.from(Array(days).keys()).map((it) => stDateDate + it)
+  const startDay = request.tzDate.year === year && request.tzDate.month === month ? request.tzDate.day : 1
+  const endDay = request.tzDueDate.year === year && request.tzDueDate.month === month
+    ? request.tzDueDate.day
+    : new Date(year, month + 1, 0).getDate()
+  const stDate = new Date(year, month, startDay)
+  let ds = Array.from({ length: endDay - startDay + 1 }, (_, index) => startDay + index)
   if ((type?.value ?? -1) < 0) {
     ds = ds.filter((it) => !isWeekend(new Date(stDate.setDate(it))) && !isHoliday(holidays ?? undefined, stDate))
   }

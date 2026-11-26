@@ -38,7 +38,14 @@ export interface AttributeSlotModel extends SlotModel {
 }
 
 // Process model dscription
+export interface HrCalendarFields {
+  start: string
+  end: string
+  kind: string
+}
+
 export interface Process extends Doc {
+  hrCalendar?: HrCalendarFields
   masterTag: Ref<MasterTag | Tag>
   name: string
   description: string

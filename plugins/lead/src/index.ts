@@ -57,6 +57,7 @@ export interface Lead extends Task {
   attachedTo: Ref<Customer>
   status: Ref<Status>
   startDate: Timestamp | null
+  description?: Markup
   title: string
 }
 

@@ -74,7 +74,7 @@
     if (value != null) date = value
     if (date === undefined) return
     if (type === undefined) return
-    if (employee === null) return
+    if (employee === null || staff.department == null) return
     await client.addCollection(hr.class.Request, core.space.Workspace, employee, staff._class, 'requests', {
       type: type._id,
       tzDate: timeToTzDate(date),

@@ -8473,6 +8473,9 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments
       '@hcengineering/hr':
         specifier: workspace:^0.7.0
         version: link:../../plugins/hr
@@ -9863,6 +9866,9 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/lead':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/lead
       '@hcengineering/model':
         specifier: workspace:^0.7.17
         version: link:../../foundations/core/packages/model
@@ -25928,6 +25934,9 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/lead':
+        specifier: workspace:^0.7.0
+        version: link:../lead
       '@hcengineering/platform':
         specifier: workspace:^0.7.20
         version: link:../../foundations/core/packages/platform
@@ -26047,6 +26056,9 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/lead':
+        specifier: workspace:^0.7.0
+        version: link:../lead
       '@hcengineering/platform':
         specifier: workspace:^0.7.20
         version: link:../../foundations/core/packages/platform
@@ -26056,9 +26068,18 @@ importers:
       '@hcengineering/prospects':
         specifier: workspace:^0.7.0
         version: link:../prospects
+      '@hcengineering/task':
+        specifier: workspace:^0.7.0
+        version: link:../task
+      '@hcengineering/text-core':
+        specifier: workspace:^0.7.19
+        version: link:../../foundations/core/packages/text-core
       '@hcengineering/ui':
         specifier: workspace:^0.7.0
         version: link:../../packages/ui
+      '@hcengineering/view-resources':
+        specifier: workspace:^0.7.0
+        version: link:../view-resources
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -35793,6 +35814,9 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/hr':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/hr
       '@hcengineering/platform':
         specifier: workspace:^0.7.20
         version: link:../../foundations/core/packages/platform

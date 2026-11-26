@@ -151,6 +151,7 @@ export default plugin(serverProcessId, {
     OnExecutionContinue: '' as Resource<TriggerFunc>,
     OnCustomEvent: '' as Resource<TriggerFunc>,
     OnExecutionDone: '' as Resource<TriggerFunc>,
+    OnHrCalendar: '' as Resource<TriggerFunc>,
     OnExecutionRemove: '' as Resource<TriggerFunc>
   }
 })

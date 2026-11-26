@@ -110,7 +110,7 @@ export class TDepartment extends TDoc implements Department {
 @UX(hr.string.Staff, hr.icon.HR, 'STFF', 'name')
 export class TStaff extends TEmployee implements Staff {
   @Prop(TypeRef(hr.class.Department), hr.string.Department)
-    department!: Ref<Department>
+    department!: Staff['department']
 }
 
 @Model(hr.class.RequestType, core.class.Doc, DOMAIN_MODEL)

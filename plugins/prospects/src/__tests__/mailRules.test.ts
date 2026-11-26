@@ -1,4 +1,4 @@
-import { canSendMail, matchReply, messageIds, type Prospect, type ProspectMail } from '..'
+import { canSendMail, matchReply, messageIds, updateProspectMailStatus, type Prospect, type ProspectMail } from '..'
 function prospect (id: string, email: string, status: Prospect['status'] = 'new'): Prospect {
   const partial: Partial<Prospect> = { _id: id as Prospect['_id'], email, status }
   return partial as Prospect
@@ -45,4 +45,11 @@ test('matches sender only when unique and with an earlier sent email', () => {
   expect(
     matchReply('a@example.test', ['<a@example.test> <b@example.test>'], [outbound, sent('<b@example.test>', b)], [a, b])
   ).toEqual({ kind: 'ambiguous' })
+})
+
+test('conversion preserves outbound mail blocks and keeps the lead state after a mail update', () => {
+  const converted = prospect('test', 'test@example.test', 'converted')
+  expect(canSendMail({ ...converted, mailStatus: 'bounced' }, 100)).toBeDefined()
+  expect(canSendMail({ ...converted, mailStatus: 'do-not-send' }, 100)).toBeDefined()
+  expect(updateProspectMailStatus(converted, 'replied')).toEqual({ mailStatus: 'replied' })
 })

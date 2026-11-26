@@ -38,7 +38,8 @@
     sent: local(prospects.string.PageSent),
     replied: local(prospects.string.PageReplied),
     'do-not-send': local(prospects.string.PageOptOut),
-    bounced: local(prospects.string.PageBounced)
+    bounced: local(prospects.string.PageBounced),
+    converted: local(prospects.string.PageConverted)
   }
   let groups: Array<{ key: 'source' | 'country' | 'industry' | 'status', title: string }>
   $: groups = [

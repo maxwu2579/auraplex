@@ -15,7 +15,8 @@
 -->
 <script lang="ts">
   import { DateRangePresenter } from '@hcengineering/ui'
-  import { DateRangeMode } from '@hcengineering/core'
+  import { DateRangeMode, type TypeDate } from '@hcengineering/core'
+  import { displayCalendarDate, storeCalendarDate } from '../calendarDate'
 
   export let value: number | null | undefined
   export let onChange: ((value: number | null) => void) | undefined = undefined
@@ -25,19 +26,21 @@
   export let inline: boolean = false
   export let mode: DateRangeMode = DateRangeMode.DATE
   export let readonly: boolean = false
+  export let type: TypeDate | undefined = undefined
+  $: displayed = type?.calendarDate && value != null ? displayCalendarDate(value) : value
 </script>
 
 {#if onChange !== undefined && !readonly}
   <DateRangePresenter
-    {value}
+    value={displayed}
     {noShift}
     {mode}
     editable
-    on:change={(e) => onChange?.(e.detail)}
+    on:change={(e) => onChange?.(type?.calendarDate && e.detail !== null ? storeCalendarDate(e.detail) : e.detail)}
     {shouldShowAvatar}
     {accent}
     {inline}
   />
 {:else}
-  <DateRangePresenter {value} {noShift} {mode} {shouldShowAvatar} {accent} {inline} />
+  <DateRangePresenter value={displayed} {noShift} {mode} {shouldShowAvatar} {accent} {inline} />
 {/if}

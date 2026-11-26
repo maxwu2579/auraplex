@@ -350,6 +350,8 @@ export enum DateRangeMode {
  * @public
  */
 export interface TypeDate extends Type<Date> {
+  /** Stores a calendar-only value as UTC midnight. */
+  calendarDate?: boolean
   // If not set date mode default
   mode: DateRangeMode
   // If not set to true, will be false

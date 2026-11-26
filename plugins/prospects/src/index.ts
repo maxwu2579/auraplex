@@ -1,10 +1,13 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import type { AccountUuid, AttachedDoc, Class, Doc, Ref } from '@hcengineering/core'
+import type { Lead } from '@hcengineering/lead'
 import { plugin, type Asset, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
 
 export const prospectsId = 'prospects' as Plugin
-export type ProspectStatus = 'new' | 'sent' | 'replied' | 'do-not-send' | 'bounced'
+/** Serialize conditional writes to the prospect and its related records. */
+export const prospectWriteScope = 'prospect-write'
+export type ProspectStatus = 'new' | 'sent' | 'replied' | 'do-not-send' | 'bounced' | 'converted'
 export interface Prospect extends Doc {
   name: string
   company: string
@@ -21,6 +24,8 @@ export interface Prospect extends Doc {
   sourceDate?: number
   notes: string
   status: ProspectStatus
+  lead?: Ref<Lead> | null
+  mailStatus?: Exclude<ProspectStatus, 'converted'>
   photos?: number
   lastEmailAt?: number
   emailCount: number
@@ -92,6 +97,10 @@ export default plugin(prospectsId, {
     PageReplied: '' as IntlString,
     PageOptOut: '' as IntlString,
     PageBounced: '' as IntlString,
+    PageConverted: '' as IntlString,
+    PageConvertToLead: '' as IntlString,
+    PageOpenLead: '' as IntlString,
+    PageLeadFailed: '' as IntlString,
     PageSourceDate: '' as IntlString,
     PageLastEmail: '' as IntlString,
     PageSendCount: '' as IntlString,

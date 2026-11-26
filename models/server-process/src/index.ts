@@ -448,6 +448,16 @@ export function createModel (builder: Builder): void {
     isAsync: true
   })
 
+  // Auraplex: keep the HR calendar in sync with terminal application decisions.
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverProcess.trigger.OnHrCalendar,
+    txMatch: {
+      _class: core.class.TxUpdateDoc,
+      objectClass: process.class.Execution,
+      'operations.status': { $in: [ExecutionStatus.Done, ExecutionStatus.Cancelled] }
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverProcess.trigger.OnExecutionCreate,
     txMatch: {

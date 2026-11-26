@@ -80,6 +80,10 @@ export class TLead extends TTask implements Lead {
   @Index(IndexKind.FullText)
     title!: string
 
+  @Prop(TypeMarkup(), lead.string.Description)
+  @Index(IndexKind.FullText)
+    description?: string
+
   @Prop(TypeRef(contact.mixin.Employee), lead.string.Assignee)
   declare assignee: Ref<Employee> | null
 

@@ -83,8 +83,8 @@ async function migrateDefaultStatuses (client: MigrationClient, logger: ModelLog
     return defaultLeadStatuses.find(
       (defStatus) =>
         defStatus.category === oldStatus.category &&
-        (defStatus.name.toLowerCase() === oldStatus.name.trim().toLowerCase() ||
-          (defStatus.name === 'Negotiation' && oldStatus.name === 'Negotation'))
+        ([defStatus.name, defStatus.legacyName].some((name) => name.toLowerCase() === oldStatus.name.trim().toLowerCase()) ||
+          (defStatus.legacyName === 'Negotiation' && oldStatus.name === 'Negotation'))
     )?.id
   }
 
@@ -167,6 +167,17 @@ export const leadOperation: MigrateOperation = {
         state: 'migrate-default-type-mixins',
         func: async (client) => {
           await migrateDefaultTypeMixins(client)
+        }
+      },
+      {
+        state: 'default-funnel-six-stages',
+        mode: 'upgrade',
+        func: async (client) => {
+          await client.update(DOMAIN_TASK, {
+            _class: lead.class.Lead,
+            kind: lead.taskType.Lead,
+            status: { $in: [lead.taskTypeStatus.MakeADecision, lead.taskTypeStatus.ContractConclusion] }
+          }, { status: lead.taskTypeStatus.Negotiation })
         }
       },
       {

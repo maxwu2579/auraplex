@@ -14,11 +14,13 @@
   import prospects, {
     findDuplicates,
     normalizeEmail,
+    prospectWriteScope,
     type Prospect,
     type ProspectStatus,
     type RecognitionField
   } from '@hcengineering/prospects'
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
+  import ProspectLeadAction from './ProspectLeadAction.svelte'
   import MailPanel from './MailPanel.svelte'
 
   export let value: Prospect | undefined = undefined
@@ -49,6 +51,7 @@
   }
   let sourceDate = value?.sourceDate === undefined ? '' : new Date(value.sourceDate).toISOString().slice(0, 10)
   let status: ProspectStatus = value?.status ?? 'new'
+  $: if (value?.lead != null) status = 'converted'
   let front: File | undefined = initialFront
   let back: File | undefined = initialBack
   let busy = false
@@ -227,7 +230,7 @@
       }
       const normalizedEmail = normalizeEmail(draft.email)
       const id = value?._id ?? generateId<Prospect>()
-      const ops = client.apply('prospects-email')
+      const ops = client.apply(prospectWriteScope)
       if (normalizedEmail !== '') {
         ops.notMatch(prospects.class.Prospect, {
           normalizedEmail,
@@ -237,7 +240,7 @@
       const data = {
         ...draft,
         normalizedEmail,
-        status,
+        ...(value?.lead == null && status !== 'converted' ? { status } : {}),
         ...(sourceDate === '' ? {} : { sourceDate: new Date(`${sourceDate}T12:00:00`).getTime() }),
         ...(recognized && model !== undefined
           ? {
@@ -252,10 +255,13 @@
         await ops.createDoc(
           prospects.class.Prospect,
           core.space.Workspace,
-          { ...data, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
+          { ...data, status, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
           id
         )
       } else {
+        if (value.lead == null && status !== 'converted') {
+          ops.match(prospects.class.Prospect, { _id: id, $or: [{ lead: { $exists: false } }, { lead: null }] })
+        }
         const unset = {
           ...(sourceDate === '' ? { sourceDate: true } : {}),
           ...(photoChanged && !recognized ? { recognitionModel: true, recognizedAt: true, recognitionBy: true } : {})
@@ -353,10 +359,12 @@
         >{/each}
       <label><Label label={prospects.string.PageSourceDate} /><input disabled={busy} type="date" bind:value={sourceDate} /></label>
       <label
-        ><Label label={prospects.string.PageStatus} /><select disabled={busy} bind:value={status}
+        ><Label label={prospects.string.PageStatus} /><select disabled={busy || status === 'converted'} bind:value={status}
           ><option value="new">{local(prospects.string.PageNew)}</option><option value="sent">{local(prospects.string.PageSent)}</option><option value="replied"
             >{local(prospects.string.PageReplied)}</option
-          ><option value="do-not-send">{local(prospects.string.PageOptOut)}</option><option value="bounced">{local(prospects.string.PageBounced)}</option></select
+          ><option value="do-not-send">{local(prospects.string.PageOptOut)}</option><option value="bounced">{local(prospects.string.PageBounced)}</option>{#if status === 'converted'}
+            <option value="converted">{local(prospects.string.PageConverted)}</option>
+          {/if}</select
         ></label
       >
     </div>
@@ -379,7 +387,12 @@
         >查看已有记录：{duplicate.name} · {duplicate.company}</button
       >{/if}
     <footer><button disabled={busy || !moduleCanEdit} on:click={save}>{busy ? $t('处理中…') : $t('确认保存')}</button></footer>
-    {#if value !== undefined}<MailPanel {value} />{/if}
+    {#if value !== undefined}
+      <ProspectLeadAction {value} canEdit={moduleCanEdit} disabled={busy}
+        on:converted={() => { status = 'converted' }}
+        on:opened={() => dispatch('close')} />
+      <MailPanel {value} />
+    {/if}
   </section>
   {#if preview}<div class="preview" role="presentation" on:click|self={() => (preview = undefined)}>
       <button on:click={() => (preview = undefined)}><Label label={prospects.string.PageClose} /></button><img src={preview} alt={$t('名片大图')} />

@@ -115,6 +115,9 @@ export class TProcess extends TDoc implements Process {
   @Prop(TypeRecord(), process.string.Bindings)
     bindings?: Record<string, string>
 
+  @Prop(TypeRecord(), process.string.Process)
+  hrCalendar?: Process['hrCalendar']
+
   context!: Record<ContextId, ProcessContext>
 }
 

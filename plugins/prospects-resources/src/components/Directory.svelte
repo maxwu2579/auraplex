@@ -12,6 +12,7 @@
   import { createWorkbook, datedFilename, downloadWorkbook } from '../xlsx'
   import { recordExport } from '../audit'
   import { prospectFilter } from '../filter'
+  import ProspectLeadAction from './ProspectLeadAction.svelte'
   import EditDialog from './EditDialog.svelte'
   const query = createQuery()
   const client = getClient()
@@ -50,7 +51,8 @@
     sent: local(prospects.string.PageSent),
     replied: local(prospects.string.PageReplied),
     'do-not-send': local(prospects.string.PageOptOut),
-    bounced: local(prospects.string.PageBounced)
+    bounced: local(prospects.string.PageBounced),
+    converted: local(prospects.string.PageConverted)
   }
   query.query(prospects.class.Prospect, {}, (items) => {
     all = items
@@ -289,7 +291,7 @@
                 on:click={() => {
                   edit(item)
                 }} disabled={!moduleCanEdit}><Label label={prospects.string.PageEdit} /></button
-              >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
+              ><ProspectLeadAction value={item} canEdit={moduleCanEdit} />{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
             ></tr
           >{:else}<tr><td colspan="11">{all.length === 0 ? $t('还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。') : $t('没有符合条件的记录。')}</td></tr>{/each}</tbody
       >
@@ -297,7 +299,7 @@
   </div>
 </div>
 {#if moduleCanEdit && editing}{#key selected?._id ?? 'new'}<EditDialog
-      value={selected}
+      value={all.find((item) => item._id === selected?._id) ?? selected}
       initialFront={fromQueue ? queue[frontIndex] : undefined}
       initialBack={fromQueue && backIndex >= 0 ? queue[backIndex] : undefined}
       on:close={() => (editing = false)}
