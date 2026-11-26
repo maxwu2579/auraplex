@@ -985,9 +985,10 @@
 <style lang="scss">
   .application-assignment-list {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-2);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-2) var(--spacing-4);
     margin-block: var(--spacing-2);
   }
 
