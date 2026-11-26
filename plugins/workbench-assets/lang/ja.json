@@ -4,6 +4,8 @@
     "Delete": "削除",
     "ShowMenu": "メニューを表示",
     "HideMenu": "メニューを非表示",
+    "ShowAppNames": "Show app names",
+    "HideAppNames": "Hide app names",
     "Archive": "アーカイブ",
     "Archived": "アーカイブ済み",
     "Open": "開く",

@@ -67,6 +67,11 @@ export function canOrderAction (
   if (action.kind === 'start') {
     return order.state === 'pending' && (scanner || order.salesOwner === actor) && order.stages[0]?.id === action.stage
   }
+  if (action.kind === 'cancel') {
+    // Auraplex: only super admins and company admins cancel an order that is not finished, with a reason.
+    return (owner || extra.maintainer === true) && (order.state === 'pending' || order.state === 'active') &&
+      order.stages.some((it) => it.id === action.stage) && hasText(action.reason)
+  }
   if (order.state !== 'active') return false
   const index = order.stages.findIndex((it) => it.id === action.stage)
   const stage = order.stages[index]

@@ -15,7 +15,7 @@
 <script lang="ts">
   import type { Asset, IntlString } from '@hcengineering/platform'
   import type { AnySvelteComponent } from '@hcengineering/ui'
-  import { Icon, Loading, tooltip } from '@hcengineering/ui'
+  import { Icon, Label, Loading, tooltip } from '@hcengineering/ui'
 
   export let label: IntlString
   export let icon: Asset | AnySvelteComponent
@@ -26,6 +26,8 @@
   export let notify: boolean = false
   export let navigator: boolean = false
   export let dataId: string | undefined = undefined
+  // Auraplex: show the name next to the icon (wide left bar).
+  export let showLabel: boolean = false
 </script>
 
 <button
@@ -33,6 +35,7 @@
   class:loading
   class:selected
   class:navigator
+  class:withLabel={showLabel}
   id={'app-' + label}
   data-id={dataId}
   disabled={loading}
@@ -45,6 +48,7 @@
     <div class="flex-center icon-container" class:noty={notify}>
       <Icon {icon} size={size === 'small' ? 'small' : 'medium'} />
     </div>
+    {#if showLabel}<span class="app-label"><Label {label} /></span>{/if}
     {#if notify}<div class="marker" />{/if}
   {/if}
 </button>
@@ -62,6 +66,28 @@
 
     &.loading {
       pointer-events: none;
+    }
+
+    &.withLabel {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 9rem !important;
+      padding: 0 0.5rem;
+      .icon-container {
+        flex-shrink: 0;
+      }
+    }
+    .app-label {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 0.8125rem;
+      color: var(--theme-content-color);
+    }
+    &.selected .app-label,
+    &:hover .app-label {
+      color: var(--theme-caption-color);
     }
 
     &.large {

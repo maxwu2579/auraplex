@@ -1949,6 +1949,22 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
     case 'scan':
       // Only kept in the history: who scanned the order's QR code and when.
       return []
+    case 'cancel': {
+      if (order.state !== 'pending' && order.state !== 'active') return []
+      state = 'cancelled'
+      for (const item of stages) {
+        if (item.todo !== undefined) {
+          results.push(control.txFactory.createTxUpdateDoc(orderTodoClass, orderTodoSpace, item.todo, { doneOn: now } as any))
+          delete item.todo
+        }
+      }
+      const running = stages[order.current]
+      const people = [order.salesOwner, ...(running?.assignee !== undefined ? [running.assignee] : [])]
+      await notifyOrder(control, results, tx, order, people, departments.string.OrderCancelledNotice,
+        `${title}\n订单已取消${reason}`, `The order was cancelled${reasonEn}`)
+      results.unshift(control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, state }))
+      return results
+    }
     case 'start': {
       if (order.state !== 'pending' || index !== 0) return []
       stage.status = 'active'

@@ -4,6 +4,8 @@
         "Delete": "삭제",
         "ShowMenu": "메뉴 표시",
         "HideMenu": "메뉴 숨기기",
+        "ShowAppNames": "Show app names",
+        "HideAppNames": "Hide app names",
         "Archive": "보관",
         "Archived": "보관됨",
         "Open": "열기",

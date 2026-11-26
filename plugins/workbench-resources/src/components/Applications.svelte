@@ -28,6 +28,7 @@
   import { NotificationType } from '@hcengineering/communication-types'
 
   import AppItem from './AppItem.svelte'
+  import { appBarLabels } from '../appBarLabels'
 
   export let active: Ref<Application> | undefined
   export let apps: Application[] = []
@@ -185,6 +186,7 @@
             notify={showNotify(app.alias, hasInboxNotifications, hasNewInboxNotifications, hasNewMessagesNotification)}
             {...customProps}
             dataId={`app-sidebar-${app.alias}`}
+            showLabel={$appBarLabels && direction === 'vertical'}
             on:click={getClickHandler(app, customProps)}
           />
         </NavLink>
@@ -202,6 +204,7 @@
             navigator={app._id === active && $deviceInfo.navigator.visible}
             {...customProps}
             dataId={`app-sidebar-${app.alias}`}
+            showLabel={$appBarLabels && direction === 'vertical'}
             on:click={getClickHandler(app, customProps)}
           />
         </NavLink>
@@ -219,6 +222,7 @@
               notify={app.alias === chatId && hasNewInboxNotifications}
               {...customProps}
               dataId={`app-sidebar-${app.alias}`}
+            showLabel={$appBarLabels && direction === 'vertical'}
               on:click={getClickHandler(app, customProps)}
             />
           </NavLink>

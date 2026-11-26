@@ -504,7 +504,7 @@
             >
           </tr>
         {:else}
-          <tr><td colspan="9" class="empty"><Label label={materials.string.NoResults} /></td></tr>
+          <tr><td colspan="9" class="empty"><Label label={all.length === 0 ? materials.string.EmptyDirectory : materials.string.NoResults} /></td></tr>
         {/each}
       </tbody>
     </table>

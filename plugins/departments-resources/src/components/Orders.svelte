@@ -54,6 +54,19 @@
   let pendingScan: string | undefined = getCurrentLocation().query?.scan ?? undefined
   $: canScan = owner || me.role === AccountRole.Maintainer || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
   $: canStart = selected !== undefined && selected.state === 'pending' && (canScan || selected.salesOwner === me.uuid)
+  // Auraplex: super admins and company admins cancel an order that is not finished, with a reason.
+  $: canCancel = selected !== undefined && (selected.state === 'pending' || selected.state === 'active') &&
+    (owner || me.role === AccountRole.Maintainer)
+  let cancelOpen = false
+  let cancelReason = ''
+  async function cancelOrder (): Promise<void> {
+    if (selected === undefined || cancelReason.trim() === '') return
+    await act('cancel', { stage: selected.stages[selected.current]?.id ?? selected.stages[0]?.id, reason: cancelReason.trim() })
+    if (error === '') {
+      cancelOpen = false
+      cancelReason = ''
+    }
+  }
   const scanLink = (number: string): string => {
     const loc = getCurrentLocation()
     return `${window.location.origin}/workbench/${loc.path[1]}/orders/orders?scan=${encodeURIComponent(number)}`
@@ -271,7 +284,8 @@
     approve: local(departments.string.OrderApprove),
     reject: local(departments.string.OrderReject),
     start: L('开始流程', 'Started'),
-    scan: L('扫码', 'Scanned')
+    scan: L('扫码', 'Scanned'),
+    cancel: L('取消订单', 'Cancelled')
   }
 
   function closeDetail (): void {
@@ -475,18 +489,18 @@
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
-          {@const left = it.state === 'done' ? undefined : countdown(cur)}
+          {@const left = it.state === 'done' || it.state === 'cancelled' ? undefined : countdown(cur)}
           <tr class:sel={it._id === selectedId} on:click={() => open(it)}>
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
-            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
+            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'cancelled'}<StatusTag status="late" text={L('已取消', 'Cancelled')} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
             <td>{#if it.state === 'active'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
           </tr>
         {/each}
-        {#if shown.length === 0}<tr><td colspan="7" class="hint"><Label label={departments.string.OrderPage12} /></td></tr>{/if}
+        {#if shown.length === 0}<tr><td colspan="7" class="hint"><Label label={orders.length === 0 ? departments.string.OrderEmptyHint : departments.string.OrderPage12} /></td></tr>{/if}
       </tbody>
     </table>
 
@@ -506,7 +520,19 @@
         {:else}
           {#if scannedId === selected._id}<p class="scanned">📷 {L('扫码打开', 'Opened by scan')}</p>{/if}
           <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}
-            <button class="qr-btn" on:click={() => { showQr = !showQr }}>{L('二维码', 'QR code')}</button></h3>
+            <button class="qr-btn" on:click={() => { showQr = !showQr }}>{L('二维码', 'QR code')}</button>
+            {#if canCancel}<button class="qr-btn" on:click={() => { cancelOpen = !cancelOpen }}>{L('取消订单', 'Cancel order')}</button>{/if}</h3>
+          {#if cancelOpen && canCancel}
+            <div class="cancel-box">
+              <p class="hint">{L('取消后订单不能再继续，所有待办会关闭，销售负责人会收到通知。必须写原因。', 'A cancelled order cannot continue; its to-dos close and the salesperson is told. A reason is required.')}</p>
+              <input bind:value={cancelReason} placeholder={L('取消原因', 'Reason')} />
+              <button disabled={busy || cancelReason.trim() === ''} on:click={cancelOrder}>{L('确认取消', 'Confirm cancel')}</button>
+              <button disabled={busy} on:click={() => { cancelOpen = false }}>{L('不取消', 'Keep order')}</button>
+            </div>
+          {/if}
+          {#if selected.state === 'cancelled'}
+            <div class="pending"><StatusTag status="late" text={L('已取消', 'Cancelled')} /></div>
+          {/if}
           {#if showQr}
             <div class="qr-box">
               {#if qrImage !== ''}<img src={qrImage} alt={selected.number} />{/if}
@@ -529,7 +555,7 @@
             <div class="order-progress">
               <progress aria-label={local(departments.string.OrderProgress)} max={Math.max(1, selected.stages.length)}
                 value={selected.stages.filter((item) => item.status === 'done').length}></progress>
-              {#if stage}
+              {#if stage && selected.state !== 'cancelled'}
                 <div><Label label={departments.string.OrderStageProgress} params={{ current: selected.current + 1, total: selected.stages.length, stage: stage.name, assignee: name(stage.assignee) }} />
                   {#if stage.startedOn !== undefined} · <Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />{/if}
                   {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
@@ -686,6 +712,8 @@
 </section>
 
 <style>
+  .cancel-box { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+  .cancel-box .hint { flex-basis: 100%; margin: 0; }
   .scan-btn, .qr-btn { margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; border: 1px solid var(--theme-divider-color); background: var(--theme-button-default); color: var(--theme-caption-color); cursor: pointer; font-size: 0.8rem; font-weight: 500; }
   .start-later { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
   .qr-box { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }

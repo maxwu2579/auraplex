@@ -291,7 +291,7 @@
                 }} disabled={!moduleCanEdit}><Label label={prospects.string.PageEdit} /></button
               >{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
             ></tr
-          >{:else}<tr><td colspan="11">{$t('没有符合条件的记录。')}</td></tr>{/each}</tbody
+          >{:else}<tr><td colspan="11">{all.length === 0 ? $t('还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。') : $t('没有符合条件的记录。')}</td></tr>{/each}</tbody
       >
     </table>
   </div>

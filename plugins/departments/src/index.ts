@@ -75,7 +75,7 @@ export interface Order extends Doc {
   stages: OrderStage[]
   current: number
   /** pending: created but not started yet (started by hand or by scanning its QR code). */
-  state: 'pending' | 'active' | 'done'
+  state: 'pending' | 'active' | 'done' | 'cancelled'
   /** Linked places, created on first use: chat channel, tracker component, document, drive folder. */
   channel?: Ref<Doc>
   component?: Ref<Doc>
@@ -85,7 +85,7 @@ export interface Order extends Doc {
   linkSpaces?: Record<string, Ref<Space>>
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan' | 'cancel'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {
@@ -408,6 +408,7 @@ export default plugin(departmentsId, {
     OrderPage10: '' as IntlString,
     OrderPage11: '' as IntlString,
     OrderPage12: '' as IntlString,
+    OrderEmptyHint: '' as IntlString,
     OrderPage13: '' as IntlString,
     OrderPage14: '' as IntlString,
     OrderPage15: '' as IntlString,
@@ -475,6 +476,7 @@ export default plugin(departmentsId, {
     ApplicationCancelled: '' as IntlString,
     OrderAssigned: '' as IntlString,
     OrderFinished: '' as IntlString,
+    OrderCancelledNotice: '' as IntlString,
     Tracking: '' as IntlString,
     ActivityLog: '' as IntlString,
     Workload: '' as IntlString,

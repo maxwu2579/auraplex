@@ -265,6 +265,7 @@ export default plugin(materialsId, {
     AllCategories: '' as IntlString,
     AllRacks: '' as IntlString,
     NoResults: '' as IntlString,
+    EmptyDirectory: '' as IntlString,
     Duplicate: '' as IntlString,
     Required: '' as IntlString,
     SaveFailed: '' as IntlString,

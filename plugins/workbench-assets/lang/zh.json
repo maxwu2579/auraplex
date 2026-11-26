@@ -4,6 +4,8 @@
     "Delete": "删除",
     "ShowMenu": "显示菜单",
     "HideMenu": "隐藏菜单",
+    "ShowAppNames": "显示模块名字",
+    "HideAppNames": "收起模块名字",
     "Archive": "归档",
     "Archived": "已归档",
     "Open": "打开",

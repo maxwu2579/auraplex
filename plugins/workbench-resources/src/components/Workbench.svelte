@@ -67,6 +67,8 @@
     getCurrentLocation,
     getLocation,
     IconSettings,
+    IconChevronLeft,
+    IconChevronRight,
     isSameSegments,
     Label,
     languageStore,
@@ -118,6 +120,7 @@
   import { buildNavModel, isAllowedToRole, logOut, workspacesStore } from '../utils'
   import AccountPopup from './AccountPopup.svelte'
   import AppItem from './AppItem.svelte'
+  import { appBarLabels } from '../appBarLabels'
   import AppSwitcher from './AppSwitcher.svelte'
   import Applications from './Applications.svelte'
   import Logo from './Logo.svelte'
@@ -955,6 +958,7 @@
   <div class="workbench-container apps-{$deviceInfo.navigator.direction}">
     <div
       class="antiPanel-application {$deviceInfo.navigator.direction} no-print"
+      class:wideApps={$appBarLabels && $deviceInfo.navigator.direction === 'vertical'}
       class:lastDivider={!$deviceInfo.navigator.visible}
     >
       <div
@@ -981,6 +985,16 @@
             size={appsMini ? 'small' : 'medium'}
             on:click={toggleNav}
           />
+          {#if $deviceInfo.navigator.direction === 'vertical' && !appsMini}
+            <!-- Auraplex: show or hide the names of the apps in the left bar. -->
+            <AppItem
+              icon={$appBarLabels ? IconChevronLeft : IconChevronRight}
+              label={$appBarLabels ? workbench.string.HideAppNames : workbench.string.ShowAppNames}
+              size="medium"
+              showLabel={$appBarLabels}
+              on:click={() => appBarLabels.update((value) => !value)}
+            />
+          {/if}
         </div>
         {#if !isExcludedApp(activeInboxId)}
           {#if !isCommunicationEnabled}
@@ -1286,6 +1300,12 @@
     }
   }
 
+  /* Auraplex: the left bar widens when app names are shown. */
+  .antiPanel-application.wideApps,
+  .antiPanel-application.wideApps :global(*) {
+    --app-panel-width: 10.5rem;
+  }
+
   .hamburger-container {
     position: relative;
     display: flex;
@@ -1310,6 +1330,10 @@
         margin-bottom: 0.25rem;
       }
       .topmenu-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
         margin-bottom: 1rem;
       }
     }

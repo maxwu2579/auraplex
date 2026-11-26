@@ -24,6 +24,7 @@
     "AllCategories": "All categories",
     "AllRacks": "All racks",
     "NoResults": "No materials found",
+    "EmptyDirectory": "No materials yet. Use \"Import from Excel\" at the top right to load your stock sheet, or \"New material\" to add them one by one.",
     "Duplicate": "A material with this code already exists.",
     "Required": "Enter a material code and name.",
     "SaveFailed": "Could not save. Please try again.",

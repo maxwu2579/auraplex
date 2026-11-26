@@ -4,6 +4,7 @@ export const en: Record<string, string> = {
   未填写: 'Not filled in',
   '删除失败，请检查权限后重试。': 'Could not delete. Check your permissions and try again.',
   '没有符合条件的记录。': 'No matching records.',
+  '还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。': 'No business cards yet. Use "Add manually" or upload card fronts at the top right; you can pick several at once.',
   '正在检查识别服务…': 'Checking the recognition service…',
   识别服务连不上: 'Cannot reach the recognition service',
   识别服务未配置: 'Recognition service not set up',

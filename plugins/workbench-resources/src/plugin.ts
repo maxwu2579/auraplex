@@ -25,6 +25,8 @@ export default mergeIds(workbenchId, workbench, {
     Delete: '' as IntlString,
     ShowMenu: '' as IntlString,
     HideMenu: '' as IntlString,
+    ShowAppNames: '' as IntlString,
+    HideAppNames: '' as IntlString,
     Archived: '' as IntlString,
     Open: '' as IntlString,
     General: '' as IntlString,

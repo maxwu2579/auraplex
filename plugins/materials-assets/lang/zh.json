@@ -24,6 +24,7 @@
     "AllCategories": "全部类别",
     "AllRacks": "全部货架",
     "NoResults": "没有找到物料",
+    "EmptyDirectory": "还没有物料。点右上角\"导入 Excel\"一次导入库存表，或者点\"新建物料\"一条一条加。",
     "Duplicate": "这个物料编号已经存在。",
     "Required": "请填写物料编号和名称。",
     "SaveFailed": "保存失败，请重试。",

@@ -134,3 +134,17 @@ test('people working on an order may link chat, tasks, document and folder once'
   expect(canEditOrder({ folder: 'f1', linkSpaces: { folder: 'd1' } }, 'wang', false, order())).toBe(true)
   expect(canEditOrder({ channel: 'c1', title: 'x' }, 'li', false, order(), true)).toBe(false)
 })
+
+test('only super admins and company admins cancel an unfinished order, with a reason', () => {
+  const cancel = { kind: 'cancel', stage: 'p', reason: '客户取消' }
+  expect(canOrderAction(order(), cancel, 'boss', true, roleOf)).toBe(true)
+  expect(canOrderAction(order(), cancel, 'admin', false, roleOf, { maintainer: true })).toBe(true)
+  expect(canOrderAction(order(), cancel, 'ming', false, roleOf, { adminSomewhere: true })).toBe(false)
+  expect(canOrderAction(order(), cancel, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(order(), { ...cancel, reason: ' ' }, 'boss', true, roleOf)).toBe(false)
+  expect(canOrderAction({ ...order(), state: 'pending' }, { ...cancel, stage: 's' }, 'boss', true, roleOf)).toBe(true)
+  expect(canOrderAction({ ...order(), state: 'done' }, cancel, 'boss', true, roleOf)).toBe(false)
+  expect(canOrderAction({ ...order(), state: 'cancelled' }, cancel, 'boss', true, roleOf)).toBe(false)
+  // A cancelled order cannot move any more.
+  expect(canOrderAction({ ...order(), state: 'cancelled' }, { kind: 'complete', stage: 'p' }, 'boss', true, roleOf)).toBe(false)
+})
