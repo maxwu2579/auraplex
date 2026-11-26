@@ -7,7 +7,7 @@
   import departments, { type DepartmentAccess, type DepartmentPermission, type ModuleGrant, type ModuleSettings } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, ModernCheckbox, getCurrentLocation, languageStore, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
+  import { AvailableSpacesInput, Breadcrumb, Button, Header, Icon, Label, ModernCheckbox, SelectPopup, eventToHTMLElement, getCurrentLocation, languageStore, location, navigate, SearchInput, showPopup, Toggle } from '@hcengineering/ui'
 
   function localize (language: string) {
     return (id: IntlString): string => {
@@ -523,6 +523,48 @@
     if (level === 'view' || level === 'edit') extra[alias] = level
     else delete extra[alias]
   }
+
+  // One choice per module for a person's exception: follow the department, extra access, or blocked.
+  function exceptionChoice (alias: string): string {
+    if (blocked.includes(alias)) return 'blocked'
+    return extra[alias] ?? ''
+  }
+  function setExceptionChoice (alias: string, value: string): void {
+    blocked = value === 'blocked' ? [...blocked.filter((item) => item !== alias), alias] : blocked.filter((item) => item !== alias)
+    changeExtra(alias, value)
+  }
+  let showAllModules = false
+  // By default list only modules this department uses, plus any the person already has an exception for.
+  $: exceptionApps = applications.filter((app) => showAllModules ||
+    moduleCards.some((card) => card.app.alias === app.alias && card.enabled) ||
+    exceptionChoice(app.alias) !== '')
+  function closeGrant (): void {
+    if (!busy) grantPerson = undefined
+  }
+
+  function memberActions (event: MouseEvent, account: AccountUuid): void {
+    if (draft === undefined) return
+    const items = [
+      ...(canEdit && moduleSettings?.enabled === true && roles.some(({ field }) => live?.[field].includes(account))
+        ? [{ id: 'exceptions', label: departments.string.DirectoryExceptions }] : []),
+      ...(account !== me.uuid ? [{ id: 'message', label: departments.string.DirectoryMessage }] : []),
+      ...(canEdit && canMoveMember(draft, account) ? [{ id: 'remove', label: departments.string.DirectoryRemove }] : [])
+    ]
+    showPopup(SelectPopup, { value: items }, eventToHTMLElement(event), (result: string | undefined) => {
+      if (result === 'exceptions') void editGrant(account)
+      else if (result === 'message') void chat(account)
+      else if (result === 'remove') setMemberRole(account)
+    })
+  }
+
+  $: dirty = live !== undefined && draft !== undefined &&
+    (JSON.stringify(draft) !== JSON.stringify(clone(live)) || (owner && name.trim() !== live.name))
+  function discard (): void {
+    if (live === undefined || busy) return
+    draft = clone(live)
+    name = live.name
+    error = false
+  }
   async function create (): Promise<void> {
     if (!canCreateDepartment || busy || newName.trim() === '' || (owner && newAdmin === '')) return
     busy = true
@@ -691,6 +733,14 @@
       </nav>
     {:else if live !== undefined && draft !== undefined}
       <div class="editor">
+        {#if canEdit && (dirty || busy)}
+          <div class="unsaved-bar" role="status">
+            <span>⚠ <Label label={departments.string.DirectoryUnsaved} /></span>
+            <button class="primary" on:click={save} disabled={busy || (owner && name.trim() === '')}
+              ><Label label={busy ? departments.string.Processing : departments.string.Save} /></button>
+            <button on:click={discard} disabled={busy}><Label label={departments.string.DirectoryDiscard} /></button>
+          </div>
+        {/if}
         <div class="tabs">
           <button aria-pressed={tab === 'members'} on:click={() => { tab = 'members' }}><Label label={departments.string.DirectoryMembers} /></button>
           <button aria-pressed={tab === 'modules'} on:click={() => { tab = 'modules' }}><Label label={departments.string.DirectoryModuleAccess} /></button>
@@ -728,13 +778,9 @@
                           </option>
                         {/each}
                       </select>
-                      {#if canEdit}
-                        <button disabled={busy || !roles.some(({ field }) => live?.[field].includes(account))}
-                          on:click={() => editGrant(account)}><Label label={departments.string.DirectoryExceptions} /></button>
-                      {/if}
-                      {#if account !== me.uuid}<button on:click={() => chat(account)}><Label label={departments.string.DirectoryMessage} /></button>{/if}
-                      {#if canEdit}
-                        <button disabled={!canMoveMember(draft, account)} on:click={() => setMemberRole(account)}><Label label={departments.string.DirectoryRemove} /></button>
+                      {#if canEdit || account !== me.uuid}
+                        <button class="more" aria-label={local(departments.string.DirectoryMore)} title={local(departments.string.DirectoryMore)}
+                          disabled={busy} on:click={(event) => { memberActions(event, account) }}>⋯</button>
                       {/if}
                     </div>
                   {/if}
@@ -742,33 +788,6 @@
               </section>
             {/if}
           {/each}
-        {#if canEdit && grantPerson !== undefined}
-          <fieldset>
-            <legend><Label label={departments.string.DirectoryPersonExceptions} params={{ name: names([grantPerson]) }} /></legend>
-            <div class="member">
-              <fieldset><legend><Label label={departments.string.DirectoryExtra} /></legend>
-                {#each applications as app (app.alias)}
-                  <label><Label label={app.label} />
-                    <select value={extra[app.alias] ?? ''} disabled={busy}
-                      on:change={(event) => changeExtra(app.alias, event.currentTarget.value)}>
-                      <option value=""><Label label={departments.string.DirectoryNoExtra} /></option>
-                      {#if ownModules.has(app.alias)}<option value="view"><Label label={departments.string.DirectoryView} /></option>{/if}
-                      <option value="edit">{ownModules.has(app.alias) ? local(departments.string.DirectoryCanEdit) : local(departments.string.DirectoryEnabled)}</option>
-                    </select>
-                  </label>
-                {/each}
-              </fieldset>
-              <fieldset><legend><Label label={departments.string.DirectoryBlocked} /></legend>
-                {#each applications as app (app.alias)}
-                  <label><input type="checkbox" bind:group={blocked} value={app.alias} disabled={busy} />
-                    <Label label={app.label} /></label>
-                {/each}
-              </fieldset>
-            </div>
-            <button disabled={busy} on:click={saveGrant}><Label label={departments.string.DirectorySaveExceptions} /></button>
-            <button disabled={busy} on:click={() => { grantPerson = undefined }}><Label label={departments.string.DirectoryCancel} /></button>
-          </fieldset>
-        {/if}
         {/if}
         {#if tab === 'modules'}
           <div class="tabs" aria-label={local(departments.string.DirectoryFilter)}>
@@ -892,7 +911,8 @@
           </select>
         </label>
         {/if}
-        {#if canEdit && tab === 'members'}
+        {#if canEdit && tab === 'settings'}
+        <h3><Label label={departments.string.DirectoryRolePermissions} /></h3>
         <p><Label label={departments.string.InviteHelp} /></p>
         <div class="table-wrap">
           <table>
@@ -918,19 +938,49 @@
           </table>
         </div>
         {/if}
-        {#if canEdit}
-        {#if !owner}<p><Label label={departments.string.NoPermission} /></p>{/if}
-        <button
-          on:click={save}
-          disabled={busy ||
-            (owner && name.trim() === '')}
-          ><Label label={busy ? departments.string.Processing : departments.string.Save} /></button
-        >
-        {/if}
+        {#if canEdit && !owner}<p><Label label={departments.string.NoPermission} /></p>{/if}
       </div>
     {/if}
   </div>
 </section>
+
+<svelte:window on:keydown={(event) => { if (event.key === 'Escape' && grantPerson !== undefined) closeGrant() }} />
+
+{#if canEdit && grantPerson !== undefined}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div class="grant-backdrop" on:click|self={closeGrant}>
+    <div class="grant-dialog" role="dialog" aria-modal="true">
+      <div class="grant-header">
+        <h3><Label label={departments.string.DirectoryPersonExceptions} params={{ name: names([grantPerson]) }} /></h3>
+        <button class="close" aria-label={local(departments.string.DirectoryCancel)} on:click={closeGrant}>×</button>
+      </div>
+      <p class="grant-hint"><Label label={departments.string.DirectoryExceptionsHint} /></p>
+      <div class="grant-list">
+        {#each exceptionApps as app (app.alias)}
+          <label class="grant-row">
+            <span class="grant-module"><Icon icon={app.icon} size="small" /><Label label={app.label} /></span>
+            <select value={exceptionChoice(app.alias)} disabled={busy} class:changed={exceptionChoice(app.alias) !== ''}
+              on:change={(event) => { setExceptionChoice(app.alias, event.currentTarget.value) }}>
+              <option value=""><Label label={departments.string.DirectoryFollowDepartment} /></option>
+              {#if ownModules.has(app.alias)}
+                <option value="view"><Label label={departments.string.DirectoryExtraView} /></option>
+                <option value="edit"><Label label={departments.string.DirectoryExtraEdit} /></option>
+              {:else}
+                <option value="edit"><Label label={departments.string.DirectoryExtraEnable} /></option>
+              {/if}
+              <option value="blocked"><Label label={departments.string.DirectoryBlockPerson} /></option>
+            </select>
+          </label>
+        {/each}
+      </div>
+      <label class="grant-all"><input type="checkbox" bind:checked={showAllModules} /><Label label={departments.string.DirectoryShowAllModules} /></label>
+      <div class="grant-footer">
+        <button on:click={closeGrant} disabled={busy}><Label label={departments.string.DirectoryCancel} /></button>
+        <button class="primary" on:click={saveGrant} disabled={busy}><Label label={departments.string.Save} /></button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style lang="scss">
   .application-assignment-list {
@@ -1071,7 +1121,50 @@
   .error {
     color: var(--theme-error-color);
   }
+  .unsaved-bar {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+    padding: 0.625rem 1rem; border-radius: 0.5rem;
+    border: 1px solid var(--theme-warning-color, #f2994a);
+    background: var(--theme-bg-color); color: var(--theme-caption-color); font-weight: 500;
+    box-shadow: var(--theme-popup-shadow);
+  }
+  .unsaved-bar span { flex: 1 1 auto; }
+  .departments button.primary, .grant-dialog button.primary {
+    color: var(--theme-button-contrast-color, #fff); background: var(--theme-button-primary-color, #3b6fe0); border-color: transparent;
+  }
+  .departments button.more { padding: 0.15rem 0.6rem; font-size: 1.1rem; line-height: 1; }
+  .member strong { min-width: 8rem; }
+  .grant-backdrop {
+    position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+    padding: 1rem; background: rgba(0, 0, 0, 0.45);
+  }
+  .grant-dialog {
+    display: flex; flex-direction: column; gap: 0.75rem;
+    width: min(32rem, 100%); max-height: min(40rem, 90vh); padding: 1.25rem;
+    border-radius: 0.75rem; border: 1px solid var(--theme-divider-color);
+    background: var(--theme-popup-color, var(--theme-bg-color)); color: var(--theme-content-color);
+    box-shadow: var(--theme-popup-shadow);
+  }
+  .grant-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .grant-header h3 { margin: 0; color: var(--theme-caption-color); }
+  .grant-hint { margin: 0; font-size: 0.8125rem; }
+  .grant-list { overflow: auto; scrollbar-width: auto; border-top: 1px solid var(--theme-divider-color); }
+  .grant-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 13rem; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0.25rem; border-bottom: 1px solid var(--theme-divider-color);
+  }
+  .grant-module { display: flex; align-items: center; gap: 0.5rem; color: var(--theme-caption-color); }
+  .grant-all { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+  .grant-footer { display: flex; justify-content: flex-end; gap: 0.5rem; }
+  .grant-dialog button, .grant-dialog select {
+    color: var(--theme-caption-color); background-color: var(--theme-bg-color);
+    border: 1px solid var(--theme-button-border); border-radius: 0.375rem; padding: 0.35rem 0.65rem;
+  }
+  .grant-dialog select.changed { border-color: var(--theme-caption-color); font-weight: 600; }
+  .grant-dialog button.close { border: 0; background: transparent; font-size: 1.4rem; line-height: 1; padding: 0 0.25rem; cursor: pointer; }
   @media (max-width: 680px) {
+    .grant-row { grid-template-columns: minmax(0, 1fr); }
     /* Auraplex: phones - keep the page title readable next to the toggle and button. */
     .module-control small { display: none; }
     .module-control { font-size: 0.75rem; }
