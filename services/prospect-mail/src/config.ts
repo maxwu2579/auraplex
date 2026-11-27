@@ -11,6 +11,7 @@ export interface ServiceConfig {
   secret: string
   /** Workspace UUID whose prospects this mailbox serves. */
   workspace?: string
+  taskFrontUrl?: string
   address?: string
   password?: string
   smtp: MailServer
@@ -37,6 +38,7 @@ export function readConfig (env: NodeJS.ProcessEnv): ServiceConfig {
     accountsUrl: env.ACCOUNTS_URL ?? '',
     secret: env.SERVER_SECRET ?? 'secret',
     workspace: text('MAIL_WORKSPACE'),
+    taskFrontUrl: text('TASK_MAIL_FRONT_URL'),
     address: text('MAIL_ADDRESS'),
     // Google shows app passwords in groups of four; the spaces are not part of it.
     password: text('MAIL_PASSWORD')?.replace(/\s/g, ''),

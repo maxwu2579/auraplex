@@ -402,6 +402,7 @@ export default plugin(departmentsId, {
     OrderAllStagesDone: '' as IntlString,
     OrderDays: '' as IntlString,
     OrderOverdueDays: '' as IntlString,
+    TaskOverdueReminder: '' as IntlString,
     OrderRemainingDays: '' as IntlString,
     OrderElapsed: '' as IntlString,
     OrderOrderInfo: '' as IntlString,

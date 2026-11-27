@@ -302,7 +302,7 @@ services:
       - SERVER_SECRET=secret
     restart: unless-stopped
   prospect-mail:
-    # Without .env.mail.local it only answers "邮件未配置" and never connects to a mailbox.
+    # The task scheduler uses MAIL_WORKSPACE even when SMTP is unset.
     image: hardcoreeng/prospect-mail
     extra_hosts:
       - 'huly.local:host-gateway'
@@ -313,6 +313,7 @@ services:
       - '127.0.0.1:8102:8102'
     environment:
       - PORT=8102
+      - TASK_MAIL_FRONT_URL=${TASK_MAIL_FRONT_URL:-http://huly.local:8087}
       - ACCOUNTS_URL=http://account:3000
       - SERVER_SECRET=secret
     restart: unless-stopped

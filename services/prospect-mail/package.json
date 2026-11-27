@@ -62,6 +62,12 @@
   "dependencies": {
     "@hcengineering/account-client": "workspace:^0.7.25",
     "@hcengineering/core": "workspace:^0.7.26",
+    "@hcengineering/departments": "workspace:^0.7.0",
+    "@hcengineering/hr": "workspace:^0.7.0",
+    "@hcengineering/task": "workspace:^0.7.0",
+    "@hcengineering/time": "workspace:^0.7.0",
+    "@hcengineering/tracker": "workspace:^0.7.0",
+    "@hcengineering/process": "workspace:^0.7.0",
     "@hcengineering/platform": "workspace:^0.7.20",
     "express": "^4.21.2",
     "@hcengineering/prospects": "workspace:^0.7.0",

@@ -1852,33 +1852,6 @@ async function syncOrderTodo (
   } as any, stage.todo))
 }
 
-async function checkOverdueOrders (control: TriggerControl, tx: TxCUD<Doc>, exclude?: Ref<Order>): Promise<Tx[]> {
-  const results: Tx[] = []
-  const orders = await control.findAll(control.ctx, departments.class.Order, { state: 'active' })
-  for (const order of orders) {
-    if (order._id === exclude) continue
-    const stages = order.stages.map((item) => ({ ...item }))
-    if (!(await markOrderOverdue(control, results, tx, order, stages[order.current]))) continue
-    results.push(control.txFactory.createTxUpdateDoc(order._class, order.space, order._id, { stages }))
-  }
-  return results
-}
-
-async function markOrderOverdue (
-  control: TriggerControl, results: Tx[], tx: TxCUD<Doc>, order: Order, stage: OrderStage | undefined
-): Promise<boolean> {
-  if (stage?.status !== 'active' || stage.startedOn === undefined || stage.limitDays === undefined ||
-    stage.remindedOn !== undefined || tx.modifiedOn - stage.startedOn <= stage.limitDays * 86400000) return false
-  const leads = await departmentLeads(control, stage.department)
-  if (leads.length === 0) return false
-  const days = Math.floor((tx.modifiedOn - stage.startedOn) / 86400000)
-  await notifyOrder(control, results, tx, order, leads, departments.string.OrderEscalated,
-    `${order.number} ${order.title}：${stage.name} 已经 ${days} 天还没完成`,
-    `${stage.name}: not finished after ${days} day(s)`)
-  stage.remindedOn = tx.modifiedOn
-  return true
-}
-
 /** Default owner of a stage: the department's chosen person, else its first supervisor, else its first admin. */
 async function autoAssignee (control: TriggerControl, department: Ref<Doc> | undefined): Promise<AccountUuid | undefined> {
   if (department === undefined) return undefined
@@ -2146,8 +2119,6 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       await syncOrderTodo(control, results, order, item, now)
     }
   }
-  await markOrderOverdue(control, results, tx, order, stages[current])
-  results.push(...await checkOverdueOrders(control, tx, order._id))
   results.unshift(
     control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, current, state })
   )
@@ -2239,7 +2210,6 @@ export async function OnAuditLogin (txes: Tx[], control: TriggerControl): Promis
     }
     if (user === undefined || user === systemAccountUuid) continue
     if (!checkedOverdue) {
-      results.push(...await checkOverdueOrders(control, tx))
       checkedOverdue = true
     }
     const now = tx.modifiedOn

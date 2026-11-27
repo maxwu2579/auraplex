@@ -793,6 +793,14 @@ function isWorkspaceServiceSecret (account: AccountUuid, service: unknown, param
   return true
 }
 
+function isTaskMailRecord (
+  account: AccountUuid, service: unknown, workspace: WorkspaceUuid | undefined, params: IntegrationSecretKey
+): boolean {
+  return account === systemAccountUuid && service === 'prospect-mail' && workspace === params.workspaceUuid &&
+    String(params.socialId) === '0' && String(params.kind) === 'auraplex-service-settings' &&
+    /^task-mail:(?:claim:[a-f0-9]{64})$/.test(params.key)
+}
+
 export async function addIntegrationSecret (
   ctx: MeasureContext,
   db: AccountDB,
@@ -800,7 +808,7 @@ export async function addIntegrationSecret (
   token: string,
   params: IntegrationSecret
 ): Promise<void> {
-  const { extra, account } = decodeTokenVerbose(ctx, token)
+  const { extra, account, workspace } = decodeTokenVerbose(ctx, token)
   const { socialId, kind, workspaceUuid, key, secret } = params
   if (
     kind == null ||
@@ -813,7 +821,8 @@ export async function addIntegrationSecret (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
-  if (!isWorkspaceServiceSecret(account, extra?.service, params) &&
+  if (!isTaskMailRecord(account, extra?.service, workspace, params) &&
+      !isWorkspaceServiceSecret(account, extra?.service, params) &&
       await findExistingIntegration(account, db, params, extra) == null) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationNotFound, {}))
   }
@@ -908,7 +917,9 @@ export async function getIntegrationSecret (
   const service = extra?.service
   if (service === 'prospects-recognizer' || service === 'prospect-mail') {
     const allowedKey = service === 'prospects-recognizer' ? 'recognizer-settings' : 'mail-settings'
-    if (account !== systemAccountUuid || workspace !== workspaceUuid || String(socialId) !== '0' || kind !== 'auraplex-service-settings' || key !== allowedKey) {
+    if (!isTaskMailRecord(account, service, workspace, params) &&
+      (account !== systemAccountUuid || workspace !== workspaceUuid || String(socialId) !== '0' ||
+        kind !== 'auraplex-service-settings' || key !== allowedKey)) {
       throw new PlatformError(new Status(Severity.ERROR, platform.status.Forbidden, {}))
     }
   } else if (String(kind) !== 'auraplex-service-settings' || !isWorkspaceServiceSecret(account, service, params)) {

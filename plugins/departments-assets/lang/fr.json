@@ -140,6 +140,7 @@
     "OrderStageProgress": "Stage {current}/{total} · {stage} · {assignee}",
     "OrderAllStagesDone": "All {count} stages complete",
     "OrderDays": "{count} days",
+    "TaskOverdueReminder": "Task overdue",
     "OrderOverdueDays": "{count} days overdue",
     "OrderRemainingDays": "{count} days left",
     "OrderElapsed": "Elapsed: {duration}",

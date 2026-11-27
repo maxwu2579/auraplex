@@ -13,6 +13,7 @@
 // limitations under the License.
 -->
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { SortingOrder, WithLookup } from '@hcengineering/core'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import tags from '@hcengineering/tags'
@@ -29,6 +30,13 @@
   export let todo: WithLookup<ToDo>
   export let planned: boolean = true
   export let isNew: boolean = false
+
+  let now = Date.now()
+  onMount(() => {
+    const timer = setInterval(() => { now = Date.now() }, 60_000)
+    return () => { clearInterval(timer) }
+  })
+  $: overdue = todo.doneOn == null && todo.dueDate != null && todo.dueDate < now
 
   const client = getClient()
   let updating: Promise<any> | undefined = undefined
@@ -108,7 +116,7 @@
       </span>
     {/if}
     {#if todo.dueDate}
-      <span class="font-regular-12 secondary-textColor">
+      <span class="font-regular-12 secondary-textColor" class:overdue>
         {new Date(todo.dueDate).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
       </span>
     {/if}
@@ -117,3 +125,7 @@
     <ToDoCheckbox checked={isDone} priority={todo.priority} on:value={markDone} />
   </div>
 </button>
+
+<style>
+  .overdue { color: var(--theme-error-color); }
+</style>

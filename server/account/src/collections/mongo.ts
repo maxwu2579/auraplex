@@ -473,6 +473,15 @@ export class MongoAccountDB implements AccountDB {
       }
     ])
 
+    await this.integrationSecret.collection.createIndex(
+      { workspaceUuid: 1, kind: 1, socialId: 1, key: 1 },
+      {
+        name: 'auraplex_task_mail_unique',
+        unique: true,
+        partialFilterExpression: { kind: 'auraplex-service-settings', key: { $gte: 'task-mail:', $lt: 'task-mail;' } }
+      }
+    )
+
     await this.workspaceMembers.ensureIndices([
       {
         key: { workspaceUuid: 1 },

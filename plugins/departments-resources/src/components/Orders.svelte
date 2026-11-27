@@ -17,7 +17,7 @@
   import { getResource, translate, translateCB, type IntlString } from '@hcengineering/platform'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import OrderFlowChart from './OrderFlowChart.svelte'
-  import { tick } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import StatusTag from './StatusTag.svelte'
   import QrScanner from './QrScanner.svelte'
   import OrderLinks from './OrderLinks.svelte'
@@ -294,10 +294,15 @@
     from === undefined ? '' : local(departments.string.OrderDays, { count: Math.max(0, Math.floor((Date.now() - from) / 86400000)) })
   const time = (t: number): string => new Date(t).toLocaleString()
   const dayMs = 86400000
+  let now = Date.now()
+  onMount(() => {
+    const timer = setInterval(() => { now = Date.now() }, 60_000)
+    return () => { clearInterval(timer) }
+  })
   // Countdown for a stage with a time limit: 还剩 N 天 / 不到 1 天 / 超时 N 天.
-  $: countdown = (s: { startedOn?: number, limitDays?: number } | undefined): { text: string, late: boolean } | undefined => {
-    if (s?.startedOn === undefined || s.limitDays === undefined || s.limitDays <= 0) return undefined
-    const left = s.startedOn + s.limitDays * dayMs - Date.now()
+  $: countdown = (s: { status: string, startedOn?: number, limitDays?: number } | undefined): { text: string, late: boolean } | undefined => {
+    if ((s?.status !== 'active' && s?.status !== 'approval') || s.startedOn === undefined || s.limitDays === undefined || s.limitDays <= 0) return undefined
+    const left = s.startedOn + s.limitDays * dayMs - now
     if (left < 0) return { text: local(departments.string.OrderOverdueDays, { count: Math.ceil(-left / dayMs) }), late: true }
     return { text: left < dayMs ? local(departments.string.OrderUnderOneDay) : local(departments.string.OrderRemainingDays, { count: Math.floor(left / dayMs) }), late: false }
   }
@@ -537,7 +542,7 @@
             <td>{it.customer}</td>
             <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'cancelled'}<StatusTag status="late" text={L('已取消', 'Cancelled')} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
-            <td>{#if it.state === 'active'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
+            <td>{#if it.state === 'active' && (cur?.status === 'active' || cur?.status === 'approval')}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
             <td><StatusTag status={it.paidOn === undefined ? 'waiting' : 'done'}
               label={it.paidOn === undefined ? departments.string.OrderUnpaid : departments.string.OrderPaid} /></td>

@@ -13,6 +13,10 @@ import { pollInbox, type Cursor } from './poller'
 import { Receiver } from './receiver'
 import { Sender } from './sender'
 import { createApp } from './server'
+import { singaporeClock, startScheduledChecks, workdays } from './schedule'
+import { ScheduledRecords } from './scheduledRecords'
+import { taskSnapshot } from './taskSnapshot'
+import { recordTaskFailure, sendOverdueReminders, type SendTaskMail } from './taskReminders'
 
 const config = readConfig(process.env)
 setMetadata(serverClient.metadata.Endpoint, config.accountsUrl)
@@ -61,6 +65,38 @@ function smtp (value: typeof config): ReturnType<typeof nodemailer.createTranspo
     host: value.smtp.host, port: value.smtp.port, secure: value.smtp.secure, ignoreTLS: !value.smtp.secure,
     auth: value.address === undefined ? undefined : { user: value.address, pass: value.password ?? '' }
   })
+}
+
+function taskSender (client: TxOperations, active: typeof config): SendTaskMail | undefined {
+  if (!active.address || !active.password) return undefined
+  const address = active.address
+  const transport = smtp(active)
+  const lookup = new Forwarder(client, transport, address)
+  return async (user, subject, text, html) => {
+    const email = await lookup.ownerEmail(user)
+    if (email === undefined || !/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(email)) throw new Error('No recipient email')
+    await transport.sendMail({ from: address, to: email, subject, text, html })
+  }
+}
+
+async function checkScheduledTasks (now: number): Promise<void> {
+  if (config.workspace === undefined) return
+  const day = singaporeClock(now)
+  if (!workdays.includes(day.weekday)) return
+  const workspace = config.workspace as WorkspaceUuid
+  const account = getClient(config.accountsUrl, generateToken(systemAccountUuid, workspace, { service: 'prospect-mail' }))
+  const [client, info, active] = await Promise.all([
+    workspaceClient(workspace),
+    account.getWorkspaceInfo(),
+    workspaceSettings(workspace).catch(() => {
+      recordTaskFailure('mail-config')
+      return undefined
+    })
+  ])
+  const base = `${config.taskFrontUrl?.replace(/\/+$/, '') ?? ''}/workbench/${encodeURIComponent(info.url)}`
+  const snapshot = await taskSnapshot(client, base, now)
+  const send = active !== undefined && config.taskFrontUrl !== undefined ? taskSender(client, active) : undefined
+  await sendOverdueReminders(client, new ScheduledRecords(workspace, account), snapshot, send, now, day.date, recordTaskFailure)
 }
 
 let lastPoll: { at: number, ok: boolean, error?: string } | undefined
@@ -130,4 +166,5 @@ createApp(
   workspaceSettings
 ).listen(config.port)
 schedule(5000)
+startScheduledChecks(checkScheduledTasks, () => { recordTaskFailure('scan') })
 console.info(JSON.stringify({ event: 'started', configured: config.address !== undefined }))

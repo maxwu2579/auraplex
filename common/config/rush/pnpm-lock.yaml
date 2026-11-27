@@ -42347,12 +42347,21 @@ importers:
       '@hcengineering/core':
         specifier: workspace:^0.7.26
         version: link:../../foundations/core/packages/core
+      '@hcengineering/departments':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments
+      '@hcengineering/hr':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/hr
       '@hcengineering/notification':
         specifier: workspace:^0.7.0
         version: link:../../plugins/notification
       '@hcengineering/platform':
         specifier: workspace:^0.7.20
         version: link:../../foundations/core/packages/platform
+      '@hcengineering/process':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/process
       '@hcengineering/prospects':
         specifier: workspace:^0.7.0
         version: link:../../plugins/prospects
@@ -42362,6 +42371,15 @@ importers:
       '@hcengineering/server-token':
         specifier: workspace:^0.7.18
         version: link:../../foundations/core/packages/token
+      '@hcengineering/task':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/task
+      '@hcengineering/time':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/time
+      '@hcengineering/tracker':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/tracker
       express:
         specifier: ^4.21.2
         version: 4.21.2
