@@ -2,6 +2,7 @@
 // Short page texts in Chinese with their English versions; other languages use English.
 export const en: Record<string, string> = {
   名片模板: 'Business card template',
+  '导入 Excel': 'Import Excel',
   '需要名片编辑权限才能修改模板。': 'Editing the template requires business card edit access.',
   '暂时无法读取名片模板，请刷新后再试。': 'The business card template is unavailable. Reload and try again.',
   '有改动还没保存': 'Unsaved changes',

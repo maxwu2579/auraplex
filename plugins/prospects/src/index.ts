@@ -59,6 +59,8 @@ export interface Prospect extends Doc {
   /** Cards a person said are not the same as this one. */
   notDuplicate?: Array<Ref<Prospect>>
   mergedFrom?: MergeRecord[]
+  /** Old customer brought in by an import: no new-customer introduction, campaigns only. */
+  imported?: boolean
 }
 export interface ProspectMail extends AttachedDoc<Prospect> {
   direction: 'outgoing' | 'incoming' | 'forward'
@@ -207,3 +209,4 @@ export * from './template'
 
 export * from './automation'
 export * from './review'
+export * from './importRows'

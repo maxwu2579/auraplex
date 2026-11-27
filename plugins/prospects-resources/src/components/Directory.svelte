@@ -15,6 +15,7 @@
   import { prospectFilter } from '../filter'
   import ProspectLeadAction from './ProspectLeadAction.svelte'
   import EditDialog from './EditDialog.svelte'
+  import ImportDialog from './ImportDialog.svelte'
   import { prospectFieldLabel, watchProspectTemplate } from '../templateFields'
   import { autoSaveCard, cardFields, recognizerConfigured, type AutoSaveResult } from '../cardSave'
   import { onMount } from 'svelte'
@@ -58,6 +59,7 @@
   let sort = 'name'
   let ascending = true
   let editing = false
+  let importing = false
   let selected: Prospect | undefined
   let queue: File[] = []
   let frontIndex = 0
@@ -274,7 +276,7 @@
           e.currentTarget.value = ''
         }}
       /></label
-    >{/if}<button on:click={exportList}><Label label={prospects.string.PageExport} /></button>
+    ><button on:click={() => { importing = true }}>{$t('导入 Excel')}</button>{/if}<button on:click={exportList}><Label label={prospects.string.PageExport} /></button>
   </header>
   {#if moduleCanEdit}<div class="auto">
       <label class="switch" title={aiReady ? '' : $t('要先在 设置 → 集成 → 名片 AI 填好服务地址，才能自动识别。')}
@@ -390,6 +392,7 @@
     </table>
   </div>
 </div>
+{#if moduleCanEdit && importing}<ImportDialog columns={columns} {all} on:close={() => { importing = false }} />{/if}
 {#if moduleCanEdit && editing}{#key selected?._id ?? 'new'}<EditDialog
       templateFields={template?.fields}
       value={all.find((item) => item._id === selected?._id) ?? selected}

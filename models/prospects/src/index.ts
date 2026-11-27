@@ -70,6 +70,7 @@ export class TProspect extends TDoc implements Prospect {
   @Hidden() photoHash?: string
   @Hidden() notDuplicate?: Prospect['notDuplicate']
   @Hidden() mergedFrom?: Prospect['mergedFrom']
+  @Hidden() imported?: boolean
 }
 @Model(prospects.class.ProspectMail, core.class.AttachedDoc, DOMAIN_PROSPECTS)
 @UX(prospects.string.Prospects, prospects.icon.Prospects)

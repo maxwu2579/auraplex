@@ -71,7 +71,7 @@ export function introCandidates (customers: Prospect[], after: number, removed: 
     const email = marketingEmail(item)
     return email !== undefined && counts.get(email) === 1 && (item.createdOn ?? 0) >= after &&
       item.status !== 'converted' && prospectMailStatus(item) === 'new' && (item.emailCount ?? 0) === 0 &&
-      item.lastEmailAt === undefined && !removed.has(item._id) && !mailed.has(item._id)
+      item.lastEmailAt === undefined && item.imported !== true && !removed.has(item._id) && !mailed.has(item._id)
   }).sort((a, b) => (a.createdOn ?? 0) - (b.createdOn ?? 0))
 }
 
