@@ -210,7 +210,10 @@ async function checkAutomatedMail (now: number): Promise<void> {
 }
 
 let lastPoll: { at: number, ok: boolean, error?: string } | undefined
+/** Which step of the last poll failed (no error text: libraries may put credentials in it). */
+let pollStage = 'settings'
 async function pollOnce (): Promise<void> {
+  pollStage = 'settings'
   if (config.workspace === undefined) return
   const active = await workspaceSettings(config.workspace as WorkspaceUuid)
   if (active.address === undefined || active.password === undefined) return
@@ -232,6 +235,7 @@ async function pollOnce (): Promise<void> {
     logger: false
   })
   imap.on('error', () => {})
+  pollStage = 'inbox'
   await pollInbox(imap, {
     read: async () => {
       const doc = await client.findOne(prospects.class.ProspectMailCursor, { _id: cursorId })
@@ -245,8 +249,13 @@ async function pollOnce (): Promise<void> {
         await client.update(doc, cursor)
       }
     },
-    accept: async (reply) => await receiver.accept(reply)
+    accept: async (reply) => {
+      pollStage = 'receive'
+      await receiver.accept(reply)
+      pollStage = 'inbox'
+    }
   })
+  pollStage = 'forward'
   await forwardPendingReplies(client, records, new Forwarder(client, smtp(active), active.address), recordTaskFailure)
 }
 function schedule (delay = Math.min(config.pollMs, 60_000)): void {
@@ -259,7 +268,7 @@ function schedule (delay = Math.min(config.pollMs, 60_000)): void {
         // Never log the error object itself: some libraries include credentials in it.
         const authFailed = (err as { authenticationFailed?: boolean })?.authenticationFailed === true
         lastPoll = { at: Date.now(), ok: false, error: authFailed ? '邮箱登录失败' : '收信失败' }
-        console.error(JSON.stringify({ event: 'poll-failed', authFailed }))
+        console.error(JSON.stringify({ event: 'poll-failed', authFailed, stage: pollStage, kind: (err as Error)?.name, code: (err as { code?: string })?.code }))
       })
       .finally(() => {
         schedule()

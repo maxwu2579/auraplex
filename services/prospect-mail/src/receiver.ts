@@ -84,12 +84,12 @@ export class Receiver {
       const employee = await this.client.findOne(contact.mixin.Employee, { personUuid: prospect.owner, active: true })
       if (employee !== undefined) {
         const followUp = stableMailId('follow-up', id) as unknown as Ref<ToDo>
-        await ops.createDoc(time.class.ToDo, time.space.ToDos, {
+        // A to-do is attached to the card, so it has to be added as part of the card's collection.
+        await ops.addCollection(time.class.ToDo, time.space.ToDos, prospect._id, prospect._class, 'replyFollowUps', {
           user: employee._id as Ref<Employee>, title: followUpTitle(prospect), description: '',
           dueDate: nextWorkdayEnd(now), doneOn: null, workslots: 0, priority: ToDoPriority.NoPriority,
-          visibility: 'private', rank: '0|hzzzzz:',
-          attachedTo: prospect._id, attachedToClass: prospect._class, attachedSpace: prospect.space, collection: 'replyFollowUps'
-        }, followUp)
+          visibility: 'private', rank: '0|hzzzzz:'
+        } as any, followUp)
         Object.assign(changes, { followUp })
       }
     }
