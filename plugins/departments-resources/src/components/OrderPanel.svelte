@@ -13,5 +13,5 @@
 </div>
 
 <style>
-  .order-panel { height: 100%; overflow: auto; }
+  .order-panel { height: 100%; width: 100%; overflow: auto; background-color: var(--theme-panel-color, var(--theme-bg-color)); }
 </style>
