@@ -392,7 +392,9 @@
   article.off { opacity: 0.7; }
   fieldset { border: 1px solid var(--theme-divider-color); border-radius: 0.4rem; margin: 0.6rem 0; display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
   legend { padding: 0 0.3rem; font-weight: 600; }
-  label { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+  label { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; max-width: 100%; }
+  fieldset { min-width: 0; }
+  input, select { min-width: 0; max-width: 100%; }
   label.wide { flex: 1 1 100%; }
   label.wide input { flex: 1; min-width: 12rem; }
   .row, .buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }

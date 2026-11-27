@@ -114,7 +114,7 @@
 <style>
   .page { padding: 1.5rem; overflow: auto; min-width: 0; color: var(--theme-content-color); }
   header { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-bottom: 1rem; }
-  header h1 { flex: 1; margin: 0; font-size: 1.2rem; }
+  header h1 { flex: 1 1 auto; margin: 0; font-size: 1.2rem; white-space: nowrap; }
   label { display: flex; gap: 0.4rem; align-items: center; }
   select { color: var(--theme-content-color); background: var(--theme-button-default); border: 1px solid var(--theme-button-border); padding: 0.35rem; border-radius: 0.3rem; }
   select option { background: var(--theme-popup-color); color: var(--theme-content-color); }
@@ -129,4 +129,10 @@
   .card b { overflow-wrap: anywhere; }
   .tag { align-self: flex-start; border: 1px solid var(--theme-divider-color); border-radius: 0.4rem; padding: 0 0.4rem; font-size: 0.85rem; }
   .empty { opacity: 0.5; margin: 0.4rem; }
+  /* Phones: one column under the other instead of four narrow ones side by side. */
+  @media (max-width: 700px) {
+    .page { padding: 1rem 0.6rem; }
+    .board { grid-template-columns: 1fr; overflow-x: visible; }
+    section { min-width: 0; }
+  }
 </style>

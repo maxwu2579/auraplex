@@ -69,5 +69,5 @@
   a { color: var(--theme-link-color); overflow-wrap: anywhere; }
   .tag { border: 1px solid var(--theme-divider-color); padding: 0.1rem 0.4rem; border-radius: 0.4rem; }
   .overdue, .overdue a { color: var(--theme-error-color); }
-  button { padding: 0.4rem 0.6rem; color: var(--theme-caption-color); }
+  button { padding: 0.4rem 0.8rem; color: var(--theme-caption-color); background: var(--theme-button-default); border: 1px solid var(--theme-button-border); border-radius: 0.4rem; cursor: pointer; }
 </style>
