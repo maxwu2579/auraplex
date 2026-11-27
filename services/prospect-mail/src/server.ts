@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { getClient, isWorkspaceLoginInfo } from '@hcengineering/account-client'
 import { AccountRole, type AccountUuid, type WorkspaceUuid } from '@hcengineering/core'
 import { MailUserError } from './errors'
+import { parseDigestSettings, type DigestSettings } from './taskDigest'
 
 export interface MailConfig {
   accountsUrl: string
@@ -27,13 +28,20 @@ export interface MailBackend {
     requestId: string
   ) => Promise<void>
 }
+export interface TaskMailBackend {
+  get: (workspace: WorkspaceUuid) => Promise<{ settings: DigestSettings, smtpConfigured: boolean, linkConfigured: boolean }>
+  save: (workspace: WorkspaceUuid, settings: DigestSettings) => Promise<void>
+  test: (workspace: WorkspaceUuid, actor: AccountUuid) => Promise<void>
+}
+
 const requestIdPattern = /^[a-f0-9-]{36}$/i
 const objectIdPattern = /^[a-zA-Z0-9:_-]{1,150}$/
 export function createApp (
   config: MailConfig,
   backend: MailBackend,
   status: () => Record<string, unknown> = () => ({}),
-  resolve?: (workspace: WorkspaceUuid) => Promise<MailConfig>
+  resolve?: (workspace: WorkspaceUuid) => Promise<MailConfig>,
+  taskMail?: TaskMailBackend
 ): express.Express {
   const app = express()
   app.disable('x-powered-by')
@@ -58,7 +66,8 @@ export function createApp (
           return
         }
         const members = await account.getWorkspaceMembers()
-        if (!members.some((entry) => entry.person === login.account)) {
+        const member = members.find((entry) => entry.person === login.account)
+        if (member === undefined) {
           res.sendStatus(403)
           return
         }
@@ -68,6 +77,7 @@ export function createApp (
         }
         res.locals.workspace = login.workspace
         res.locals.actor = login.account
+        res.locals.role = member.role
         next()
       } catch {
         res.sendStatus(401)
@@ -88,6 +98,35 @@ export function createApp (
       res.json({ ...status(), configured: configured(value), address: configured(value) ? value.address : undefined })
     }).catch(() => res.sendStatus(503))
   })
+  if (taskMail !== undefined) {
+    app.use('/api/task-mail', (_req, res, next) => {
+      if (res.locals.role !== AccountRole.Owner && res.locals.role !== AccountRole.Maintainer) {
+        res.sendStatus(403)
+        return
+      }
+      if (config.workspace === undefined || res.locals.workspace !== config.workspace) {
+        res.sendStatus(503)
+        return
+      }
+      next()
+    })
+    app.get('/api/task-mail', (_req, res) => {
+      void taskMail.get(res.locals.workspace).then((state) => {
+        res.set('Cache-Control', 'no-store').json(state)
+      }).catch(() => res.sendStatus(503))
+    })
+    app.post('/api/task-mail', (req, res) => {
+      const settings = parseDigestSettings(req.body)
+      if (settings === undefined) {
+        res.sendStatus(400)
+        return
+      }
+      void taskMail.save(res.locals.workspace, settings).then(() => res.json({ ok: true })).catch(() => res.sendStatus(503))
+    })
+    app.post('/api/task-mail/test', (_req, res) => {
+      void taskMail.test(res.locals.workspace, res.locals.actor).then(() => res.json({ ok: true })).catch(() => res.sendStatus(503))
+    })
+  }
   app.post('/api/send', (req, res) => {
     void (async () => {
       if (!configured(await active(res.locals.workspace))) {

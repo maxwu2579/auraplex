@@ -27,6 +27,15 @@ function server (env: NodeJS.ProcessEnv, prefix: string, host: string, port: num
   }
 }
 
+function webOrigin (value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  try {
+    const url = new URL(value)
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && url.username === '' && url.password === '' &&
+      url.pathname === '/' && url.search === '' && url.hash === '') return url.origin
+  } catch {}
+}
+
 /** Defaults are Gmail; the local test compose file points them at the fake mail server. */
 export function readConfig (env: NodeJS.ProcessEnv): ServiceConfig {
   const text = (name: string): string | undefined => {
@@ -38,7 +47,7 @@ export function readConfig (env: NodeJS.ProcessEnv): ServiceConfig {
     accountsUrl: env.ACCOUNTS_URL ?? '',
     secret: env.SERVER_SECRET ?? 'secret',
     workspace: text('MAIL_WORKSPACE'),
-    taskFrontUrl: text('TASK_MAIL_FRONT_URL'),
+    taskFrontUrl: webOrigin(text('TASK_MAIL_FRONT_URL')),
     address: text('MAIL_ADDRESS'),
     // Google shows app passwords in groups of four; the spaces are not part of it.
     password: text('MAIL_PASSWORD')?.replace(/\s/g, ''),

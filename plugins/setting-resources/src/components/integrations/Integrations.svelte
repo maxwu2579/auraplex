@@ -20,6 +20,7 @@
   import setting from '@hcengineering/setting'
   import { type Integration } from '@hcengineering/account-client'
   import {
+    Button,
     Component,
     Header,
     Breadcrumb,
@@ -33,18 +34,22 @@
   import { translate } from '@hcengineering/platform'
   import { onIntegrationEvent } from '@hcengineering/integration-client'
 
+  import DailyTaskMail from './DailyTaskMail.svelte'
   import IntegrationCard from './IntegrationCard.svelte'
   import IntegrationErrorNotification from './IntegrationErrorNotification.svelte'
   import { getAccountClient } from '../../utils'
   import { Analytics } from '@hcengineering/analytics'
   import type { AnyComponent } from '@hcengineering/ui'
-  import { IntegrationKind } from '@hcengineering/core'
+  import { AccountRole, getCurrentAccount, IntegrationKind } from '@hcengineering/core'
 
   // Auraplex: the WhatsApp plugin owns its service settings and supervision UI.
   const whatsappAdministration = 'whatsapp:component:WorkspaceAdministration' as AnyComponent
   const typeQuery = createQuery()
 
   const accountClient = getAccountClient()
+  const role = getCurrentAccount().role
+  const canManageMail = role === AccountRole.Owner || role === AccountRole.Maintainer
+  let showTaskMail = false
 
   let connections: Integration[] = []
   let integrations: Integration[] = []
@@ -268,6 +273,12 @@
       />
     </svelte:fragment>
   </Header>
+  {#if canManageMail}
+    <div class="px-4">
+      <Button label={setting.string.TaskMailSettings} selected={showTaskMail} on:click={() => { showTaskMail = !showTaskMail }} />
+      {#if showTaskMail}<DailyTaskMail />{/if}
+    </div>
+  {/if}
   {#if hasResource(whatsappAdministration)}<Component is={whatsappAdministration} />{/if}
   {#if isLoading}
     <div class="loading-container">

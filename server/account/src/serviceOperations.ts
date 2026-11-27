@@ -798,7 +798,7 @@ function isTaskMailRecord (
 ): boolean {
   return account === systemAccountUuid && service === 'prospect-mail' && workspace === params.workspaceUuid &&
     String(params.socialId) === '0' && String(params.kind) === 'auraplex-service-settings' &&
-    /^task-mail:(?:claim:[a-f0-9]{64})$/.test(params.key)
+    /^task-mail:(?:settings|claim:[a-f0-9]{64})$/.test(params.key)
 }
 
 export async function addIntegrationSecret (
@@ -843,7 +843,7 @@ export async function updateIntegrationSecret (
   token: string,
   params: IntegrationSecret
 ): Promise<void> {
-  const { extra, account } = decodeTokenVerbose(ctx, token)
+  const { extra, account, workspace } = decodeTokenVerbose(ctx, token)
   const { socialId, kind, workspaceUuid, key, secret } = params
   if (
     kind == null ||
@@ -856,7 +856,8 @@ export async function updateIntegrationSecret (
     throw new PlatformError(new Status(Severity.ERROR, platform.status.BadRequest, {}))
   }
 
-  if (!isWorkspaceServiceSecret(account, extra?.service, params) &&
+  const canUpdateDigest = key === 'task-mail:settings' && isTaskMailRecord(account, extra?.service, workspace, params)
+  if (!canUpdateDigest && !isWorkspaceServiceSecret(account, extra?.service, params) &&
       await findExistingIntegration(account, db, params, extra) == null) {
     throw new PlatformError(new Status(Severity.ERROR, platform.status.IntegrationNotFound, {}))
   }

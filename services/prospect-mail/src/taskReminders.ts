@@ -3,6 +3,7 @@ import type { AccountUuid, Doc, Ref, TxOperations } from '@hcengineering/core'
 import notification, { type DocNotifyContext } from '@hcengineering/notification'
 import departments from '@hcengineering/departments'
 import type { PersonSpace } from '@hcengineering/contact'
+import { taskMailLabel } from './taskMailLabels'
 import { isOverdue, reminderRecipients } from './schedule'
 import type { ScheduledRecords } from './scheduledRecords'
 import type { ScheduledTask, taskSnapshot } from './taskSnapshot'
@@ -65,7 +66,7 @@ export async function sendOverdueReminders (
       }
       if (send !== undefined) {
         try {
-          await send(user, 'Auraplex · 任务已过期 / Task overdue', `${item.title}\n${item.href}`)
+          await send(user, `Auraplex · ${taskMailLabel('TaskOverdueReminder')}`, `${item.title}\n${item.href}`)
         } catch {
           onFailure('overdue-mail')
         }

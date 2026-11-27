@@ -1,5 +1,6 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
-import core, { TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
+import core, { SocialIdType, TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
+import contact from '@hcengineering/contact'
 import { setMetadata } from '@hcengineering/platform'
 import prospects, { type ProspectMailCursor } from '@hcengineering/prospects'
 import serverClient, { createClient, getTransactorEndpoint } from '@hcengineering/server-client'
@@ -12,9 +13,11 @@ import { Forwarder } from './forwarder'
 import { pollInbox, type Cursor } from './poller'
 import { Receiver } from './receiver'
 import { Sender } from './sender'
-import { createApp } from './server'
+import { createApp, type TaskMailBackend } from './server'
 import { singaporeClock, startScheduledChecks, workdays } from './schedule'
 import { ScheduledRecords } from './scheduledRecords'
+import { digestIsDue, formatDigest, sendDailyDigest } from './taskDigest'
+import { taskMailLabel } from './taskMailLabels'
 import { taskSnapshot } from './taskSnapshot'
 import { recordTaskFailure, sendOverdueReminders, type SendTaskMail } from './taskReminders'
 
@@ -67,24 +70,52 @@ function smtp (value: typeof config): ReturnType<typeof nodemailer.createTranspo
   })
 }
 
+function taskAccount (workspace: WorkspaceUuid): ReturnType<typeof getClient> {
+  return getClient(config.accountsUrl, generateToken(systemAccountUuid, workspace, { service: 'prospect-mail' }))
+}
+
+const mailConfigured = (value: typeof config): boolean => Boolean(value.address && value.password)
+
 function taskSender (client: TxOperations, active: typeof config): SendTaskMail | undefined {
-  if (!active.address || !active.password) return undefined
   const address = active.address
-  const transport = smtp(active)
-  const lookup = new Forwarder(client, transport, address)
+  if (!address || !active.password || config.taskFrontUrl === undefined) return undefined
+  const transport = nodemailer.createTransport({
+    host: active.smtp.host, port: active.smtp.port, secure: active.smtp.secure,
+    auth: { user: address, pass: active.password },
+    connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 25_000
+  })
   return async (user, subject, text, html) => {
-    const email = await lookup.ownerEmail(user)
-    if (email === undefined || !/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(email)) throw new Error('No recipient email')
+    const person = await client.findOne(contact.class.Person, { personUuid: user })
+    if (person === undefined) throw new Error('No recipient person')
+    const ids = await client.findAll(contact.class.SocialIdentity, {
+      attachedTo: person._id, type: SocialIdType.EMAIL, verifiedOn: { $gt: 0 }, isDeleted: { $ne: true }
+    })
+    const email = ids[0]?.value
+    if (email === undefined || !/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(email)) throw new Error('No verified recipient email')
     await transport.sendMail({ from: address, to: email, subject, text, html })
   }
 }
 
+function workbenchLink (workspaceUrl: string): string {
+  return `${config.taskFrontUrl?.replace(/\/+$/, '') ?? ''}/workbench/${encodeURIComponent(workspaceUrl)}`
+}
+
+let lastDigestRun: string | undefined
+
 async function checkScheduledTasks (now: number): Promise<void> {
   if (config.workspace === undefined) return
   const day = singaporeClock(now)
-  if (!workdays.includes(day.weekday)) return
   const workspace = config.workspace as WorkspaceUuid
-  const account = getClient(config.accountsUrl, generateToken(systemAccountUuid, workspace, { service: 'prospect-mail' }))
+  const account = taskAccount(workspace)
+  const records = new ScheduledRecords(workspace, account)
+  const settings = await records.getDigest().catch(() => {
+    recordTaskFailure('digest-settings')
+    return undefined
+  })
+  const runKey = settings === undefined ? '' : `${day.date}:${settings.time}`
+  const shouldDigest = settings !== undefined && lastDigestRun !== runKey && digestIsDue(settings, day)
+  const shouldRemind = workdays.includes(day.weekday)
+  if (!shouldRemind && !shouldDigest) return
   const [client, info, active] = await Promise.all([
     workspaceClient(workspace),
     account.getWorkspaceInfo(),
@@ -93,10 +124,48 @@ async function checkScheduledTasks (now: number): Promise<void> {
       return undefined
     })
   ])
-  const base = `${config.taskFrontUrl?.replace(/\/+$/, '') ?? ''}/workbench/${encodeURIComponent(info.url)}`
-  const snapshot = await taskSnapshot(client, base, now)
-  const send = active !== undefined && config.taskFrontUrl !== undefined ? taskSender(client, active) : undefined
-  await sendOverdueReminders(client, new ScheduledRecords(workspace, account), snapshot, send, now, day.date, recordTaskFailure)
+  const send = active === undefined ? undefined : taskSender(client, active)
+  const includeDigest = shouldDigest && send !== undefined
+  if (!shouldRemind && !includeDigest) return
+  const snapshot = await taskSnapshot(client, workbenchLink(info.url), includeDigest ? day.end : now, includeDigest)
+  const overdue = shouldRemind
+    ? sendOverdueReminders(client, records, snapshot, send, now, day.date, recordTaskFailure)
+        .catch(() => { recordTaskFailure('overdue-scan') })
+    : undefined
+  if (includeDigest) {
+    const users = snapshot.employees.flatMap((employee) => employee.personUuid === undefined ? [] : [employee.personUuid])
+    if (await sendDailyDigest(records, send, snapshot.tasks, users, day.date, now, day.end, recordTaskFailure)) {
+      lastDigestRun = runKey
+    }
+  }
+  await overdue
+}
+
+const taskMail: TaskMailBackend = {
+  get: async (workspace) => {
+    const [settings, active] = await Promise.all([
+      new ScheduledRecords(workspace, taskAccount(workspace)).getDigest(),
+      workspaceSettings(workspace)
+    ])
+    return { settings, smtpConfigured: mailConfigured(active), linkConfigured: config.taskFrontUrl !== undefined }
+  },
+  save: async (workspace, settings) => {
+    await new ScheduledRecords(workspace, taskAccount(workspace)).setDigest(settings)
+  },
+  test: async (workspace, actor) => {
+    try {
+      const [client, active, info] = await Promise.all([
+        workspaceClient(workspace), workspaceSettings(workspace), taskAccount(workspace).getWorkspaceInfo()
+      ])
+      const send = taskSender(client, active)
+      if (send === undefined) throw new Error('Task mail not configured')
+      const { text, html } = formatDigest([{ title: taskMailLabel('TaskMailExampleTask'), href: workbenchLink(info.url), section: 0 }])
+      await send(actor, `Auraplex · ${taskMailLabel('TaskMailTestSubject')}`, text, html)
+    } catch (err) {
+      recordTaskFailure('test-mail')
+      throw err
+    }
+  }
 }
 
 let lastPoll: { at: number, ok: boolean, error?: string } | undefined
@@ -163,7 +232,8 @@ createApp(
     }
   },
   () => ({ lastPoll }),
-  workspaceSettings
+  workspaceSettings,
+  taskMail
 ).listen(config.port)
 schedule(5000)
 startScheduledChecks(checkScheduledTasks, () => { recordTaskFailure('scan') })

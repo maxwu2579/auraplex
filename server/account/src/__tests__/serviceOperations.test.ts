@@ -20,6 +20,7 @@ import {
   type PersonId,
   type PersonUuid,
   SocialIdType,
+  systemAccountUuid,
   type WorkspaceUuid
 } from '@hcengineering/core'
 import platform, { PlatformError, Status, Severity } from '@hcengineering/platform'
@@ -1260,6 +1261,40 @@ describe('integration methods', () => {
       )
 
       expect(mockDb.integrationSecret.deleteMany).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('task mail records', () => {
+    const workspace = 'fake-workspace' as WorkspaceUuid
+    const record: IntegrationSecret = {
+      socialId: '0' as PersonId,
+      kind: 'auraplex-service-settings' as IntegrationKind,
+      workspaceUuid: workspace,
+      key: 'task-mail:claim:' + 'a'.repeat(64),
+      secret: '2026-11-27'
+    }
+    const identity = { account: systemAccountUuid, workspace, extra: { service: 'prospect-mail' } }
+
+    test('only the workspace mail daemon may create or read a matching claim', async () => {
+      const token = decodeTokenVerbose as jest.Mock
+      token.mockReturnValue(identity)
+      ;(mockDb.integrationSecret.findOne as jest.Mock).mockResolvedValueOnce(null)
+      await addIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, record)
+      expect(mockDb.integrationSecret.insertOne).toHaveBeenCalledWith(record)
+      ;(mockDb.integrationSecret.findOne as jest.Mock).mockResolvedValueOnce(record)
+      await expect(getIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, record)).resolves.toEqual(record)
+      token.mockReturnValue({ ...identity, workspace: 'another-workspace' })
+      await expect(getIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, record)).rejects.toThrow(PlatformError)
+      await expect(addIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, record)).rejects.toThrow(PlatformError)
+    })
+
+    test('lets the workspace mail daemon update the schedule while claims are immutable', async () => {
+      ;(decodeTokenVerbose as jest.Mock).mockReturnValue(identity)
+      const settings = { ...record, key: 'task-mail:settings', secret: '{}' }
+      ;(mockDb.integrationSecret.findOne as jest.Mock).mockResolvedValueOnce(settings)
+      await updateIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, settings)
+      expect(mockDb.integrationSecret.update).toHaveBeenCalledTimes(1)
+      await expect(updateIntegrationSecret(mockCtx, mockDb, mockBranding, mockToken, record)).rejects.toThrow(PlatformError)
     })
   })
 

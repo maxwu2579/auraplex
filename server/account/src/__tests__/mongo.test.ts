@@ -742,13 +742,19 @@ describe('MongoAccountDB', () => {
       workspace: { get: () => mockWorkspace },
       workspaceMembers: { get: () => mockWorkspaceMembers },
       workspaceStatus: { get: () => mockWorkspaceStatus },
-      migration: { get: () => mockMigration }
+      migration: { get: () => mockMigration },
+      integrationSecret: { value: { collection: { createIndex: jest.fn() } } }
     })
   })
 
   describe('init', () => {
     it('should create required indices', async () => {
       await accountDb.init()
+
+      expect(accountDb.integrationSecret.collection.createIndex).toHaveBeenCalledWith(
+        { workspaceUuid: 1, kind: 1, socialId: 1, key: 1 },
+        expect.objectContaining({ name: 'auraplex_task_mail_unique', unique: true })
+      )
 
       // Verify account indices
       expect(accountDb.account.ensureIndices).toHaveBeenCalledWith([

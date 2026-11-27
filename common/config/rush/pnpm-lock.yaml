@@ -42350,6 +42350,9 @@ importers:
       '@hcengineering/departments':
         specifier: workspace:^0.7.0
         version: link:../../plugins/departments
+      '@hcengineering/departments-assets':
+        specifier: workspace:^0.7.0
+        version: link:../../plugins/departments-assets
       '@hcengineering/hr':
         specifier: workspace:^0.7.0
         version: link:../../plugins/hr
