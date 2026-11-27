@@ -506,6 +506,8 @@ export default plugin(departmentsId, {
     OrderPaymentAmount: '' as IntlString,
     OrderPaymentNote: '' as IntlString,
     OrderUndoPaymentReason: '' as IntlString,
+    OrderWaitingForPayment: '' as IntlString,
+    OrderStartsAfterPayment: '' as IntlString,
     OrderPaymentRequired: '' as IntlString,
     OrderPaymentCompletedStage: '' as IntlString,
     OrderWaitForPayment: '' as IntlString,

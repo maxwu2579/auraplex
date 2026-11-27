@@ -540,7 +540,7 @@
             <td>{it.number}</td>
             <td>{it.title}</td>
             <td>{it.customer}</td>
-            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'cancelled'}<StatusTag status="late" text={L('已取消', 'Cancelled')} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
+            <td>{#if it.state === 'done'}<StatusTag status="done" label={departments.string.OrderCompleted} />{:else if it.state === 'cancelled'}<StatusTag status="late" text={L('已取消', 'Cancelled')} />{:else if it.paidOn === undefined && cur?.status === 'waiting' && (cur.waitForPayment ?? (it.current === 1))}<StatusTag status="waiting" label={departments.string.OrderWaitingForPayment} />{:else if it.state === 'pending'}<StatusTag status="waiting" text={L('未开始', 'Not started')} />{:else}{cur?.name ?? ''}{#if cur?.status === 'approval'} <StatusTag status="approval" label={departments.string.OrderAwaitingApproval} />{/if}{/if}</td>
             <td>{name(cur?.assignee)}</td>
             <td>{#if it.state === 'active' && (cur?.status === 'active' || cur?.status === 'approval')}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
@@ -631,6 +631,7 @@
                 value={selected.stages.filter((item) => item.status === 'done').length}></progress>
               {#if stage && selected.state !== 'cancelled'}
                 <div><Label label={departments.string.OrderStageProgress} params={{ current: selected.current + 1, total: selected.stages.length, stage: stage.name, assignee: name(stage.assignee) }} />
+                  {#if awaitingPayment} · <Label label={departments.string.OrderStartsAfterPayment} />{/if}
                   {#if stage.startedOn !== undefined} · <Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />{/if}
                   {#if countdown(stage) !== undefined}{@const left = countdown(stage)}
                     · <StatusTag status={left?.late === true ? 'late' : 'active'} text={left?.text} />{/if}

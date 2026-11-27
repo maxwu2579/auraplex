@@ -70,6 +70,8 @@
     "OrderPaymentAmount": "Amount (optional)",
     "OrderPaymentNote": "Note (optional)",
     "OrderUndoPaymentReason": "Reason (required)",
+    "OrderWaitingForPayment": "Awaiting payment",
+    "OrderStartsAfterPayment": "Starts after payment",
     "OrderPaymentRequired": "The order is not paid yet",
     "OrderPaymentCompletedStage": "Paid, stage completed automatically",
     "OrderWaitForPayment": "Wait for payment before starting",

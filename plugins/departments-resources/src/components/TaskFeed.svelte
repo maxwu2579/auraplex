@@ -1,11 +1,13 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
+  import card, { type Card } from '@hcengineering/card'
+  import { translate } from '@hcengineering/platform'
   import { onMount } from 'svelte'
   import contact, { type Employee, type Person } from '@hcengineering/contact'
   import core, { getCurrentAccount, type AccountUuid, type Ref, type Status } from '@hcengineering/core'
   import departments, {
-    issueTask, managedTaskPeople, orderTask, singaporeClock, taskSection, todoTask,
-    type DepartmentAccess, type Order, type ScheduledTask, type TaskSection
+    approvalTaskTitle, issueTask, managedTaskPeople, orderTask, singaporeClock, taskSection, todoTask,
+    type DepartmentAccess, type Order
   } from '@hcengineering/departments'
   import hr from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
@@ -13,7 +15,7 @@
   import task from '@hcengineering/task'
   import time, { type ToDo } from '@hcengineering/time'
   import tracker, { type Issue } from '@hcengineering/tracker'
-  import { getCurrentLocation } from '@hcengineering/ui'
+  import { getCurrentLocation, languageStore } from '@hcengineering/ui'
 
   export let includeDepartment = false
   const me = getCurrentAccount().uuid
@@ -24,6 +26,19 @@
   let issues: Issue[] = []
   let todos: ToDo[] = []
   let approvals: ApproveRequest[] = []
+  let cards: Card[] = []
+  let titles = new Map<Ref<Card>, string>()
+  let titleRequest = 0
+  const cardQuery = createQuery()
+  async function loadTitles (docs: Card[], language: string): Promise<void> {
+    const request = ++titleRequest
+    const translated = await Promise.all(docs.map(async (doc) => {
+      const label = hierarchy.findClass(doc._class)?.label
+      const type = label === undefined ? undefined : await translate(label, {}, language, true)
+      return [doc._id, approvalTaskTitle(type === label ? undefined : type, doc.title, doc.title)] as const
+    }))
+    if (request === titleRequest) titles = new Map(translated)
+  }
   let staff: Employee[] = []
   let teams: DepartmentAccess[] = []
   let closed = new Set<Ref<Status>>()
@@ -49,14 +64,17 @@
   $: todoQuery.query(time.class.ToDo, { user: { $in: refs }, doneOn: null, dueDate: { $lt: end, $gt: 0 } }, (docs) => { todos = docs })
   $: approvalQuery.query(processModel.class.ApproveRequest, { user: { $in: refs }, doneOn: null }, (docs) => { approvals = docs })
 
+  $: cardQuery.query(card.class.Card, { _id: { $in: approvals.map((item) => item.card).filter((id) => id !== undefined) } },
+    (docs) => { cards = docs })
+  $: void loadTitles(cards, $languageStore)
   $: accounts = new Map<Ref<Person>, AccountUuid | undefined>(relevant.map((person) => [person._id, person.personUuid]))
   $: teamMap = new Map<string, DepartmentAccess>(teams.map((team) => [team._id, team]))
-  $: approvalById = new Set<string>(approvals.filter((doc) => doc.actionType !== 'review').map((doc) => doc._id))
+  $: approvalById = new Map<string, ApproveRequest>(approvals.filter((doc) => doc.actionType !== 'review').map((doc) => [doc._id, doc]))
   $: tasks = [
     ...orders.flatMap((doc) => { const item = orderTask(base, doc, teamMap); return item === undefined ? [] : [item] }),
     ...issues.map((doc) => issueTask(base, doc, doc.assignee === null || doc.assignee === undefined ? undefined : accounts.get(doc.assignee), closed.has(doc.status))),
     ...[...new Map<string, ToDo>([...todos, ...approvals.filter((doc) => doc.actionType !== 'review')].map((doc) => [doc._id, doc])).values()]
-      .map((doc) => todoTask(base, doc, accounts.get(doc.user), approvalById.has(doc._id)))
+      .map((doc) => todoTask(base, doc, accounts.get(doc.user), approvalById.has(doc._id), titles.get(approvalById.get(doc._id)?.card as Ref<Card>)))
   ]
   $: mine = tasks.flatMap((item) => {
     const section = taskSection(item, me, now, end)

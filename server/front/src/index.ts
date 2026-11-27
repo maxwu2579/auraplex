@@ -311,6 +311,7 @@ export function start (
   setInterval(cleanupTempFiles, 1000 * 60 * 15) // Run every 15 minutes
 
   app.use(cors())
+  // Keep this allowlist in sync with the prospect-mail API routes used by the browser.
   app.use('/prospect-mail-api', (req, res) => {
     if (!['/status', '/send', '/forward', '/task-mail', '/task-mail/test'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
       res.sendStatus(404)

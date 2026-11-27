@@ -1,7 +1,9 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import card from '@hcengineering/card'
+import { translate } from '@hcengineering/platform'
 import contact, { type Employee, type Person, type PersonSpace } from '@hcengineering/contact'
 import core, { type AccountUuid, type Doc, type Ref, type TxOperations } from '@hcengineering/core'
-import departments, { type DepartmentAccess, issueTask, orderTask, todoTask, type ScheduledTask } from '@hcengineering/departments'
+import departments, { type DepartmentAccess, approvalTaskTitle, issueTask, orderTask, todoTask, type ScheduledTask } from '@hcengineering/departments'
 import hr from '@hcengineering/hr'
 import processModel from '@hcengineering/process'
 import task from '@hcengineering/task'
@@ -39,10 +41,18 @@ export async function taskSnapshot (client: TxOperations, base: string, dueBefor
     if (closedStatuses.has(issue.status)) continue
     tasks.push(issueTask(base, issue, issue.assignee == null ? undefined : byPerson.get(issue.assignee), false))
   }
+  const cards = awaiting.size === 0 ? [] : await client.findAll(card.class.Card, {
+    _id: { $in: [...awaiting.values()].map((approval) => approval.card).filter((id) => id !== undefined) }
+  })
+  const titles = new Map(await Promise.all(cards.map(async (doc) => {
+    const label = hierarchy.findClass(doc._class)?.label
+    const type = label === undefined ? undefined : await translate(label, {}, 'en', true)
+    return [doc._id, approvalTaskTitle(type === label ? undefined : type, doc.title, doc.title)] as const
+  })))
   const addTodo = (todo: (typeof todos)[number]): void => {
-    const approval = awaiting.has(todo._id)
+    const approval = awaiting.get(todo._id)
     awaiting.delete(todo._id)
-    tasks.push(todoTask(base, todo, byPerson.get(todo.user), approval))
+    tasks.push(todoTask(base, todo, byPerson.get(todo.user), approval !== undefined, approval === undefined ? undefined : titles.get(approval.card)))
   }
   for (const todo of todos) addTodo(todo)
   for (const approval of awaiting.values()) addTodo(approval)

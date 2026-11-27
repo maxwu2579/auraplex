@@ -70,6 +70,8 @@
     "OrderPaymentAmount": "金额（可选）",
     "OrderPaymentNote": "备注（可选）",
     "OrderUndoPaymentReason": "撤销原因（必填）",
+    "OrderWaitingForPayment": "等付款",
+    "OrderStartsAfterPayment": "等付款后开始",
     "OrderPaymentRequired": "订单还没付款",
     "OrderPaymentCompletedStage": "已付款，自动完成",
     "OrderWaitForPayment": "要等付款才开始",

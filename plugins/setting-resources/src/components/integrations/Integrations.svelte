@@ -259,6 +259,7 @@
 </script>
 
 <div class="hulyComponent integrations-page">
+  <div class="integrations-header">
   <Header adaptive={'disabled'}>
     <Breadcrumb icon={setting.icon.Integrations} label={setting.string.Integrations} size={'large'} isCurrent />
     <svelte:fragment slot="extra">
@@ -273,8 +274,9 @@
       />
     </svelte:fragment>
   </Header>
+  </div>
   {#if canManageMail}
-    <div class="px-4">
+    <div class="task-mail-settings">
       <Button label={setting.string.TaskMailSettings} selected={showTaskMail} on:click={() => { showTaskMail = !showTaskMail }} />
       {#if showTaskMail}<DailyTaskMail />{/if}
     </div>
@@ -303,6 +305,8 @@
 </div>
 
 <style lang="scss">
+  .integrations-header, .task-mail-settings { flex: 0 0 auto; }
+  .task-mail-settings { padding: 0.5rem 1.5rem; }
   .cards_grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
