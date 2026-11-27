@@ -56,7 +56,7 @@
     stages = [...stages]
   }
 
-  const copy = (list: OrderFlowStage[]): OrderFlowStage[] => list.map((it) => ({ ...it, steps: [...it.steps] }))
+  const copy = (list: OrderFlowStage[]): OrderFlowStage[] => list.map((it, i) => ({ ...it, waitForPayment: it.waitForPayment ?? (i === 1), steps: [...it.steps] }))
   createQuery().query(departments.class.OrderFlow, { _id: departments.ids.OrderFlow }, (res) => {
     flow = res[0]
     if (!loaded || !busy) stages = copy(flow?.stages ?? defaultOrderStages)
@@ -156,6 +156,7 @@
         {/if}
       </div>
       {#if owner && moduleCanEdit}
+        {#if owner}<label><input type="checkbox" bind:checked={stage.waitForPayment} /> <Label label={departments.string.OrderWaitForPayment} /></label>{/if}
         <label><Label label={departments.string.FlowTimeLimit} /> <input type="number" min="1" step="1" bind:value={stage.limitDays} /></label>
         <label><Label label={departments.string.FlowApprover} />
           <select value={stage.approval?.by === 'person' ? stage.approval.person : stage.approval ? 'admins' : ''}

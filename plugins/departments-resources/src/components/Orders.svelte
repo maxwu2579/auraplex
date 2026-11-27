@@ -57,6 +57,32 @@
   // Auraplex: super admins and company admins cancel an order that is not finished, with a reason.
   $: canCancel = selected !== undefined && (selected.state === 'pending' || selected.state === 'active') &&
     (owner || me.role === AccountRole.Maintainer)
+  $: sales = selected?.stages[0]
+  $: canPay = moduleCanEdit && selected !== undefined && selected.state !== 'cancelled' && sales !== undefined &&
+    (owner || me.role === AccountRole.Maintainer || selected.salesOwner === me.uuid ||
+      depts.some((d) => d._id === sales?.department && !d.archived && d.administrators.includes(me.uuid)))
+  $: awaitingPayment = selected?.paidOn === undefined && stage?.status === 'waiting' && (stage.waitForPayment ?? (selected?.current === 1))
+  let paymentOpen = false
+  let paidAmount = ''
+  let paidNote = ''
+  let paymentReason = ''
+  $: if (selectedId !== undefined) resetPaymentForm(selectedId)
+
+  function resetPaymentForm (_id: Ref<Order>): void {
+    paymentOpen = false
+    paidAmount = ''
+    paidNote = ''
+    paymentReason = ''
+  }
+  async function savePayment (): Promise<void> {
+    if (selected === undefined || sales === undefined) return
+    if (selected.paidOn === undefined) {
+      await act('paid', { stage: sales.id, paidAmount: paidAmount.trim(), paidNote: paidNote.trim() })
+    } else if (paymentReason.trim() !== '') {
+      await act('unpaid', { stage: sales.id, reason: paymentReason.trim() })
+    }
+    if (error === '') resetPaymentForm(selected._id)
+  }
   let cancelOpen = false
   let cancelReason = ''
   async function cancelOrder (): Promise<void> {
@@ -119,12 +145,14 @@
         order: found._id, kind: 'scan', stage: found.stages[Math.min(found.current, found.stages.length - 1)]?.id ?? '', actor: me.uuid
       })
       // B: scanning a pending order starts its flow straight away.
-      if (found.state === 'pending' && found.stages[0] !== undefined) {
+      const start = found.state === 'pending' && found.stages[0] !== undefined &&
+        (found.stages[0].waitForPayment !== true || found.paidOn !== undefined)
+      if (start) {
         await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
           order: found._id, kind: 'start', stage: found.stages[0].id, actor: me.uuid
         })
       }
-      if ((await ops.commit()).result && found.state === 'pending') notice = L('扫码成功，流程已开始。', 'Scanned - the order has started.')
+      if ((await ops.commit()).result && start) notice = L('扫码成功，流程已开始。', 'Scanned - the order has started.')
     } catch {}
   }
   $: if (pendingScan !== undefined && orders.length > 0) {
@@ -277,6 +305,8 @@
     assign: local(departments.string.OrderAssign),
     step: local(departments.string.OrderCheckStep),
     complete: local(departments.string.OrderCompleteStage),
+    paid: local(departments.string.OrderPaid),
+    unpaid: local(departments.string.OrderUndoPayment),
     escalate: local(departments.string.OrderEscalate),
     return: local(departments.string.OrderReturn),
     insert: local(departments.string.OrderInsert),
@@ -374,22 +404,33 @@
   }
 
   async function act (kind: OrderActionKind, extra: Partial<OrderAction> = {}): Promise<void> {
-    if (busy || selected === undefined || stage === undefined) return
+    const stageId = extra.stage ?? stage?.id
+    if (busy || selected === undefined || stageId === undefined) return
+    const destination = kind === 'start' ? 0 : kind === 'return'
+      ? selected.stages.findIndex((item) => item.id === extra.target)
+      : -1
+    if (selected.paidOn === undefined && (selected.stages[destination]?.waitForPayment ?? (destination === 1))) {
+      error = local(departments.string.OrderPaymentRequired)
+      return
+    }
     busy = true
     error = ''
     notice = ''
     try {
-      const ops = client.apply(undefined, 'order-action')
+      const ops = client.apply(selected._id, 'order-action')
+      if (kind === 'paid' || kind === 'unpaid') {
+        ops.match(departments.class.Order, { _id: selected._id, modifiedOn: selected.modifiedOn })
+      }
       await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
         order: selected._id,
         kind,
-        stage: extra.stage ?? stage.id,
+        stage: stageId,
         actor: me.uuid,
         ...extra
       })
       // The server checks who may do this; a refusal must show as an error, not as success.
       if (!(await ops.commit()).result) throw new Error('refused')
-      if (kind !== 'step') notice = kind === 'complete' && stage.approval ? local(departments.string.OrderSubmitted) : local(departments.string.OrderActionDone)
+      if (kind !== 'step') notice = kind === 'complete' && stage?.approval ? local(departments.string.OrderSubmitted) : local(departments.string.OrderActionDone)
       reason = ''
       returnTarget = ''
       returnPerson = ''
@@ -485,7 +526,7 @@
 
   <div class="body">
     <table>
-      <thead><tr><th><Label label={departments.string.OrderPage6} /></th><th><Label label={departments.string.OrderPage1} /></th><th><Label label={departments.string.OrderPage7} /></th><th><Label label={departments.string.OrderPage8} /></th><th><Label label={departments.string.OrderPage9} /></th><th><Label label={departments.string.OrderPage10} /></th><th><Label label={departments.string.OrderPage11} /></th></tr></thead>
+      <thead><tr><th><Label label={departments.string.OrderPage6} /></th><th><Label label={departments.string.OrderPage1} /></th><th><Label label={departments.string.OrderPage7} /></th><th><Label label={departments.string.OrderPage8} /></th><th><Label label={departments.string.OrderPage9} /></th><th><Label label={departments.string.OrderPage10} /></th><th><Label label={departments.string.OrderPage11} /></th><th><Label label={departments.string.OrderPaid} /></th></tr></thead>
       <tbody>
         {#each shown as it (it._id)}
           {@const cur = it.stages[it.current]}
@@ -498,9 +539,11 @@
             <td>{name(cur?.assignee)}</td>
             <td>{#if it.state === 'active'}{#if left !== undefined}<StatusTag status={left.late ? 'late' : 'active'} text={left.text} />{:else}{local(departments.string.OrderElapsed, { duration: days(cur?.startedOn) })}{/if}{/if}</td>
             <td>{name(it.salesOwner)}</td>
+            <td><StatusTag status={it.paidOn === undefined ? 'waiting' : 'done'}
+              label={it.paidOn === undefined ? departments.string.OrderUnpaid : departments.string.OrderPaid} /></td>
           </tr>
         {/each}
-        {#if shown.length === 0}<tr><td colspan="7" class="hint"><Label label={orders.length === 0 ? departments.string.OrderEmptyHint : departments.string.OrderPage12} /></td></tr>{/if}
+        {#if shown.length === 0}<tr><td colspan="8" class="hint"><Label label={orders.length === 0 ? departments.string.OrderEmptyHint : departments.string.OrderPage12} /></td></tr>{/if}
       </tbody>
     </table>
 
@@ -522,6 +565,32 @@
           <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}
             <button class="qr-btn" on:click={() => { showQr = !showQr }}>{L('二维码', 'QR code')}</button>
             {#if canCancel}<button class="qr-btn" on:click={() => { cancelOpen = !cancelOpen }}>{L('取消订单', 'Cancel order')}</button>{/if}</h3>
+          <div class="pending">
+            <StatusTag status={selected.paidOn === undefined ? 'waiting' : 'done'}
+              label={selected.paidOn === undefined ? departments.string.OrderUnpaid : departments.string.OrderPaid} />
+            {#if selected.paidOn !== undefined}
+              <span class="hint">{time(selected.paidOn)} · {name(selected.paidBy)}{selected.paidAmount ? ' · ' + selected.paidAmount : ''}{selected.paidNote ? ' · ' + selected.paidNote : ''}</span>
+            {/if}
+            {#if canPay}
+              <button on:click={() => { paymentOpen = !paymentOpen }}>
+                <Label label={selected.paidOn === undefined ? departments.string.OrderMarkPaid : departments.string.OrderUndoPayment} />
+              </button>
+            {/if}
+          </div>
+          {#if paymentOpen && canPay}
+            <div class="cancel-box">
+              {#if selected.paidOn === undefined}
+                <label><Label label={departments.string.OrderPaymentAmount} /><input bind:value={paidAmount} maxlength="1000" /></label>
+                <label><Label label={departments.string.OrderPaymentNote} /><input bind:value={paidNote} maxlength="1000" /></label>
+              {:else}
+                <label><Label label={departments.string.OrderUndoPaymentReason} /><input bind:value={paymentReason} /></label>
+              {/if}
+              <button disabled={busy || (selected.paidOn !== undefined && paymentReason.trim() === '')} on:click={savePayment}>
+                <Label label={departments.string.OrderPage15} />
+              </button>
+            </div>
+          {/if}
+          {#if awaitingPayment}<p class="hint"><Label label={departments.string.OrderPaymentRequired} /></p>{/if}
           {#if cancelOpen && canCancel}
             <div class="cancel-box">
               <p class="hint">{L('取消后订单不能再继续，所有待办会关闭，销售负责人会收到通知。必须写原因。', 'A cancelled order cannot continue; its to-dos close and the salesperson is told. A reason is required.')}</p>
@@ -545,7 +614,7 @@
           {#if selected.state === 'pending'}
             <div class="pending">
               <StatusTag status="waiting" text={L('未开始', 'Not started')} />
-              {#if canStart}<button class="big" disabled={busy} on:click={() => act('start', { stage: selected?.stages[0]?.id })}>▶ {L('开始流程', 'Start')}</button>{/if}
+              {#if canStart}<button class="big" disabled={busy || awaitingPayment} on:click={() => act('start', { stage: selected?.stages[0]?.id })}>▶ {L('开始流程', 'Start')}</button>{/if}
             </div>
           {/if}
           <p class="hint"><Label label={departments.string.OrderOrderInfo} params={{ customer: selected.customer, owner: name(selected.salesOwner) }} />{#if selected.note} · {selected.note}{/if}</p>
@@ -694,7 +763,7 @@
           {#each (showAllHistory ? history : history.slice(0, 3)) as a (a._id)}
             <li>
               <span class="hint">{time(a.createdOn ?? a.modifiedOn)}</span>
-              {a.auto === true ? local(departments.string.OrderAutomatic) : name(a.actor)}：{a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? local(departments.string.OrderApprovalSubmitted) : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
+              {a.auto === true ? local(departments.string.OrderAutomatic) : name(a.actor)}：{a.kind === 'complete' && a.auto === true ? local(departments.string.OrderPaymentCompletedStage) : a.kind === 'complete' && selected.stages.find((item) => item.id === a.stage)?.approval ? local(departments.string.OrderApprovalSubmitted) : kindText[a.kind]}（{selected.stages.find((s) => s.id === a.stage)?.name ?? ''}{a.kind === 'return'
                 ? ` → ${selected.stages.find((s) => s.id === a.target)?.name ?? ''}`
                 : ''}{a.kind === 'assign' ? ` → ${name(a.assignee)}` : ''}{a.kind === 'insert' ? ` → ${a.name ?? ''}` : ''}）{a.reason ? `：${a.reason}` : ''}
             </li>

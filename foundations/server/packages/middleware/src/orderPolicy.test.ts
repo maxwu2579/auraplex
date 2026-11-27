@@ -148,3 +148,40 @@ test('only super admins and company admins cancel an unfinished order, with a re
   // A cancelled order cannot move any more.
   expect(canOrderAction({ ...order(), state: 'cancelled' }, { kind: 'complete', stage: 'p' }, 'boss', true, roleOf)).toBe(false)
 })
+
+test.each([
+  ['wang', false, {}, true],
+  ['sales-admin', false, {}, true],
+  ['company-admin', false, { maintainer: true }, true],
+  ['owner', true, {}, true],
+  ['ming', false, { adminSomewhere: true }, false],
+  ['sales-supervisor', false, {}, false]
+] as const)('payment and revocation permissions for %s', (actor, owner, extra, allowed) => {
+  const lookup: RoleOf = (department, person) => {
+    if (department === 'sales' && person === 'sales-admin') return 'admin'
+    if (department === 'sales' && person === 'sales-supervisor') return 'supervisor'
+    return roleOf(department, person)
+  }
+  const value = order()
+  expect(canOrderAction(value, { kind: 'paid', stage: 's' }, actor, owner, lookup, extra)).toBe(allowed)
+  value.paidOn = 1
+  expect(canOrderAction(value, { kind: 'unpaid', stage: 's', reason: 'Reconciled' }, actor, owner, lookup, extra)).toBe(allowed)
+  expect(canOrderAction(value, { kind: 'unpaid', stage: 's', reason: ' ' }, actor, owner, lookup, extra)).toBe(false)
+})
+
+test('cancelled orders and direct order writes cannot set payment', () => {
+  expect(canOrderAction({ ...order(), state: 'cancelled' }, { kind: 'paid', stage: 's' }, 'boss', true, roleOf)).toBe(false)
+  expect(canCreateOrder({ salesOwner: 'wang', paidOn: 1 }, 'wang', false, true)).toBe(false)
+  expect(canEditOrder({ paidOn: 1 }, 'wang', false, order())).toBe(false)
+})
+
+test('payment is required when starting or returning to a gated stage', () => {
+  const value = order()
+  value.stages[0].waitForPayment = true
+  const start = { kind: 'start', stage: 's' }
+  expect(canOrderAction({ ...value, state: 'pending' }, start, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction({ ...value, state: 'pending', paidOn: 1 }, start, 'wang', false, roleOf)).toBe(true)
+  const back = { kind: 'return', stage: 'p', target: 's', reason: 'Review' }
+  expect(canOrderAction(value, back, 'ming', false, roleOf)).toBe(false)
+  expect(canOrderAction({ ...value, paidOn: 1 }, back, 'ming', false, roleOf)).toBe(true)
+})

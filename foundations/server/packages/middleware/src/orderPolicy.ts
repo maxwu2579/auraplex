@@ -6,12 +6,14 @@ export interface OrderStageLike {
   name?: string
   department?: string
   status: string
+  waitForPayment?: boolean
   assignee?: string
   approval?: { by: string, person?: string }
   steps: Array<{ name: string, done: boolean }>
 }
 export interface OrderLike {
   salesOwner: string
+  paidOn?: number
   stages: OrderStageLike[]
   current: number
   state: string
@@ -24,6 +26,8 @@ export interface OrderActionLike {
   step?: number
   target?: string
   reason?: string
+  paidAmount?: string
+  paidNote?: string
   name?: string
   department?: string
   position?: number
@@ -34,6 +38,7 @@ export interface FlowStageLike {
   name: string
   department?: string
   limitDays?: number
+  waitForPayment?: boolean
   approval?: { by: string, person?: string }
   steps: string[]
 }
@@ -53,6 +58,14 @@ const hasText = (value: string | undefined): boolean => typeof value === 'string
  * - insert ("插入一段"): department admins, right after the current stage of this one order
  * Super admins may do everything; a finished order cannot change.
  */
+export function orderPaymentBlocksAction (order: OrderLike, action: OrderActionLike): boolean {
+  if (order.paidOn !== undefined) return false
+  const index = action.kind === 'start' ? 0 : action.kind === 'return'
+    ? order.stages.findIndex((stage) => stage.id === action.target)
+    : -1
+  return order.stages[index]?.waitForPayment ?? (index === 1)
+}
+
 export function canOrderAction (
   order: OrderLike,
   action: OrderActionLike,
@@ -64,6 +77,18 @@ export function canOrderAction (
   // Scanning an order's QR code: company admins, department admins and super admins.
   const scanner = owner || extra.adminSomewhere === true || extra.maintainer === true
   if (action.kind === 'scan') return scanner && order.stages.some((it) => it.id === action.stage)
+  if (action.kind === 'paid' || action.kind === 'unpaid') {
+    const sales = order.stages[0]
+    if (sales === undefined || action.stage !== sales.id || order.state === 'cancelled') return false
+    if (!owner && extra.maintainer !== true && order.salesOwner !== actor &&
+      roleOf(sales.department, actor) !== 'admin') return false
+    if (action.kind === 'unpaid') return order.paidOn !== undefined && hasText(action.reason)
+    return order.paidOn === undefined && [action.paidAmount, action.paidNote].every(
+      (value) => value === undefined || (typeof value === 'string' && value.length <= 1000)
+    )
+  }
+  if (action.paidAmount !== undefined || action.paidNote !== undefined) return false
+  if (orderPaymentBlocksAction(order, action)) return false
   if (action.kind === 'start') {
     return order.state === 'pending' && (scanner || order.salesOwner === actor) && order.stages[0]?.id === action.stage
   }
@@ -137,6 +162,7 @@ export function canCreateOrder (
   if (!owner && attributes.salesOwner !== actor) return false
   // A new order runs at once, or waits until someone starts it (for example by scanning its QR code).
   if (attributes.state !== undefined && attributes.state !== 'active' && attributes.state !== 'pending') return false
+  if (['paidOn', 'paidBy', 'paidAmount', 'paidNote'].some((field) => field in attributes)) return false
   const stages = attributes.stages
   // Stages, number and progress are filled in by the system from the current flow.
   return (stages === undefined || (Array.isArray(stages) && stages.length === 0)) && (attributes.current ?? 0) === 0
@@ -182,7 +208,8 @@ export function canChangeFlow (
   roleOf: RoleOf
 ): boolean {
   const valid = after.every((it) => hasText(it.id) && hasText(it.name) && Array.isArray(it.steps))
-  const validRules = after.every(({ limitDays, approval }) =>
+  const validRules = after.every(({ limitDays, approval, waitForPayment }) =>
+    (waitForPayment === undefined || typeof waitForPayment === 'boolean') &&
     (limitDays === undefined || (Number.isSafeInteger(limitDays) && limitDays > 0)) &&
     (approval === undefined || (approval !== null &&
       (approval.by === 'deptAdmins' || (approval.by === 'person' && hasText(approval.person)))))
@@ -193,7 +220,8 @@ export function canChangeFlow (
   return after.every((stage, i) => {
     const old = before[i]
     if (stage.id !== old.id || stage.name !== old.name || stage.department !== old.department) return false
-    if (stage.limitDays !== old.limitDays || stage.approval?.by !== old.approval?.by ||
+    if ((stage.waitForPayment ?? (i === 1)) !== (old.waitForPayment ?? (i === 1)) ||
+      stage.limitDays !== old.limitDays || stage.approval?.by !== old.approval?.by ||
       stage.approval?.person !== old.approval?.person) return false
     const same = stage.steps.length === old.steps.length && stage.steps.every((it, j) => it === old.steps[j])
     return same || roleOf(stage.department, actor) === 'admin'

@@ -41,6 +41,7 @@ export interface OrderFlowStage {
   id: string
   name: string
   department?: Ref<Department>
+  waitForPayment?: boolean
   limitDays?: number
   approval?: OrderApproval
   steps: string[]
@@ -65,6 +66,7 @@ export interface OrderStage {
   doneOn?: number
   todo?: Ref<Doc>
   remindedOn?: number
+  waitForPayment?: boolean
 }
 
 /** A customer order moving through the stages. Only the system changes stages (via OrderAction). */
@@ -73,6 +75,10 @@ export interface Order extends Doc {
   title: string
   customer: string
   note: string
+  paidOn?: number
+  paidAmount?: string
+  paidNote?: string
+  paidBy?: AccountUuid
   salesOwner: AccountUuid
   stages: OrderStage[]
   current: number
@@ -87,7 +93,7 @@ export interface Order extends Doc {
   linkSpaces?: Record<string, Ref<Space>>
 }
 
-export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan' | 'cancel'
+export type OrderActionKind = 'assign' | 'step' | 'complete' | 'escalate' | 'return' | 'insert' | 'reorder' | 'approve' | 'reject' | 'start' | 'scan' | 'cancel' | 'paid' | 'unpaid'
 
 /** A request to move an order; checked by the server, applied by the system, kept as history. */
 export interface OrderAction extends Doc {
@@ -99,6 +105,8 @@ export interface OrderAction extends Doc {
   step?: number
   target?: string
   reason?: string
+  paidAmount?: string
+  paidNote?: string
   position?: number
   stageOrder?: string[]
   /** insert: name and department of the stage added right after the current one. */
@@ -110,7 +118,7 @@ export interface OrderAction extends Doc {
 
 export const defaultOrderStages: OrderFlowStage[] = [
   { id: 'sales', name: '销售', steps: [] },
-  { id: 'design', name: '设计', steps: [] },
+  { id: 'design', name: '设计', waitForPayment: true, steps: [] },
   { id: 'production', name: '生产', steps: [] },
   { id: 'engineering', name: '工程', steps: [] },
   { id: 'training', name: '去客户工厂教', steps: [] }
@@ -478,6 +486,16 @@ export default plugin(departmentsId, {
     ApplicationCancelled: '' as IntlString,
     OrderAssigned: '' as IntlString,
     OrderFinished: '' as IntlString,
+    OrderPaid: '' as IntlString,
+    OrderUnpaid: '' as IntlString,
+    OrderMarkPaid: '' as IntlString,
+    OrderUndoPayment: '' as IntlString,
+    OrderPaymentAmount: '' as IntlString,
+    OrderPaymentNote: '' as IntlString,
+    OrderUndoPaymentReason: '' as IntlString,
+    OrderPaymentRequired: '' as IntlString,
+    OrderPaymentCompletedStage: '' as IntlString,
+    OrderWaitForPayment: '' as IntlString,
     OrderCancelledNotice: '' as IntlString,
     Tracking: '' as IntlString,
     ActivityLog: '' as IntlString,

@@ -59,7 +59,7 @@ import {
   type DepartmentPermission,
   type DepartmentPolicy
 } from './departmentPolicy'
-import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, type OrderLike, type RoleOf } from './orderPolicy'
+import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, orderPaymentBlocksAction, type OrderLike, type RoleOf } from './orderPolicy'
 import { isOwner, isSystem } from './utils'
 import {
   applicationRelatedClasses,
@@ -867,7 +867,12 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
         departments: live.map((d) => d._id as string),
         maintainer: ctx.contextData.account.role === AccountRole.Maintainer
       })
-      if (!ok) forbidden()
+      if (!ok) {
+        if (orderPaymentBlocksAction(order as unknown as OrderLike, attributes as any)) {
+          throw new PlatformError(new Status(Severity.ERROR, 'departments:string:OrderPaymentRequired' as typeof platform.status.Forbidden, {}))
+        }
+        forbidden()
+      }
       return
     }
     if (tx.objectClass === orderClass) {

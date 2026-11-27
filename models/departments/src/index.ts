@@ -91,6 +91,10 @@ export class TOrder extends TDoc implements Order {
   @Hidden() stages!: Order['stages']
   @Prop(TypeNumber(), departments.string.CurrentStage) current!: number
   @Prop(TypeString(), departments.string.OrderState) state!: Order['state']
+  @Hidden() paidOn?: Order['paidOn']
+  @Hidden() paidAmount?: Order['paidAmount']
+  @Hidden() paidNote?: Order['paidNote']
+  @Hidden() paidBy?: Order['paidBy']
   @Hidden() channel?: Order['channel']
   @Hidden() component?: Order['component']
   @Hidden() document?: Order['document']
@@ -112,6 +116,8 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Hidden() name?: string
   @Hidden() department?: OrderAction['department']
   @Hidden() auto?: boolean
+  @Hidden() paidAmount?: string
+  @Hidden() paidNote?: string
   @Prop(TypeString(), departments.string.Note) reason?: string
 }
 

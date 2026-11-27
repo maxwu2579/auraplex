@@ -1900,12 +1900,13 @@ async function setupOrder (control: TriggerControl, tx: TxCreateDoc<Order>): Pro
   const template = flow?.stages !== undefined && flow.stages.length > 0 ? flow.stages : defaultOrderStages
   const now = tx.modifiedOn
   // A pending order waits until someone starts it (for example by scanning its QR code).
-  const pending = tx.attributes.state === 'pending'
+  const pending = tx.attributes.state === 'pending' || template[0]?.waitForPayment === true
   const stages: OrderStage[] = template.map((stage, i) => ({
     id: stage.id,
     name: stage.name,
     department: stage.department,
     limitDays: stage.limitDays,
+    waitForPayment: stage.waitForPayment ?? (i === 1),
     approval: stage.approval,
     status: i === 0 && !pending ? 'active' : 'waiting',
     // The salesperson who takes the order runs the first stage.
@@ -1945,6 +1946,45 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
   const reasonEn = action.reason !== undefined && action.reason.trim() !== '' ? ` (reason: ${action.reason})` : ''
   let current = order.current
   let state = order.state
+  const activateNext = async (next: OrderStage, previous: OrderStage): Promise<void> => {
+    next.status = 'active'
+    next.startedOn = now
+    delete next.remindedOn
+    if (next.assignee === undefined) {
+      const picked = await autoAssignee(control, next.department)
+      if (picked !== undefined) {
+        next.assignee = picked
+        // Kept in the history only; OnOrder skips automatic records.
+        results.push(control.txFactory.createTxCreateDoc(departments.class.OrderAction, tx.objectSpace, {
+          order: order._id,
+          kind: 'assign',
+          stage: next.id,
+          actor: systemAccountUuid as AccountUuid,
+          assignee: picked,
+          auto: true
+        }))
+        await notifyOrder(control, results, tx, order, [picked], departments.string.OrderAssigned, `${title}\n${next.name}：由你负责（自动指定）`, `${next.name}: you are in charge (assigned automatically)`)
+      }
+    }
+    const leads = await departmentLeads(control, next.department)
+    const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
+    await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
+      `${title}\n${previous.name} 已完成，轮到：${next.name}${next.assignee === undefined ? '，请分配负责人' : ''}`,
+      `${previous.name} is done, next: ${next.name}${next.assignee === undefined ? ' (please assign someone)' : ''}`)
+  }
+  const finishStage = async (paid: boolean): Promise<void> => {
+    stage.status = 'done'
+    stage.doneOn = now
+    const next = stages[index + 1]
+    current = index + 1
+    if (next !== undefined) {
+      if ((next.waitForPayment ?? (current === 1)) !== true || paid) await activateNext(next, stage)
+    } else {
+      current = stages.length
+      state = 'done'
+      await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderFinished, `${title}\n全部完成`, 'All stages are done')
+    }
+  }
   switch (action.kind) {
     case 'scan':
       // Only kept in the history: who scanned the order's QR code and when.
@@ -1965,8 +2005,34 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       results.unshift(control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, state }))
       return results
     }
+    case 'paid': {
+      if (index !== 0 || order.paidOn !== undefined || order.state === 'cancelled') return []
+      results.push(control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, {
+        paidOn: now,
+        paidBy: action.actor,
+        paidAmount: action.paidAmount?.trim() ?? '',
+        paidNote: action.paidNote?.trim() ?? ''
+      }))
+      if (order.state === 'active' && current === 0 && stage.status === 'active') {
+        for (const step of stage.steps) step.done = true
+        results.push(control.txFactory.createTxCreateDoc(departments.class.OrderAction, tx.objectSpace, {
+          order: order._id, kind: 'complete', stage: stage.id, actor: systemAccountUuid as AccountUuid, auto: true
+        }))
+        await finishStage(true)
+      } else if (order.state === 'active' && current > 0) {
+        const next = stages[current]
+        if (next?.status === 'waiting' && (next.waitForPayment ?? (current === 1))) await activateNext(next, stages[current - 1])
+      }
+      break
+    }
+    case 'unpaid':
+      if (index !== 0 || order.paidOn === undefined || order.state === 'cancelled' || !action.reason?.trim()) return []
+      return [control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, {
+        $unset: { paidOn: true, paidBy: true, paidAmount: true, paidNote: true }
+      })]
     case 'start': {
-      if (order.state !== 'pending' || index !== 0) return []
+      if (order.state !== 'pending' || index !== 0 ||
+        (stage.waitForPayment === true && order.paidOn === undefined)) return []
       stage.status = 'active'
       stage.startedOn = now
       current = 0
@@ -2014,6 +2080,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
       break
     case 'approve':
     case 'complete': {
+      if (index !== order.current || stage.status !== (action.kind === 'approve' ? 'approval' : 'active')) return []
       if (action.kind === 'complete' && stage.approval !== undefined) {
         stage.status = 'approval'
         const [department] = stage.department === undefined ? [] :
@@ -2025,40 +2092,7 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
           title + '\n' + stage.name + ' 等待审批', `${stage.name}: waiting for approval`)
         break
       }
-      stage.status = 'done'
-      stage.doneOn = now
-      const next = stages[index + 1]
-      if (next !== undefined) {
-        next.status = 'active'
-        next.startedOn = now
-        delete next.remindedOn
-        current = index + 1
-        if (next.assignee === undefined) {
-          const picked = await autoAssignee(control, next.department)
-          if (picked !== undefined) {
-            next.assignee = picked
-            // Kept in the history only; OnOrder skips automatic records.
-            results.push(control.txFactory.createTxCreateDoc(departments.class.OrderAction, tx.objectSpace, {
-              order: order._id,
-              kind: 'assign',
-              stage: next.id,
-              actor: systemAccountUuid as AccountUuid,
-              assignee: picked,
-              auto: true
-            }))
-            await notifyOrder(control, results, tx, order, [picked], departments.string.OrderAssigned, `${title}\n${next.name}：由你负责（自动指定）`, `${next.name}: you are in charge (assigned automatically)`)
-          }
-        }
-        const leads = await departmentLeads(control, next.department)
-        const people = [...leads, ...(next.assignee !== undefined ? [next.assignee] : [])]
-        await notifyOrder(control, results, tx, order, people, departments.string.OrderHandedOver,
-          `${title}\n${stage.name} 已完成，轮到：${next.name}${next.assignee === undefined ? '，请分配负责人' : ''}`,
-          `${stage.name} is done, next: ${next.name}${next.assignee === undefined ? ' (please assign someone)' : ''}`)
-      } else {
-        current = stages.length
-        state = 'done'
-        await notifyOrder(control, results, tx, order, [order.salesOwner], departments.string.OrderFinished, `${title}\n全部完成`, 'All stages are done')
-      }
+      await finishStage(order.paidOn !== undefined)
       break
     }
     case 'escalate': {
@@ -2068,7 +2102,8 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
     }
     case 'return': {
       const target = stages.findIndex((it) => it.id === action.target)
-      if (target < 0 || target >= index) return []
+      if (target < 0 || target >= index ||
+        ((stages[target].waitForPayment ?? (target === 1)) && order.paidOn === undefined)) return []
       for (let k = target + 1; k <= index; k++) {
         stages[k].status = 'waiting'
         stages[k].doneOn = undefined
