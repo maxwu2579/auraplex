@@ -7,18 +7,31 @@
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import { isOwnerOrMaintainer } from '@hcengineering/core'
-  import prospects, { type Prospect, type ProspectStatus } from '@hcengineering/prospects'
+  import prospects, { type Prospect, type ProspectStatus, type ProspectTemplate } from '@hcengineering/prospects'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { createWorkbook, datedFilename, downloadWorkbook } from '../xlsx'
+  import { createWorkbook, datedFilename, downloadWorkbook, prospectTemplateColumns } from '../xlsx'
   import { recordExport } from '../audit'
   import { prospectFilter } from '../filter'
   import ProspectLeadAction from './ProspectLeadAction.svelte'
   import EditDialog from './EditDialog.svelte'
-  import { autoSaveCard, recognizerConfigured, type AutoSaveResult } from '../cardSave'
+  import { prospectFieldLabel, watchProspectTemplate } from '../templateFields'
+  import { autoSaveCard, cardFields, recognizerConfigured, type AutoSaveResult } from '../cardSave'
   import { onMount } from 'svelte'
   const query = createQuery()
   const client = getClient()
   let all: Prospect[] = []
+  let template: ProspectTemplate | undefined
+  let templateReady = false
+  watchProspectTemplate((value) => {
+    template = value
+    templateReady = true
+  })
+  $: columns = prospectTemplateColumns(template?.fields, (field) => prospectFieldLabel(field, local))
+  $: searchColumns = columns.filter(({ field }) => field.type === 'text')
+  $: columnsByKey = new Map(columns.map((column) => [column.field.key, column]))
+  $: sourceColumn = columnsByKey.get('source')
+  $: countryColumn = columnsByKey.get('country')
+  $: industryColumn = columnsByKey.get('industry')
   let search = ''
   let status = ''
   let source = ''
@@ -71,7 +84,7 @@
   $: sources = Array.from(new Set(all.map((p) => p.source).filter(Boolean))).sort()
   $: countries = Array.from(new Set(all.map((p) => p.country).filter(Boolean))).sort()
   $: industries = Array.from(new Set(all.map((p) => p.industry).filter(Boolean))).sort()
-  function inPeriod (p: Prospect): boolean {
+  function inPeriod (p: Prospect, period: string): boolean {
     if (period === '') return true
     const now = new Date()
     const start = new Date(now.getFullYear(), now.getMonth(), period === 'month' ? 1 : now.getDate())
@@ -84,19 +97,20 @@
   $: visible = all
     .filter(
       (p) =>
-        [p.name, p.company, p.email, p.phone, p.mobile].join(' ').toLowerCase().includes(search.trim().toLowerCase()) &&
+        searchColumns.map((column) => column.read(p))
+          .join(' ').toLowerCase().includes(search.trim().toLowerCase()) &&
         matches(p.status, status) &&
-        matches(p.source, source) &&
-        matches(p.country, country) &&
-        matches(p.industry, industry) &&
-        inPeriod(p)
+        (sourceColumn === undefined || matches(p.source, source)) &&
+        (countryColumn === undefined || matches(p.country, country)) &&
+        (industryColumn === undefined || matches(p.industry, industry)) &&
+        inPeriod(p, period)
     )
-    .sort(
-      (a, b) =>
-        String(a[sort as keyof Prospect] ?? '').localeCompare(String(b[sort as keyof Prospect] ?? ''), undefined, {
-          numeric: true
-        }) * (ascending ? 1 : -1)
-    )
+    .sort((a, b) => {
+      const column = columnsByKey.get(sort) ?? columnsByKey.get('name')
+      const first = sort === 'status' ? a.status : column?.read(a) ?? ''
+      const second = sort === 'status' ? b.status : column?.read(b) ?? ''
+      return first.localeCompare(second, undefined, { numeric: true }) * (ascending ? 1 : -1)
+    })
   function order (key: string): void {
     if (sort === key) ascending = !ascending
     else {
@@ -132,8 +146,9 @@
     autoReport = ''
     const left: File[] = []
     const counts: Record<AutoSaveResult, number> = { saved: 0, empty: 0, duplicate: 0, failed: 0 }
+    const fields = cardFields(template?.fields, local)
     for (const file of files) {
-      const result = await autoSaveCard(file)
+      const result = await autoSaveCard(file, fields)
       counts[result]++
       if (result !== 'saved') left.push(file)
       autoDone++
@@ -154,7 +169,7 @@
   }
   function addFiles (files: FileList | null): void {
     if (files === null || files.length === 0) return
-    if (autoSave && aiReady && !autoBusy) {
+    if (autoSave && aiReady && templateReady && !autoBusy) {
       void autoSaveAll(Array.from(files))
       return
     }
@@ -184,23 +199,9 @@
     }
   }
   function exportList (): void {
-    const columns: Array<[string, keyof Prospect]> = [
-      [local(prospects.string.PageName), 'name'],
-      [local(prospects.string.PageCompany), 'company'],
-      [local(prospects.string.PageJobTitle), 'title'],
-      [local(prospects.string.PageMobile), 'mobile'],
-      [local(prospects.string.PagePhone), 'phone'],
-      [local(prospects.string.PageEmail), 'email'],
-      [local(prospects.string.PageWebsite), 'website'],
-      [local(prospects.string.PageAddress), 'address'],
-      [local(prospects.string.PageCountry), 'country'],
-      [local(prospects.string.PageIndustry), 'industry'],
-      [local(prospects.string.PageSource), 'source'],
-      [local(prospects.string.PageNotes), 'notes']
-    ]
     const displayTime = (time?: number): string => (time === undefined ? '' : new Date(time).toLocaleString())
     const rows = visible.map((p) => [
-      ...columns.map(([, key]) => String(p[key] ?? '')),
+      ...columns.map((column) => column.read(p)),
       displayTime(p.sourceDate),
       statuses[p.status] ?? p.status,
       displayTime(p.lastEmailAt),
@@ -215,7 +216,7 @@
           name: local(prospects.string.PageProspects),
           rows: [
             [
-              ...columns.map(([title]) => title),
+              ...columns.map((column) => column.label),
               local(prospects.string.PageSourceDate),
               local(prospects.string.PageStatus),
               local(prospects.string.PageLastEmail),
@@ -288,25 +289,28 @@
           >{/each}</select
       ></label
     >
-    <label
-      ><Label label={prospects.string.PageSource} /><select bind:value={source}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each sources as item}<option
-            >{item}</option
-          >{/each}</select
-      ></label
-    ><label
-      ><Label label={prospects.string.PageCountry} /><select bind:value={country}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each countries as item}<option
-            >{item}</option
-          >{/each}</select
-      ></label
-    ><label
-      ><Label label={prospects.string.PageIndustry} /><select bind:value={industry}
-        ><option value="">{local(prospects.string.PageAll)}</option><option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>{#each industries as item}<option
-            >{item}</option
-          >{/each}</select
-      ></label
-    ><button
+    {#if sourceColumn !== undefined}
+      <label>{sourceColumn.label}<select bind:value={source}>
+        <option value="">{local(prospects.string.PageAll)}</option>
+        <option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>
+        {#each sources as item}<option>{item}</option>{/each}
+      </select></label>
+    {/if}
+    {#if countryColumn !== undefined}
+      <label>{countryColumn.label}<select bind:value={country}>
+        <option value="">{local(prospects.string.PageAll)}</option>
+        <option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>
+        {#each countries as item}<option>{item}</option>{/each}
+      </select></label>
+    {/if}
+    {#if industryColumn !== undefined}
+      <label>{industryColumn.label}<select bind:value={industry}>
+        <option value="">{local(prospects.string.PageAll)}</option>
+        <option value={$t('未填写')}>{local(prospects.string.PageMissing)}</option>
+        {#each industries as item}<option>{item}</option>{/each}
+      </select></label>
+    {/if}
+    <button
       on:click={() => {
         search = ''
         status = ''
@@ -321,40 +325,42 @@
   <p><Label label={prospects.string.PageTotal} /> {visible.length}</p>
   <div class="table-wrap">
     <table>
-      <thead
-        ><tr
-          >{#each [['name', local(prospects.string.PageName)], ['company', local(prospects.string.PageCompany)], ['title', local(prospects.string.PageJobTitle)], ['mobile', local(prospects.string.PageMobile)], ['phone', local(prospects.string.PagePhone)], ['email', local(prospects.string.PageEmail)], ['country', local(prospects.string.PageCountry)], ['industry', local(prospects.string.PageIndustry)], ['source', local(prospects.string.PageSource)], ['status', local(prospects.string.PageStatus)]] as col}<th
-              ><button
-                on:click={() => {
-                  order(col[0])
-                }}>{col[1]}</button
-              ></th
-            >{/each}<th><Label label={prospects.string.PageActions} /></th></tr
-        ></thead
-      ><tbody
-        >{#each visible as item (item._id)}<tr
-            ><td
-              ><button
-                on:click={() => {
-                  edit(item)
-                }} disabled={!moduleCanEdit}>{item.name !== '' ? item.name : local(prospects.string.PageMissing)}</button
-              ></td
-            ><td>{item.company}</td><td>{item.title}</td><td>{item.mobile}</td><td>{item.phone}</td><td>{item.email}</td
-            ><td>{item.country}</td><td>{item.industry}</td><td>{item.source}</td><td
-              >{statuses[item.status] ?? item.status}</td
+      <thead>
+        <tr>
+          {#each columns as column (column.field.key)}
+            <th><button on:click={() => order(column.field.key)}>{column.label}</button></th>
+          {/each}
+          <th><button on:click={() => order('status')}><Label label={prospects.string.PageStatus} /></button></th>
+          <th><Label label={prospects.string.PageActions} /></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each visible as item (item._id)}
+          <tr>
+            {#each columns as column (column.field.key)}
+              <td>
+                {#if column.field.key === 'name'}
+                  <button disabled={!moduleCanEdit} on:click={() => edit(item)}>{item.name || local(prospects.string.PageMissing)}</button>
+                {:else}
+                  {column.read(item)}
+                {/if}
+              </td>
+            {/each}
+            <td>{statuses[item.status] ?? item.status}</td
             ><td
               ><button
                 on:click={() => {
                   edit(item)
                 }} disabled={!moduleCanEdit}><Label label={prospects.string.PageEdit} /></button
-              ><ProspectLeadAction value={item} canEdit={moduleCanEdit} />{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
+              ><ProspectLeadAction value={item} templateFields={template?.fields} canEdit={moduleCanEdit} />{#if moduleCanEdit && isOwnerOrMaintainer()}<button on:click={() => remove(item)}><Label label={prospects.string.PageDelete} /></button>{/if}</td
             ></tr
-          >{:else}<tr><td colspan="11">{all.length === 0 ? $t('还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。') : $t('没有符合条件的记录。')}</td></tr>{/each}</tbody
+          >{:else}<tr><td colspan={columns.length + 2}>{all.length === 0 ? $t('还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。') : $t('没有符合条件的记录。')}</td></tr>{/each}</tbody
       >
     </table>
   </div>
 </div>
 {#if moduleCanEdit && editing}{#key selected?._id ?? 'new'}<EditDialog
+      templateFields={template?.fields}
       value={all.find((item) => item._id === selected?._id) ?? selected}
       initialFront={fromQueue ? queue[frontIndex] : undefined}
       initialBack={fromQueue && backIndex >= 0 ? queue[backIndex] : undefined}

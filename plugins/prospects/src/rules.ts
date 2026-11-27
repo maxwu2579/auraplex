@@ -1,5 +1,9 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
-import type { Prospect } from './index'
+import type { Prospect, ProspectFieldDef } from './index'
+import {
+  isBuiltinProspectField, isCustomProspectField, maxProspectFields, maxProspectFieldLabel,
+  maxProspectFieldOptions, maxProspectOptionLength, parseProspectDate
+} from './template'
 
 export function normalizeEmail (value: string): string {
   return value.replace(/\s/g, '').toLowerCase()
@@ -74,26 +78,61 @@ export interface RecognitionResult {
   values: RecognitionValues
   needsReview: RecognitionField[]
 }
-export function parseRecognition (input: unknown): RecognitionResult {
+export type RecognitionFieldSpec = Pick<ProspectFieldDef, 'key' | 'label' | 'type' | 'options'>
+export interface TemplateRecognitionResult {
+  values: Record<string, string>
+  needsReview: string[]
+}
+
+export function parseRecognitionFields (input: unknown): RecognitionFieldSpec[] {
+  if (!Array.isArray(input) || input.length < 1 || input.length > maxProspectFields) throw new Error('Invalid field count')
+  const keys = new Set<string>()
+  return input.map((entry: unknown) => {
+    if (entry === null || typeof entry !== 'object') throw new Error('Invalid field')
+    const { key, label, type, options } = entry as Record<string, unknown>
+    if (typeof key !== 'string' || (!isBuiltinProspectField(key) && !isCustomProspectField(key)) || keys.has(key) ||
+      typeof label !== 'string' || label.trim() === '' || label.length > maxProspectFieldLabel ||
+      (type !== 'text' && type !== 'date' && type !== 'select') || (isBuiltinProspectField(key) && type !== 'text')) {
+      throw new Error('Invalid field')
+    }
+    keys.add(key)
+    if (type === 'select') {
+      if (!Array.isArray(options) || options.length < 1 || options.length > maxProspectFieldOptions ||
+        options.some((option) => typeof option !== 'string' || option.trim() === '' || option.length > maxProspectOptionLength)) {
+        throw new Error('Invalid dropdown options')
+      }
+      return { key, label: label.trim(), type, options }
+    }
+    return { key, label: label.trim(), type }
+  })
+}
+
+export function parseRecognition (input: unknown): RecognitionResult
+export function parseRecognition (input: unknown, fields: readonly RecognitionFieldSpec[]): TemplateRecognitionResult
+export function parseRecognition (
+  input: unknown,
+  fields: readonly RecognitionFieldSpec[] = recognitionFields.map((key) => ({ key, label: key, type: 'text' }))
+): TemplateRecognitionResult {
   if (typeof input === 'string') input = JSON.parse(input) as unknown
   if (input === null || Array.isArray(input) || typeof input !== 'object') throw new Error('返回格式不对')
   const obj = input as Record<string, unknown>
-  const values = Object.fromEntries(recognitionFields.map((field) => [field, ''])) as RecognitionValues
-  const needsReview: RecognitionField[] = []
-  for (const field of recognitionFields) {
-    const raw = obj[field]
+  const values = Object.fromEntries(fields.map(({ key }) => [key, '']))
+  const needsReview: string[] = []
+  for (const { key, type, options } of fields) {
+    const raw = obj[key]
     if (raw === undefined || raw === '') continue
     if (typeof raw !== 'string' || raw.length > 1000) {
-      needsReview.push(field)
+      needsReview.push(key)
       continue
     }
     const value = raw.trim()
-    let valid = true
-    if (field === 'email') valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-    if (field === 'phone' || field === 'mobile') {
+    let valid = type === 'date' ? parseProspectDate(value) !== undefined
+      : type === 'select' ? options?.includes(value) === true : true
+    if (key === 'email') valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+    if (key === 'phone' || key === 'mobile') {
       valid = /^[+\d\s().-]+$/.test(value) && normalizePhone(value).length >= 5 && normalizePhone(value).length <= 20
     }
-    if (field === 'website') {
+    if (key === 'website') {
       try {
         const url = new URL(value)
         valid = (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.')
@@ -102,10 +141,10 @@ export function parseRecognition (input: unknown): RecognitionResult {
       }
     }
     if (!valid) {
-      needsReview.push(field)
+      needsReview.push(key)
       continue
     }
-    values[field] = value
+    values[key] = value
   }
   return { values, needsReview }
 }

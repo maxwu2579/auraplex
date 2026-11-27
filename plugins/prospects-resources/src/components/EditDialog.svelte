@@ -16,13 +16,20 @@
     prospectWriteScope,
     type Prospect,
     type ProspectStatus,
-    type RecognitionField
+    formatProspectFieldValue,
+    isBuiltinProspectField,
+    parseCustomProspectValue,
+    readRecognizedProspectFields,
+    visibleProspectFields,
+    type ProspectFieldDef
   } from '@hcengineering/prospects'
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
-  import { compressed, recognize as recognizeCard, recognizerConfigured } from '../cardSave'
+  import { cardDraft, cardFields, compressed, recognize as recognizeCard, recognizerConfigured, type CardDraft } from '../cardSave'
+  import { prospectFieldLabel } from '../templateFields'
   import ProspectLeadAction from './ProspectLeadAction.svelte'
   import MailPanel from './MailPanel.svelte'
 
+  export let templateFields: readonly ProspectFieldDef[] | undefined = undefined
   export let value: Prospect | undefined = undefined
   export let initialFront: File | undefined = undefined
   export let initialBack: File | undefined = undefined
@@ -35,20 +42,8 @@
       photos = items
     })
   }
-  let draft = {
-    name: value?.name ?? '',
-    company: value?.company ?? '',
-    title: value?.title ?? '',
-    mobile: value?.mobile ?? '',
-    phone: value?.phone ?? '',
-    email: value?.email ?? '',
-    website: value?.website ?? '',
-    address: value?.address ?? '',
-    country: value?.country ?? '',
-    industry: value?.industry ?? '',
-    source: value?.source ?? '',
-    notes: value?.notes ?? ''
-  }
+  let draft = cardDraft(value)
+  let customDraft: Record<string, string> = {}
   let sourceDate = value?.sourceDate === undefined ? '' : new Date(value.sourceDate).toISOString().slice(0, 10)
   let status: ProspectStatus = value?.status ?? 'new'
   $: if (value?.lead != null) status = 'converted'
@@ -62,7 +57,7 @@
   let statusMessage = $t('正在检查识别服务…')
   let model = value?.recognitionModel
   let recognizedAt = value?.recognizedAt
-  let review: RecognitionField[] = []
+  let review: string[] = []
   function needsReview (key: string): boolean {
     return review.some((item) => item === key)
   }
@@ -104,21 +99,15 @@
     if (language === $languageStore) local = localizer(language)
   }
   $: void updateLanguage($languageStore)
-  let fields: Array<{ key: keyof typeof draft, label: string }>
-  $: fields = [
-    { key: 'name', label: local(prospects.string.PageName) },
-    { key: 'company', label: local(prospects.string.PageCompany) },
-    { key: 'title', label: local(prospects.string.PageJobTitle) },
-    { key: 'mobile', label: local(prospects.string.PageMobile) },
-    { key: 'phone', label: local(prospects.string.PagePhone) },
-    { key: 'email', label: local(prospects.string.PageEmail) },
-    { key: 'website', label: local(prospects.string.PageWebsite) },
-    { key: 'address', label: local(prospects.string.PageAddress) },
-    { key: 'country', label: local(prospects.string.PageCountry) },
-    { key: 'industry', label: local(prospects.string.PageIndustry) },
-    { key: 'source', label: local(prospects.string.PageSource) },
-    { key: 'notes', label: local(prospects.string.PageNotes) }
-  ]
+  $: fields = visibleProspectFields(templateFields)
+
+  function customValue (field: ProspectFieldDef, edits: Record<string, string>, stored: Prospect['custom']): string {
+    return edits[field.key] ?? formatProspectFieldValue(stored?.[field.key], field.type)
+  }
+
+  function updateCustom (key: string, value: string): void {
+    customDraft = { ...customDraft, [key]: value }
+  }
   onMount(async () => {
     try {
       configured = await recognizerConfigured()
@@ -134,22 +123,41 @@
     error = ''
     review = []
     try {
-      const data = await recognizeCard([front, ...(back === undefined ? [] : [back])])
-      draft = { ...draft, ...data.values }
+      const specs = cardFields(templateFields, local)
+      const data = await recognizeCard([front, ...(back === undefined ? [] : [back])], specs)
+      const extracted = readRecognizedProspectFields(specs, data.values)
+      draft = { ...draft, ...extracted.builtin }
+      for (const field of specs) {
+        const value = extracted.custom[field.key]
+        if (value !== undefined) updateCustom(field.key, formatProspectFieldValue(value, field.type))
+      }
       review = data.needsReview
       model = data.model
       recognizedAt = data.recognizedAt
       recognized = true
     } catch (e) {
       const internal = ['canvas', 'compress', 'read', 'recognize']
-      error = e instanceof Error && !internal.includes(e.message) ? e.message : $t('识别服务连不上')
+      error = e instanceof Error && !internal.includes(e.message) ? $t(e.message) : $t('识别服务连不上')
     } finally {
       busy = false
     }
   }
+  function builtinEdits (): Partial<CardDraft> {
+    const edits: Partial<CardDraft> = {}
+    for (const { key } of fields) {
+      if (isBuiltinProspectField(key)) edits[key] = draft[key]
+    }
+    return edits
+  }
+
+  function draftForSave (): CardDraft {
+    // Hidden built-ins retain their stored values and still participate in duplicate checks.
+    return { ...cardDraft(value), ...builtinEdits() }
+  }
+
   async function checkDuplicates (): Promise<void> {
     const all = await client.findAll(prospects.class.Prospect, {})
-    const found = findDuplicates(draft, all, value?._id)
+    const found = findDuplicates(draftForSave(), all, value?._id)
     duplicate = found.email
     warning =
       found.phones.length > 0
@@ -178,7 +186,8 @@
         error = $t('请上传名片正面。')
         return
       }
-      const normalizedEmail = normalizeEmail(draft.email)
+      const stored = draftForSave()
+      const normalizedEmail = normalizeEmail(stored.email)
       const id = value?._id ?? generateId<Prospect>()
       const ops = client.apply(prospectWriteScope)
       if (normalizedEmail !== '') {
@@ -187,9 +196,27 @@
           ...(value === undefined ? {} : { _id: { $ne: id } })
         })
       }
+      const custom = { ...value?.custom }
+      let hasCustomEdits = false
+      for (const field of fields) {
+        const edit = customDraft[field.key]
+        if (field.builtin || edit === undefined) continue
+        hasCustomEdits = true
+        const changed = parseCustomProspectValue(field, edit)
+        if (changed === undefined) {
+          // An option may have been removed while this dialog was open.
+          if (edit.trim() !== '') continue
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete custom[field.key]
+        } else custom[field.key] = changed
+      }
+      if (value !== undefined && hasCustomEdits) {
+        ops.match(prospects.class.Prospect, { _id: id, modifiedOn: value.modifiedOn })
+      }
       const data = {
-        ...draft,
-        normalizedEmail,
+        ...builtinEdits(),
+        ...(hasCustomEdits ? { custom } : {}),
+        ...(fields.some(({ key }) => key === 'email') ? { normalizedEmail } : {}),
         ...(value?.lead == null && status !== 'converted' ? { status } : {}),
         ...(sourceDate === '' ? {} : { sourceDate: new Date(`${sourceDate}T12:00:00`).getTime() }),
         ...(recognized && model !== undefined
@@ -205,7 +232,7 @@
         await ops.createDoc(
           prospects.class.Prospect,
           core.space.Workspace,
-          { ...data, status, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
+          { ...stored, ...data, normalizedEmail, status, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
           id
         )
       } else {
@@ -311,14 +338,26 @@
     >{#if statusMessage !== ''}<span>{statusMessage}</span>{/if}
     <p><Label label={prospects.string.PageReviewHelp} /></p>
     <div class="fields">
-      {#each fields as field}<label
-          >{field.label}{#if needsReview(field.key)}
-            <strong><Label label={prospects.string.PageVerify} /></strong>{/if}<input
-            disabled={busy}
-            bind:value={draft[field.key]}
-            on:change={checkDuplicatesSafe}
-          /></label
-        >{/each}
+      {#each fields as field (field.key)}
+        {@const custom = customValue(field, customDraft, value?.custom)}
+        <label>
+          {prospectFieldLabel(field, local)}
+          {#if needsReview(field.key)}<strong><Label label={prospects.string.PageVerify} /></strong>{/if}
+          {#if isBuiltinProspectField(field.key)}
+            <input disabled={busy} bind:value={draft[field.key]} on:change={checkDuplicatesSafe} />
+          {:else if field.type === 'select'}
+            <select disabled={busy} value={custom} on:change={(event) => updateCustom(field.key, event.currentTarget.value)}>
+              <option value=""></option>
+              {#if custom !== '' && !field.options?.includes(custom)}<option value={custom}>{custom}</option>{/if}
+              {#each field.options ?? [] as option (option)}<option value={option}>{option}</option>{/each}
+            </select>
+          {:else if field.type === 'date'}
+            <input type="date" disabled={busy} value={custom} on:input={(event) => updateCustom(field.key, event.currentTarget.value)} />
+          {:else}
+            <input disabled={busy} value={custom} on:input={(event) => updateCustom(field.key, event.currentTarget.value)} />
+          {/if}
+        </label>
+      {/each}
       <label><Label label={prospects.string.PageSourceDate} /><input disabled={busy} type="date" bind:value={sourceDate} /></label>
       <label
         ><Label label={prospects.string.PageStatus} /><select disabled={busy || status === 'converted'} bind:value={status}
@@ -350,7 +389,7 @@
       >{/if}
     <footer><button disabled={busy || !moduleCanEdit} on:click={save}>{busy ? $t('处理中…') : $t('确认保存')}</button></footer>
     {#if value !== undefined}
-      <ProspectLeadAction {value} canEdit={moduleCanEdit} disabled={busy}
+      <ProspectLeadAction {value} {templateFields} canEdit={moduleCanEdit} disabled={busy}
         on:converted={() => { status = 'converted' }}
         on:opened={() => dispatch('close')} />
       <MailPanel {value} />

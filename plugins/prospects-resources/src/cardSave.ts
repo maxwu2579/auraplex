@@ -2,25 +2,30 @@
 // Card photo helpers and the "save without review" path used by batch upload.
 import attachment from '@hcengineering/attachment'
 import core, { generateId, getCurrentAccount } from '@hcengineering/core'
-import { getMetadata } from '@hcengineering/platform'
+import { getMetadata, type IntlString } from '@hcengineering/platform'
 import presentation, { getClient, uploadFile } from '@hcengineering/presentation'
-import prospects, { normalizeEmail, prospectWriteScope, type Prospect, type RecognitionField } from '@hcengineering/prospects'
+import prospects, {
+  builtinProspectFields, normalizeEmail, prospectWriteScope, readRecognizedProspectFields, visibleProspectFields,
+  type BuiltinProspectField, type Prospect, type ProspectFieldDef, type RecognitionFieldSpec
+} from '@hcengineering/prospects'
+import { prospectFieldLabel } from './templateFields'
 
-export const cardFields = [
-  'name',
-  'company',
-  'title',
-  'mobile',
-  'phone',
-  'email',
-  'website',
-  'address',
-  'country',
-  'industry',
-  'source',
-  'notes'
-] as const
-export type CardDraft = Record<(typeof cardFields)[number], string>
+export type CardDraft = Record<BuiltinProspectField, string>
+
+export function cardDraft (value?: Partial<CardDraft>): CardDraft {
+  return Object.fromEntries(builtinProspectFields.map((key) => [key, value?.[key] ?? ''])) as CardDraft
+}
+
+export function cardFields (
+  fields: readonly ProspectFieldDef[] | undefined, local: (label: IntlString) => string
+): RecognitionFieldSpec[] {
+  return visibleProspectFields(fields).map((field) => ({
+    key: field.key,
+    label: prospectFieldLabel(field, local) || field.key,
+    type: field.type,
+    ...(field.type === 'select' ? { options: field.options } : {})
+  }))
+}
 
 export function apiHeaders (): Record<string, string> {
   return {
@@ -73,18 +78,18 @@ export async function readUrl (file: File): Promise<string> {
 }
 
 export interface Recognition {
-  values: Partial<CardDraft>
-  needsReview: RecognitionField[]
+  values: Record<string, string>
+  needsReview: string[]
   model?: string
   recognizedAt?: number
 }
 
-export async function recognize (files: File[]): Promise<Recognition> {
+export async function recognize (files: File[], fields: readonly RecognitionFieldSpec[]): Promise<Recognition> {
   const images = await Promise.all(files.map(async (file) => await readUrl(await compressed(file))))
   const res = await fetch('/prospects-api/recognize', {
     method: 'POST',
     headers: apiHeaders(),
-    body: JSON.stringify({ images })
+    body: JSON.stringify({ images, fields })
   })
   const data = await res.json()
   if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'recognize')
@@ -97,23 +102,17 @@ export type AutoSaveResult = 'saved' | 'empty' | 'duplicate' | 'failed'
  * Recognize one card front and save it straight away.
  * Leaves it for a person to check when nothing useful was read or the email already exists.
  */
-export async function autoSaveCard (front: File): Promise<AutoSaveResult> {
-  let recognition: Recognition
+export async function autoSaveCard (front: File, fields: readonly RecognitionFieldSpec[]): Promise<AutoSaveResult> {
   try {
-    recognition = await recognize([front])
-  } catch {
-    return 'failed'
-  }
-  const draft: CardDraft = Object.fromEntries(
-    cardFields.map((key) => [key, String(recognition.values[key] ?? '').trim()])
-  ) as CardDraft
-  if (draft.name === '' && draft.company === '') return 'empty'
-  const client = getClient()
-  const normalizedEmail = normalizeEmail(draft.email)
-  if (normalizedEmail !== '' && (await client.findOne(prospects.class.Prospect, { normalizedEmail })) !== undefined) {
-    return 'duplicate'
-  }
-  try {
+    const recognition = await recognize([front], fields)
+    const { builtin, custom } = readRecognizedProspectFields(fields, recognition.values)
+    const draft = cardDraft(builtin)
+    if (draft.name === '' && draft.company === '') return 'empty'
+    const client = getClient()
+    const normalizedEmail = normalizeEmail(draft.email)
+    if (normalizedEmail !== '' && (await client.findOne(prospects.class.Prospect, { normalizedEmail })) !== undefined) {
+      return 'duplicate'
+    }
     const id = generateId<Prospect>()
     const ops = client.apply(prospectWriteScope)
     if (normalizedEmail !== '') ops.notMatch(prospects.class.Prospect, { normalizedEmail })
@@ -122,6 +121,7 @@ export async function autoSaveCard (front: File): Promise<AutoSaveResult> {
       core.space.Workspace,
       {
         ...draft,
+        ...(Object.keys(custom).length > 0 ? { custom } : {}),
         normalizedEmail,
         status: 'new',
         emailCount: 0,

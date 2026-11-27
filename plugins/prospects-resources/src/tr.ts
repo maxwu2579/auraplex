@@ -28,6 +28,7 @@ export const en: Record<string, string> = {
   '还没有名片。点右上角"手动新增"拍照或上传名片正面，可以一次选多张。': 'No business cards yet. Use "Add manually" or upload card fronts at the top right; you can pick several at once.',
   '正在检查识别服务…': 'Checking the recognition service…',
   识别服务连不上: 'Cannot reach the recognition service',
+  名片字段清单不符合限制: 'The business card fields exceed the recognition limits.',
   识别服务未配置: 'Recognition service not set up',
   无法处理图片: 'Cannot process the picture',
   图片压缩失败: 'Could not compress the picture',

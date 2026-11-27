@@ -61,3 +61,33 @@ export function prospectFieldValue (prospect: Prospect, field: ProspectFieldDef)
   const value = isBuiltinProspectField(field.key) ? prospect[field.key] : prospect.custom?.[field.key]
   return formatProspectFieldValue(value, field.type)
 }
+
+export function parseCustomProspectValue (
+  field: Pick<ProspectFieldDef, 'type' | 'options'>,
+  raw: string
+): string | number | undefined {
+  const value = raw.trim()
+  if (value === '') return undefined
+  if (field.type === 'date') return parseProspectDate(value)
+  if (field.type === 'select' && field.options?.includes(value) !== true) return undefined
+  return value
+}
+
+/** Apply the requested field list even when talking to a recognizer that ignores it. */
+export function readRecognizedProspectFields (
+  fields: readonly Pick<ProspectFieldDef, 'key' | 'type' | 'options'>[],
+  values: Record<string, unknown>
+): { builtin: Partial<Record<BuiltinProspectField, string>>, custom: Record<string, string | number> } {
+  const builtin: Partial<Record<BuiltinProspectField, string>> = {}
+  const custom: Record<string, string | number> = {}
+  for (const field of fields) {
+    const raw = values[field.key]
+    if (typeof raw !== 'string' || raw.trim() === '') continue
+    if (isBuiltinProspectField(field.key)) builtin[field.key] = raw.trim()
+    else if (isCustomProspectField(field.key)) {
+      const value = parseCustomProspectValue(field, raw)
+      if (value !== undefined) custom[field.key] = value
+    }
+  }
+  return { builtin, custom }
+}

@@ -4,13 +4,14 @@
   import type { IntlString } from '@hcengineering/platform'
   import leadPlugin from '@hcengineering/lead'
   import { getClient } from '@hcengineering/presentation'
-  import prospects, { type Prospect } from '@hcengineering/prospects'
+  import prospects, { type Prospect, type ProspectFieldDef } from '@hcengineering/prospects'
   import { Label } from '@hcengineering/ui'
   import { openDocFromRef } from '@hcengineering/view-resources'
   import { createEventDispatcher } from 'svelte'
   import { convertToLead, LeadConversionTimeout } from '../convertToLead'
 
   export let value: Prospect
+  export let templateFields: readonly ProspectFieldDef[] | undefined = undefined
   export let canEdit: boolean
   export let disabled: boolean = false
 
@@ -26,7 +27,7 @@
     busy = true
     error = undefined
     try {
-      converted = await convertToLead(client, value._id, getCurrentAccount().uuid)
+      converted = await convertToLead(client, value._id, getCurrentAccount().uuid, templateFields)
       dispatch('converted', converted)
     } catch (err) {
       error = err instanceof LeadConversionTimeout ? prospects.string.PageLeadTimeout : prospects.string.PageLeadFailed

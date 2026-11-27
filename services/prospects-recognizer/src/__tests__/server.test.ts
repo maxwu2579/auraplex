@@ -128,3 +128,46 @@ test('rejects missing credentials and validates AI output', async () => {
   expect(result.needsReview).toContain('email')
   expect(result.values.ignored).toBeUndefined()
 })
+
+async function recognizeWithFields (fields: unknown): Promise<Response> {
+  return await fetch(base + '/api/recognize', {
+    method: 'POST',
+    headers: { authorization: 'Bearer test', 'content-type': 'application/json' },
+    body: JSON.stringify({ images: ['data:image/jpeg;base64,YQ=='], fields })
+  })
+}
+
+test.each([
+  Array.from({ length: 41 }, (_, index) => ({ key: 'c_' + index, label: 'Sample', type: 'text' })),
+  [{ key: 'name', label: 'X'.repeat(81), type: 'text' }],
+  [{ key: 'c_color', label: 'Color', type: 'select', options: [] }],
+  [{ key: 'unknown', label: 'Unknown', type: 'text' }],
+  [{ key: 'name', label: 'Name', type: 'text' }, { key: 'name', label: 'Duplicate', type: 'text' }]
+])('rejects invalid template fields before contacting the model %#', async (...fields) => {
+  expect((await recognizeWithFields(fields)).status).toBe(400)
+  expect(request).not.toHaveBeenCalled()
+})
+
+test('requests only the submitted fields and discards unlisted keys and invalid values', async () => {
+  const fields = [
+    { key: 'name', label: 'Contact name', type: 'text' },
+    { key: 'c_meeting', label: 'Meeting date', type: 'date' },
+    { key: 'c_due', label: 'Follow-up', type: 'date' },
+    { key: 'c_city', label: 'City', type: 'select', options: ['Example City'] },
+    { key: 'c_category', label: 'Category', type: 'select', options: ['Allowed'] }
+  ]
+  const content = JSON.stringify({
+    name: 'Test Person', c_meeting: '2026-11-27', c_due: '2026-02-29',
+    c_city: 'Example City', c_category: 'Invented', email: 'hidden@example.test', unforeseen: 'not requested'
+  })
+  request.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content } }] })))
+  const res = await recognizeWithFields(fields)
+  expect(res.status).toBe(200)
+  const result = await res.json()
+  expect(result.values).toEqual({ name: 'Test Person', c_meeting: '2026-11-27', c_due: '', c_city: 'Example City', c_category: '' })
+  expect(result.needsReview).toEqual(['c_due', 'c_category'])
+  const sent = JSON.parse(request.mock.calls[0][1].body)
+  const prompt = sent.messages[0].content[0].text
+  expect(prompt).toContain(JSON.stringify(fields))
+  expect(prompt).toContain('YYYY-MM-DD')
+})

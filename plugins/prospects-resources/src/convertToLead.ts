@@ -20,6 +20,9 @@ import lead, { type Customer, type Funnel, type Lead } from '@hcengineering/lead
 import prospects, {
   normalizeEmail,
   prospectMailStatus,
+  prospectFieldValue,
+  visibleProspectFields,
+  type ProspectFieldDef,
   prospectWriteScope,
   type Prospect
 } from '@hcengineering/prospects'
@@ -45,7 +48,8 @@ export class LeadConversionTimeout extends Error {
 export async function convertToLead (
   client: TxOperations,
   prospectId: Ref<Prospect>,
-  actor: AccountUuid
+  actor: AccountUuid,
+  templateFields?: readonly ProspectFieldDef[]
 ): Promise<Ref<Lead>> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -57,7 +61,7 @@ export async function convertToLead (
     }, 20_000)
   })
   try {
-    return await Promise.race([convert(client, prospectId, actor, controller.signal), timeout])
+    return await Promise.race([convert(client, prospectId, actor, controller.signal, templateFields), timeout])
   } finally {
     clearTimeout(timer)
   }
@@ -67,7 +71,8 @@ async function convert (
   client: TxOperations,
   prospectId: Ref<Prospect>,
   actor: AccountUuid,
-  signal: AbortSignal
+  signal: AbortSignal,
+  templateFields?: readonly ProspectFieldDef[]
 ): Promise<Ref<Lead>> {
   const prospect = await client.findOne(prospects.class.Prospect, { _id: prospectId })
   if (prospect === undefined) throw new Error('Business card is unavailable')
@@ -214,20 +219,23 @@ async function convert (
   const incremented = await client.update(sequence, { $inc: { sequence: 1 } }, true)
   const number = (incremented as { object?: { sequence: number } }).object?.sequence
   if (typeof number !== 'number') throw new Error('Lead number could not be allocated')
+  const builtinLabels = new Map([
+    ['title', '职位 / Job title'], ['country', '国家 / Country'], ['industry', '行业 / Industry'],
+    ['source', '来源 / Source'], ['notes', '备注 / Notes']
+  ])
   const description = jsonToMarkup({
     type: MarkupNodeType.doc,
-    content: [
-      ['职位 / Job title', prospect.title],
-      ['国家 / Country', prospect.country],
-      ['行业 / Industry', prospect.industry],
-      ['来源 / Source', prospect.source],
-      ['备注 / Notes', prospect.notes]
-    ]
-      .filter(([, value]) => value?.trim())
-      .map(([label, value]) => ({
+    content: visibleProspectFields(templateFields).flatMap((field) => {
+      const builtinLabel = builtinLabels.get(field.key)
+      if (field.builtin && builtinLabel === undefined) return []
+      const value = prospectFieldValue(prospect, field).trim()
+      if (value === '') return []
+      const label = field.label || builtinLabel || field.key
+      return [{
         type: MarkupNodeType.paragraph,
-        content: [{ type: MarkupNodeType.text, text: `${label}: ${value}` }]
-      }))
+        content: [{ type: MarkupNodeType.text, text: label + ': ' + value }]
+      }]
+    })
   })
   await ops.addCollection(
     lead.class.Lead,

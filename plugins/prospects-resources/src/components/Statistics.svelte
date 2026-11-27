@@ -3,11 +3,15 @@
   import { languageStore } from '@hcengineering/ui'
   import { Label } from '@hcengineering/ui'
 
-  import prospects, { prospectStats, type Prospect } from '@hcengineering/prospects'
+  import prospects, { prospectStats, visibleProspectFields, type Prospect, type ProspectTemplate } from '@hcengineering/prospects'
   import { createQuery } from '@hcengineering/presentation'
   import { getCurrentLocation, navigate } from '@hcengineering/ui'
   import { prospectFilter, type ProspectFilter } from '../filter'
+  import { prospectFieldLabel, watchProspectTemplate } from '../templateFields'
+
   const query = createQuery()
+  let template: ProspectTemplate | undefined
+  watchProspectTemplate((value) => { template = value })
   let records: Prospect[] = []
   query.query(prospects.class.Prospect, {}, (items) => {
     records = items
@@ -42,12 +46,13 @@
     converted: local(prospects.string.PageConverted)
   }
   let groups: Array<{ key: 'source' | 'country' | 'industry' | 'status', title: string }>
-  $: groups = [
-    { key: 'source', title: local(prospects.string.PageSource) },
-    { key: 'country', title: local(prospects.string.PageCountry) },
-    { key: 'industry', title: local(prospects.string.PageIndustry) },
-    { key: 'status', title: local(prospects.string.PageStatus) }
-  ]
+  $: groups = visibleProspectFields(template?.fields).flatMap((field) => {
+    const { key } = field
+    return key === 'source' || key === 'country' || key === 'industry'
+      ? [{ key, title: prospectFieldLabel(field, local) }]
+      : []
+  })
+  $: groupsWithStatus = [...groups, { key: 'status', title: local(prospects.string.PageStatus) } as const]
 </script>
 
 <div class="page">
@@ -67,7 +72,7 @@
       }}><Label label={prospects.string.PageMonth} /> {stats.month}</button
     >
   </div>
-  {#each groups as group}
+  {#each groupsWithStatus as group}
     <h2>{group.title}</h2>
     <div class="summary">
       {#each Object.entries(stats[group.key]) as [key, count]}<button

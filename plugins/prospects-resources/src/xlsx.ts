@@ -1,7 +1,18 @@
 // Copyright © 2026 Auraplex
 // Licensed under the Eclipse Public License, Version 2.0.
 // https://www.eclipse.org/legal/epl-2.0
+import { prospectFieldValue, visibleProspectFields, type Prospect, type ProspectFieldDef } from '@hcengineering/prospects'
 import { strToU8, zipSync } from 'fflate'
+
+export function prospectTemplateColumns (
+  fields: readonly ProspectFieldDef[] | undefined, label: (field: ProspectFieldDef) => string
+): Array<{ field: ProspectFieldDef, label: string, read: (prospect: Prospect) => string }> {
+  return visibleProspectFields(fields).map((field) => ({
+    field,
+    label: label(field),
+    read: (prospect) => prospectFieldValue(prospect, field)
+  }))
+}
 
 export type Cell = string | number | undefined
 /** Row colours. The first row of every sheet is the heading and is always bold. */

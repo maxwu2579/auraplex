@@ -3,7 +3,7 @@
 import contact from '@hcengineering/contact'
 import core, { type AccountUuid, type Ref, type TxOperations } from '@hcengineering/core'
 import lead from '@hcengineering/lead'
-import prospects, { type Prospect } from '@hcengineering/prospects'
+import prospects, { defaultProspectFields, type Prospect } from '@hcengineering/prospects'
 import task from '@hcengineering/task'
 import { convertToLead, LeadConversionTimeout } from '../convertToLead'
 
@@ -239,4 +239,22 @@ test('a stalled commit times out instead of leaving the conversion pending', asy
   } finally {
     jest.useRealTimers()
   }
+})
+
+test('lead description uses visible custom fields and formats dates from the template', async () => {
+  const { client, rawClient, ops, prospect } = fixture('')
+  const card = {
+    ...prospect,
+    custom: { c_visit: Date.UTC(2026, 10, 27), c_hidden: 'Private note', c_removed: 'Removed earlier' }
+  }
+  rawClient.findOne.mockResolvedValueOnce(card)
+  await convertToLead(client, id, actor, [
+    ...defaultProspectFields.map((field) => ({ ...field, hidden: field.key === 'country' })),
+    { key: 'c_visit', builtin: false, label: 'Visit', type: 'date', hidden: false, order: 12 },
+    { key: 'c_hidden', builtin: false, label: 'Hidden', type: 'text', hidden: true, order: 13 }
+  ])
+  const leadWrite = ops.addCollection.mock.calls.find(([cls]) => cls === lead.class.Lead)
+  const description: string = leadWrite?.[5].description
+  expect(description).toContain('Visit: 2026-11-27')
+  expect(description).not.toMatch(/Private note|Removed earlier|Country: SG/)
 })
