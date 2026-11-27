@@ -3,6 +3,7 @@
   import departments, { singaporeZone, taskDayMs, type ScheduledTask } from '@hcengineering/departments'
   import core, { getCurrentAccount } from '@hcengineering/core'
   import { departmentModuleLevel, getClient } from '@hcengineering/presentation'
+  import processModel from '@hcengineering/process'
   import type { ToDo } from '@hcengineering/time'
   import { Label, languageStore } from '@hcengineering/ui'
 
@@ -37,6 +38,7 @@
     }
   }
 
+  $: actionableTodo = item.kind === 'todo' && !client.getHierarchy().isDerived(item.source._class, processModel.class.ProcessToDo)
   $: due = item.due === undefined ? '' : new Intl.DateTimeFormat($languageStore, {
     dateStyle: 'medium', timeStyle: 'short', timeZone: singaporeZone
   }).format(item.due)
@@ -51,7 +53,7 @@
   {#if overdue && item.due !== undefined}
     <span><Label label={s.OrderOverdueDays} params={{ count: Math.ceil((now - item.due) / taskDayMs) }} /></span>
   {/if}
-  {#if actions && item.kind === 'todo' && item.assignee === me}
+  {#if actions && actionableTodo && item.assignee === me}
     <label><input type="checkbox" checked={false} disabled={busy} on:change={(event) => {
       event.currentTarget.checked = false
       void finish()

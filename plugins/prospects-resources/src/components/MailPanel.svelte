@@ -13,11 +13,38 @@
   import presentation, { createQuery, getClient } from '@hcengineering/presentation'
   import prospects, { prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type Prospect, type ProspectMail } from '@hcengineering/prospects'
   import { onMount } from 'svelte'
+  import { mailAutomationRequest } from '../mailAutomation'
 
   /** Mail for one customer: owner, sending, history and forwarding replies to the owner. */
   export let value: Prospect
 
   const client = getClient()
+  interface QueueState {
+    intro: Array<{ id: string }>
+    campaign?: { id: string, status: string, pending: Array<{ id: string }> }
+  }
+  let queueState: QueueState | undefined
+  let cancelBusy = false
+  $: introQueued = queueState?.intro.some((item) => item.id === value._id) === true
+  $: campaignQueued = (queueState?.campaign?.status === 'active' || queueState?.campaign?.status === 'paused') &&
+    queueState?.campaign?.pending.some((item) => item.id === value._id) === true
+  async function loadQueue (): Promise<void> {
+    if (!moduleCanEdit) return
+    try { queueState = await mailAutomationRequest<QueueState>() } catch {}
+  }
+  async function cancelQueued (kind: 'intro' | 'campaign'): Promise<void> {
+    if (cancelBusy) return
+    cancelBusy = true
+    try {
+      await mailAutomationRequest({ op: kind === 'intro' ? 'remove-intro' : 'remove-campaign', id: value._id, campaign: queueState?.campaign?.id })
+      await loadQueue()
+    } catch {
+      error = await translate(prospects.string.AutoMailFailed, {}, $languageStore)
+    } finally {
+      cancelBusy = false
+    }
+  }
+  onMount(() => { void loadQueue() })
   let configured = false
   let address = ''
   let lastPoll: { at: number, ok: boolean, error?: string } | undefined
@@ -179,6 +206,16 @@
 </script>
 
 <section class="mail">
+  {#if introQueued || campaignQueued}
+    <p>
+      <Label label={introQueued ? prospects.string.AutoMailQueuedIntro : prospects.string.AutoMailQueuedCampaign} />
+      {#if moduleCanEdit}
+        <button disabled={cancelBusy} on:click={() => cancelQueued(introQueued ? 'intro' : 'campaign')}>
+          <Label label={prospects.string.AutoMailCancel} />
+        </button>
+      {/if}
+    </p>
+  {/if}
   <h3><Label label={prospects.string.PageMail} /></h3>
   <p class="hint">
     {#if statusMessage !== ''}{statusMessage}{:else}发件邮箱：{address}{#if lastPoll !== undefined}

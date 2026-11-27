@@ -164,6 +164,7 @@ export class AutomatedMail {
     now: number, sender: Sender, onFailure: () => void,
     onComplete: (campaign: MailCampaign, sent: number) => Promise<void>
   ): Promise<void> {
+    const started = Date.now()
     let control = await this.read()
     if (control === undefined) return
     const { customers, intro, mail } = await this.snapshot(control)
@@ -184,7 +185,7 @@ export class AutomatedMail {
     const candidates = [...queue, ...campaignQueue]
     // Every hour has a fixed set of database-backed slots shared by both queues.
     for (const slot of mailSlots(now, control.settings.limit)) {
-      if (candidates.length === 0) break
+      if (candidates.length === 0 || singaporeClock(now + Date.now() - started).time.slice(0, 2) !== singaporeClock(now).time.slice(0, 2)) break
       if (!await this.records.claim('prospect-slot', date, String(slot))) continue
       while (candidates.length > 0) {
         const item = candidates.shift()
@@ -237,7 +238,7 @@ export class AutomatedMail {
     }
     try {
       // A deterministic request ID is recorded by Sender before contacting SMTP.
-      await sender.send(actor, fresh._id, `${key}-${fresh._id}`, message.subject, message.body, { kind, campaign: campaign?.id && kind === 'campaign' ? campaign.id : undefined })
+      await sender.send(actor, fresh._id, `${key}-${fresh._id}`, message.subject, message.body, { kind, campaign: kind === 'campaign' ? campaign?.id : undefined, revision: current.modifiedOn })
     } catch {
       onFailure()
       await this.removeAttempt(kind, fresh._id, campaign?.id)

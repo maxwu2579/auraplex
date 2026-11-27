@@ -200,6 +200,10 @@ export default plugin(departmentsId, {
     OrderTitle: '' as Resource<(client: Client, ref: Ref<Doc>, doc?: Doc) => Promise<string>>
   },
   string: {
+    TaskMailOverdue: '' as IntlString,
+    TaskMailDueToday: '' as IntlString,
+    TaskMailActiveOrders: '' as IntlString,
+    TaskMailPendingApproval: '' as IntlString,
     TodayTasks: '' as IntlString,
     MyDepartmentTasks: '' as IntlString,
     TaskEmpty: '' as IntlString,

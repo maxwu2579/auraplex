@@ -19,7 +19,7 @@ export class Sender {
     private readonly address: string
   ) {}
 
-  async send (actor: AccountUuid, prospectId: string, requestId: string, subject: string, body: string, automatic?: { kind: 'intro' | 'campaign', campaign?: string }): Promise<void> {
+  async send (actor: AccountUuid, prospectId: string, requestId: string, subject: string, body: string, automatic?: { kind: 'intro' | 'campaign', campaign?: string, revision: number }): Promise<void> {
     const id = stableMailId('out', requestId)
     const existing = await this.client.findOne(prospects.class.ProspectMail, { _id: id })
     if (existing !== undefined) {
@@ -35,6 +35,9 @@ export class Sender {
     const ops = this.client.apply(prospectWriteScope)
     ops.match(prospects.class.Prospect, { _id: prospect._id, email: prospect.email, modifiedOn: prospect.modifiedOn })
     ops.notMatch(prospects.class.ProspectMail, { _id: id })
+    if (automatic !== undefined) {
+      ops.match(prospects.class.MailAutomation, { _id: prospects.ids.MailAutomation, modifiedOn: automatic.revision })
+    }
     if (automatic?.kind === 'intro') ops.notMatch(prospects.class.ProspectMail, { attachedTo: prospect._id, direction: 'outgoing' })
     // An unresolved SMTP result may have been delivered. Never start another
     // attempt for this customer until that result has been investigated.

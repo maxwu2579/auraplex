@@ -13,7 +13,7 @@ export const departmentModuleSettingsClass = 'departments:class:ModuleSettings'
 export const departmentModuleGrantClass = 'departments:class:ModuleGrant'
 export const departmentModuleSettingsId = 'departments:ids:ModuleSettings'
 
-const alwaysAvailable = ['inbox', 'chunter', 'departments', 'time', 'calendar', 'setting', 'applications']
+const alwaysAvailable = ['today-tasks', 'inbox', 'chunter', 'departments', 'time', 'calendar', 'setting', 'applications']
 export const moduleRoles = ['admin', 'supervisor', 'employee', 'reader'] as const
 export type ModuleRole = typeof moduleRoles[number]
 export type ModuleLevel = 'none' | 'view' | 'edit'

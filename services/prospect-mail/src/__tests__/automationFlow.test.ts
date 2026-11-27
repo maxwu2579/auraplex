@@ -1,4 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import type { ImapFlow } from 'imapflow'
 import { SMTPServer } from 'smtp-server'
 import nodemailer from 'nodemailer'
 import type { AccountClient, IntegrationSecret } from '@hcengineering/account-client'
@@ -9,6 +10,7 @@ import prospects, { defaultAutomation } from '@hcengineering/prospects'
 import time from '@hcengineering/time'
 import { AutomatedMail, mailSlots } from '../automatedMail'
 import { Forwarder } from '../forwarder'
+import { pollInbox, type Cursor } from '../poller'
 import { Receiver } from '../receiver'
 import { forwardPendingReplies } from '../replyForwarder'
 import { ScheduledRecords } from '../scheduledRecords'
@@ -145,8 +147,31 @@ test('new card to fake SMTP, reply notification, one forward each and follow-up,
       uidValidity: 'fake-inbox', uid: 1, messageId: '<reply@example.test>', from: customer.email,
       subject: 'Re: Hello', text: 'What are your prices?', sentAt: Date.now(), references: [outgoing?.messageId]
     }
-    expect(await receiver.accept(reply)).toBe('recorded')
+    const source = Buffer.from([
+      'From: customer@example.test',
+      'To: company@example.test',
+      'Date: ' + new Date(reply.sentAt).toUTCString(),
+      'Message-ID: ' + reply.messageId,
+      'In-Reply-To: ' + outgoing?.messageId,
+      'Subject: ' + reply.subject,
+      'Content-Type: text/plain; charset=utf-8',
+      '', reply.text
+    ].join('\r\n'))
+    let cursor: Cursor = { uidValidity: 'fake-inbox', uid: 0 }
+    const imap = {
+      connect: async () => {}, logout: async () => {},
+      mailboxOpen: async () => ({ uidValidity: 'fake-inbox' }),
+      search: async () => [1],
+      fetchOne: async () => ({ size: source.length, source })
+    } as unknown as ImapFlow
+    await pollInbox(imap, {
+      read: async () => cursor,
+      write: async (next) => { cursor = next },
+      accept: async (incoming) => await receiver.accept(incoming)
+    })
+    expect(cursor.uid).toBe(1)
     expect(await receiver.accept(reply)).toBe('duplicate')
+    expect(await receiver.accept({ ...reply, uid: 10, messageId: '<wrong@example.test>', from: 'wrong@example.test' })).toBe('unmatched')
     expect(rows.get(notification.class.CommonInboxNotification)).toHaveLength(2)
     expect(rows.get(time.class.ToDo)).toHaveLength(1)
     const forwarder = new Forwarder(client, transport, 'company@example.test')
@@ -167,4 +192,49 @@ test('new card to fake SMTP, reply notification, one forward each and follow-up,
     transport.close()
     await new Promise<void>((resolve) => { smtp.close(() => { resolve() }) })
   }
+})
+
+
+test('an active campaign freezes recipients and gives the first available slot to introductions', async () => {
+  const { client, rows } = storage()
+  const account = fakeRecords()
+  const first = new AutomatedMail(client, new ScheduledRecords(workspace, account))
+  const second = new AutomatedMail(client, new ScheduledRecords(workspace, account))
+  const start = monday - 4 * 86_400_000
+  await first.action(owner, { op: 'settings', settings: {
+    ...defaultAutomation, enabled: true, limit: 8, language: 'en', en: { subject: 'Hello', body: 'Welcome' }
+  } }, start)
+  const make = (id: string, createdOn: number): FakeDoc => ({
+    _id: id, _class: prospects.class.Prospect, name: id, owner, createdOn, modifiedOn: 50,
+    email: id + '@example.test', normalizedEmail: id + '@example.test', status: 'new', emailCount: 0
+  })
+  const old = make('old', start - 1)
+  rows.set(prospects.class.Prospect, [old])
+  await first.action(owner, { op: 'create', start: '2026-11-30', title: 'Fake campaign',
+    template: { subject: 'Sale', body: 'Details' } }, start)
+  const scheduled = (await first.dashboard(monday)).campaign as { id: string, customers: string[] }
+  expect(scheduled.customers).toEqual(['old'])
+  rows.get(prospects.class.Prospect)?.push(make('newcomer', start + 1))
+  await expect(first.action(owner, { op: 'create', start: '2026-11-30', title: 'Second',
+    template: { subject: 'Second', body: 'Details' } }, start)).rejects.toThrow()
+  const mail: FakeDoc[] = []
+  rows.set(prospects.class.ProspectMail, mail)
+  const sent = jest.fn(async (_actor: AccountUuid, prospectId: string, _id: string, _subject: string, _body: string,
+    auto: { kind: string, campaign?: string }) => {
+    mail.push({ attachedTo: prospectId, direction: 'outgoing', delivery: 'sent', automation: auto.kind, campaign: auto.campaign, sentAt: monday })
+  })
+  const sender = { send: sent } as unknown as Sender
+  const onFinish = jest.fn()
+  const onProblem = jest.fn()
+  await first.check(monday, sender, onProblem, onFinish)
+  expect(mail.map(({ attachedTo }) => attachedTo)).toEqual(['newcomer'])
+  await first.action(owner, { op: 'pause', campaign: scheduled.id }, monday)
+  await second.check(monday + 3_600_000, sender, onProblem, onFinish)
+  expect(mail).toHaveLength(1)
+  await first.action(owner, { op: 'resume', campaign: scheduled.id }, monday)
+  await second.check(monday + 3_600_000, sender, onProblem, onFinish)
+  await first.check(monday + 7_200_000, sender, onProblem, onFinish)
+  expect(mail.map(({ attachedTo }) => attachedTo)).toEqual(['newcomer', 'old'])
+  expect(onFinish).toHaveBeenCalledTimes(1)
+  expect(onFinish.mock.calls[0][1]).toBe(1)
 })

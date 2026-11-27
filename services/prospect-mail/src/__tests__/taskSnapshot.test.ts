@@ -1,4 +1,6 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
+import card from '@hcengineering/card'
+import { getEmbeddedLabel } from '@hcengineering/platform'
 import contact from '@hcengineering/contact'
 import core, { type TxOperations } from '@hcengineering/core'
 import departments from '@hcengineering/departments'
@@ -14,7 +16,7 @@ test('uses order stages, unfinished tracker issues and open planner items includ
   const yesterday = now - 86_400_000
   const person = { _id: 'employee-1', personUuid: 'fake-account', active: true }
   const approval = {
-    _id: 'approval-1', _class: processModel.class.ApproveRequest, user: person._id, title: 'Approve application'
+    _id: 'approval-1', _class: processModel.class.ApproveRequest, card: 'fake-form', user: person._id, title: 'Approve application'
   }
   const fixture = new Map([
     [departments.class.Order as string, [{
@@ -29,13 +31,14 @@ test('uses order stages, unfinished tracker issues and open planner items includ
     [core.class.Status, [{ _id: 'done' }]],
     [time.class.ToDo, [{ _id: 'todo-1', _class: time.class.ToDo, user: person._id, dueDate: yesterday, title: 'Follow up' }]],
     [processModel.class.ApproveRequest, [approval]],
+    [card.class.Card, [{ _id: 'fake-form', _class: 'type:expense', title: 'Lunch' }]],
     [contact.class.Person, [person]],
     [hr.class.Department, []],
     [contact.class.PersonSpace, []]
   ] as Array<[string, object[]]>)
   const client = {
     findAll: jest.fn(async (key: string) => fixture.get(key) ?? []),
-    getHierarchy: () => ({ hasMixin: () => true, as: (doc: unknown) => doc })
+    getHierarchy: () => ({ hasMixin: () => true, as: (doc: unknown) => doc, findClass: () => ({ label: getEmbeddedLabel('Expense') }) })
   } as unknown as TxOperations
   const base = 'https://team.test/workbench/fake-workspace'
   const snapshot = await taskSnapshot(client, base, now + 1000, true)
@@ -43,7 +46,7 @@ test('uses order stages, unfinished tracker issues and open planner items includ
   expect(client.findAll).toHaveBeenCalledWith(processModel.class.ApproveRequest, { doneOn: null })
   const rows = digestRows(snapshot.tasks, snapshot.employees[0].personUuid!, now, now + 1000)
   expect(rows.map(({ title, section }) => [title, section])).toEqual([
-    ['ORD-0001 Widget · Design', 0], ['TEST-1 In progress', 0], ['Follow up', 0], ['Approve application', 3]
+    ['ORD-0001 Widget · Design', 0], ['TEST-1 In progress', 0], ['Follow up', 0], ['Expense: Lunch', 3]
   ])
   expect(rows[0].href).toContain(encodeURIComponent('departments:component:OrderPanel|order-1'))
   expect(rows[1].href).toBe(base + '/tracker/TEST-1')

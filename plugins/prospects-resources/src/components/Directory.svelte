@@ -7,7 +7,8 @@
   import { departmentModuleLevel } from '@hcengineering/presentation'
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import { isOwnerOrMaintainer } from '@hcengineering/core'
-  import prospects, { type Prospect, type ProspectStatus, type ProspectTemplate } from '@hcengineering/prospects'
+  import time, { type ToDo } from '@hcengineering/time'
+  import prospects, { introCandidates, marketingEmail, type MailAutomation, type Prospect, type ProspectMail, type ProspectStatus, type ProspectTemplate } from '@hcengineering/prospects'
   import { createQuery, getClient } from '@hcengineering/presentation'
   import { createWorkbook, datedFilename, downloadWorkbook, prospectTemplateColumns } from '../xlsx'
   import { recordExport } from '../audit'
@@ -20,6 +21,22 @@
   const query = createQuery()
   const client = getClient()
   let all: Prospect[] = []
+  let automation: MailAutomation | undefined
+  let outgoing: ProspectMail[] = []
+  let openFollowUps: ToDo[] = []
+  createQuery().query(prospects.class.MailAutomation, { _id: prospects.ids.MailAutomation }, (docs) => { automation = docs[0] })
+  createQuery().query(prospects.class.ProspectMail, { direction: 'outgoing' }, (docs) => { outgoing = docs })
+  createQuery().query(time.class.ToDo, { attachedToClass: prospects.class.Prospect, collection: 'replyFollowUps', doneOn: null },
+    (docs) => { openFollowUps = docs })
+  $: replyPending = new Set(openFollowUps.map((item) => item.attachedTo))
+  $: introQueued = new Set(automation?.enrolledFrom === undefined ? [] : introCandidates(
+    all, automation.enrolledFrom, new Set(automation.removed), new Set(outgoing.map((mail) => mail.attachedTo))
+  ).map((item) => item._id))
+  $: campaign = automation?.campaign
+  $: campaignSent = new Set(outgoing.filter((mail) => mail.campaign === campaign?.id && mail.campaign !== undefined).map((mail) => mail.attachedTo))
+  $: campaignQueued = new Set(campaign?.status === 'active' || campaign?.status === 'paused'
+    ? campaign.customers.filter((id) => !campaign.removed.includes(id) && !campaignSent.has(id)) : [])
+  $: autoSent = new Set(outgoing.filter((mail) => mail.automation !== undefined && mail.delivery === 'sent').map((mail) => mail.attachedTo))
   let template: ProspectTemplate | undefined
   let templateReady = false
   watchProspectTemplate((value) => {
@@ -99,7 +116,7 @@
       (p) =>
         searchColumns.map((column) => column.read(p))
           .join(' ').toLowerCase().includes(search.trim().toLowerCase()) &&
-        matches(p.status, status) &&
+        (status === 'reply-pending' ? replyPending.has(p._id) : matches(p.status, status)) &&
         (sourceColumn === undefined || matches(p.source, source)) &&
         (countryColumn === undefined || matches(p.country, country)) &&
         (industryColumn === undefined || matches(p.industry, industry)) &&
@@ -284,7 +301,8 @@
   <div class="filters">
     <input placeholder={local(prospects.string.PageSearch)} bind:value={search} /><label
       ><Label label={prospects.string.PageStatus} /><select bind:value={status}
-        ><option value="">{local(prospects.string.PageAll)}</option>{#each Object.entries(statuses) as [key, label]}<option value={key}
+        ><option value="">{local(prospects.string.PageAll)}</option>
+        <option value="reply-pending">{local(prospects.string.AutoMailReplyPending)}</option>{#each Object.entries(statuses) as [key, label]}<option value={key}
             >{label}</option
           >{/each}</select
       ></label
@@ -346,7 +364,15 @@
                 {/if}
               </td>
             {/each}
-            <td>{statuses[item.status] ?? item.status}</td
+            <td>
+              {statuses[item.status] ?? item.status}
+              {#if replyPending.has(item._id)}<span class="reply-pending">● <Label label={prospects.string.AutoMailReplyPending} /></span>{/if}
+              {#if introQueued.has(item._id)}<span class="mail-state"><Label label={prospects.string.AutoMailQueuedIntro} /></span>{/if}
+              {#if campaignQueued.has(item._id) && marketingEmail(item) !== undefined && !introQueued.has(item._id)}
+                <span class="mail-state"><Label label={prospects.string.AutoMailQueuedCampaign} /></span>
+              {/if}
+              {#if autoSent.has(item._id)}<span class="mail-state"><Label label={prospects.string.AutoMailSent} /></span>{/if}
+            </td
             ><td
               ><button
                 on:click={() => {
@@ -380,6 +406,8 @@
     color: var(--theme-content-color);
   }
   header,
+  .reply-pending { display: block; color: var(--theme-error-color); }
+  .mail-state { display: block; color: var(--theme-content-color); }
   .filters,
   section {
     display: flex;
