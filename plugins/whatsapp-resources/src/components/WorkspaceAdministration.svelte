@@ -193,6 +193,14 @@
     expanded = new Set(expanded)
   }
 
+  // Service settings: each block (WhatsApp, card AI, mail) opens on click; all start closed.
+  let openParts = new Set<string>()
+  function part (name: string): void {
+    if (openParts.has(name)) openParts.delete(name)
+    else openParts.add(name)
+    openParts = new Set(openParts)
+  }
+
   function toggle (id: string): void {
     if (supervisors.has(id)) supervisors.delete(id)
     else supervisors.add(id)
@@ -209,8 +217,8 @@
       {#if allowed}<Button label={s.Supervision} selected={section === 'supervision'} on:click={() => { void open('supervision') }} />{/if}
     </div>
     {#if section === 'settings' && settings !== undefined}
-      <h3>WhatsApp (WAHA)</h3>
-      <form on:submit|preventDefault={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })}>
+      <button type="button" class="part" on:click={() => { part('waha') }}><span>{openParts.has('waha') ? '▾' : '▸'}</span> WhatsApp (WAHA)</button>
+      {#if openParts.has('waha')}<form on:submit|preventDefault={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })}>
         <label><Label label={s.WahaAddress} /><input type="url" bind:value={url} /></label>
         <label><Label label={s.WahaAdminKey} /> <span>{#if settings.wahaApiKey}{settings.wahaApiKey}{:else}<Label label={s.SecretUnset} />{/if}</span>
           <input type="password" bind:value={key} autocomplete="new-password" />
@@ -240,9 +248,9 @@
           {/each}
         </div>
         <Button label={s.Save} kind="primary" disabled={busy} on:click={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })} />
-      </form>
-      <h3><Label label={s.RecognizerService} /></h3>
-      <form on:submit|preventDefault={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })}>
+      </form>{/if}
+      <button type="button" class="part" on:click={() => { part('ai') }}><span>{openParts.has('ai') ? '▾' : '▸'}</span> <Label label={s.RecognizerService} /></button>
+      {#if openParts.has('ai')}<form on:submit|preventDefault={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })}>
         <label><Label label={s.ServiceAddress} /><input type="url" bind:value={aiUrl} /></label>
         <label><Label label={s.ServiceModel} /><input bind:value={aiModel} /></label>
         <label><Label label={s.ServiceSecret} /> {#if settings.aiKey}{settings.aiKey}{:else}<Label label={s.SecretUnset} />{/if}
@@ -251,9 +259,9 @@
         <Button label={s.ClearServiceKey} disabled={busy} on:click={() => save({ aiKey: null })} />
         <Button label={s.Save} kind="primary" disabled={busy}
           on:click={() => save({ aiUrl: aiUrl || null, aiModel: aiModel || null, ...(aiKey === '' ? {} : { aiKey }) })} />
-      </form>
-      <h3><Label label={s.MailService} /></h3>
-      <form on:submit|preventDefault={() => save({})}>
+      </form>{/if}
+      <button type="button" class="part" on:click={() => { part('mail') }}><span>{openParts.has('mail') ? '▾' : '▸'}</span> <Label label={s.MailService} /></button>
+      {#if openParts.has('mail')}<form on:submit|preventDefault={() => save({})}>
         <label><Label label={s.MailAccount} /><input type="email" bind:value={address} /></label>
         <label><Label label={s.MailPassword} /> {#if settings.mailPassword}{settings.mailPassword}{:else}<Label label={s.SecretUnset} />{/if}
           <input type="password" bind:value={password} autocomplete="new-password" />
@@ -267,7 +275,7 @@
           mailAddress: address || null, mailSmtpHost: smtp || null, mailSmtpPort: smtpPort ?? null,
           mailImapHost: imap || null, mailImapPort: imapPort ?? null, ...(password === '' ? {} : { mailPassword: password })
         })} />
-      </form>
+      </form>{/if}
       {#if saved}<p role="status"><Label label={settings.warning ? s.ServiceSavedWarning : s.ServiceSaved} /></p>{/if}
     {:else if section === 'supervision'}
       <label><Label label={s.ChooseEmployee} />
@@ -313,6 +321,7 @@
   .roster { width: 100%; }
   .group { display: flex; align-items: center; gap: var(--spacing-1); padding: 0.3rem 0; background: none; border: none; color: inherit; cursor: pointer; font-weight: 500; }
   .count { opacity: 0.6; font-weight: 400; }
+  .part { display: flex; align-items: center; gap: var(--spacing-1); width: 100%; margin-top: var(--spacing-2); padding: 0.5rem 0; background: none; border: none; border-bottom: 1px solid var(--theme-divider-color); color: var(--theme-caption-color); cursor: pointer; font-size: 1rem; font-weight: 600; text-align: left; }
   .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr)); gap: var(--spacing-1) var(--spacing-2); width: 100%; padding: 0 0 var(--spacing-1) 1.2rem; }
   article { border-bottom: 1px solid var(--theme-divider-color); padding-block: var(--spacing-1); overflow-wrap: anywhere; }
 </style>
