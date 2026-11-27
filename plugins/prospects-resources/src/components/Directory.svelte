@@ -14,6 +14,8 @@
   import { prospectFilter } from '../filter'
   import ProspectLeadAction from './ProspectLeadAction.svelte'
   import EditDialog from './EditDialog.svelte'
+  import { autoSaveCard, recognizerConfigured, type AutoSaveResult } from '../cardSave'
+  import { onMount } from 'svelte'
   const query = createQuery()
   const client = getClient()
   let all: Prospect[] = []
@@ -107,12 +109,58 @@
     fromQueue = false
     editing = true
   }
-  function addFiles (files: FileList | null): void {
-    if (files !== null) {
-      queue = [...queue, ...Array.from(files)]
-      frontIndex = 0
-      backIndex = -1
+  // Batch upload can save cards straight away (front only, read by the card AI) instead of one-by-one review.
+  const autoKey = 'auraplex.prospects.autoSave'
+  let aiReady = false
+  let autoSave = localStorage.getItem(autoKey) === '1'
+  $: localStorage.setItem(autoKey, autoSave ? '1' : '0')
+  let autoBusy = false
+  let autoDone = 0
+  let autoTotal = 0
+  let autoReport = ''
+  onMount(async () => {
+    try {
+      aiReady = await recognizerConfigured()
+    } catch {
+      aiReady = false
     }
+  })
+  async function autoSaveAll (files: File[]): Promise<void> {
+    autoBusy = true
+    autoDone = 0
+    autoTotal = files.length
+    autoReport = ''
+    const left: File[] = []
+    const counts: Record<AutoSaveResult, number> = { saved: 0, empty: 0, duplicate: 0, failed: 0 }
+    for (const file of files) {
+      const result = await autoSaveCard(file)
+      counts[result]++
+      if (result !== 'saved') left.push(file)
+      autoDone++
+    }
+    queue = [...queue, ...left]
+    frontIndex = 0
+    backIndex = -1
+    autoBusy = false
+    autoReport = $chinese
+      ? `已自动存入 ${counts.saved} 张` +
+        (left.length > 0
+          ? `；${left.length} 张要人工核对（读不出名字 ${counts.empty}，邮箱已存在 ${counts.duplicate}，出错 ${counts.failed}），在下面选正面后点"核对这张名片"。`
+          : '。')
+      : `Saved ${counts.saved} automatically` +
+        (left.length > 0
+          ? `; ${left.length} need checking (no name read ${counts.empty}, email exists ${counts.duplicate}, errors ${counts.failed}). Pick them below and check them.`
+          : '.')
+  }
+  function addFiles (files: FileList | null): void {
+    if (files === null || files.length === 0) return
+    if (autoSave && aiReady && !autoBusy) {
+      void autoSaveAll(Array.from(files))
+      return
+    }
+    queue = [...queue, ...Array.from(files)]
+    frontIndex = 0
+    backIndex = -1
   }
   function queueEdit (): void {
     if (queue[frontIndex] === undefined || backIndex === frontIndex) return
@@ -195,6 +243,7 @@
       }}><Label label={prospects.string.PageAdd} /></button
     ><label class="upload"
       ><Label label={prospects.string.PageUpload} /><input
+        disabled={autoBusy}
         type="file"
         accept="image/*"
         multiple
@@ -205,6 +254,13 @@
       /></label
     >{/if}<button on:click={exportList}><Label label={prospects.string.PageExport} /></button>
   </header>
+  {#if moduleCanEdit}<div class="auto">
+      <label class="switch" title={aiReady ? '' : $t('要先在 设置 → 集成 → 名片 AI 填好服务地址，才能自动识别。')}
+        ><input type="checkbox" disabled={!aiReady || autoBusy} bind:checked={autoSave} />{$t('批量上传后自动识别并存入（不用一张张核对，只用正面）')}</label
+      >
+      {#if !aiReady}<span class="hint">{$t('名片 AI 还没接，暂时不能用')}</span>{/if}
+      {#if autoBusy}<span>{$t('正在自动存入')} {autoDone} / {autoTotal}…</span>{:else if autoReport}<span>{autoReport}</span>{/if}
+    </div>{/if}
   {#if moduleCanEdit && queue.length > 0}<section>
       <p>待处理照片 {queue.length} 张；选择正面和可选背面进行配对。</p>
       <label
@@ -333,6 +389,22 @@
   }
   section {
     margin: 1rem 0;
+  }
+  .auto {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-top: 0.6rem;
+  }
+  .switch {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    cursor: pointer;
+  }
+  .hint {
+    opacity: 0.6;
   }
   .table-wrap {
     min-width: 0;

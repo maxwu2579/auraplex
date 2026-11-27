@@ -9,8 +9,7 @@
   $: moduleCanEdit = $departmentModuleLevel('prospects') === 'edit'
   import attachment, { type Photo } from '@hcengineering/attachment'
   import core, { generateId, getCurrentAccount } from '@hcengineering/core'
-  import { getMetadata } from '@hcengineering/platform'
-  import presentation, { createQuery, getBlobRef, getClient, uploadFile } from '@hcengineering/presentation'
+  import { createQuery, getBlobRef, getClient, uploadFile } from '@hcengineering/presentation'
   import prospects, {
     findDuplicates,
     normalizeEmail,
@@ -20,6 +19,7 @@
     type RecognitionField
   } from '@hcengineering/prospects'
   import { createEventDispatcher, onMount, onDestroy } from 'svelte'
+  import { compressed, recognize as recognizeCard, recognizerConfigured } from '../cardSave'
   import ProspectLeadAction from './ProspectLeadAction.svelte'
   import MailPanel from './MailPanel.svelte'
 
@@ -119,80 +119,30 @@
     { key: 'source', label: local(prospects.string.PageSource) },
     { key: 'notes', label: local(prospects.string.PageNotes) }
   ]
-  const headers = (): Record<string, string> => ({
-    Authorization: 'Bearer ' + (getMetadata(presentation.metadata.Token) ?? ''),
-    'Content-Type': 'application/json'
-  })
   onMount(async () => {
     try {
-      const res = await fetch('/prospects-api/status', { headers: headers() })
-      if (!res.ok) {
-        statusMessage = $t('识别服务连不上')
-        return
-      }
-      configured = (await res.json()).configured === true
+      configured = await recognizerConfigured()
       statusMessage = configured ? '' : $t('识别服务未配置')
     } catch {
       configured = false
       statusMessage = $t('识别服务连不上')
     }
   })
-  async function compressed (file: File): Promise<File> {
-    const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    const context = canvas.getContext('2d')
-    if (context === null) {
-      bitmap.close()
-      throw new Error($t('无法处理图片'))
-    }
-    context.fillStyle = '#fff'
-    context.fillRect(0, 0, canvas.width, canvas.height)
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    bitmap.close()
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', 0.85)
-    })
-    if (blob === null) throw new Error($t('图片压缩失败'))
-    return new File([blob], 'card.jpg', { type: 'image/jpeg' })
-  }
-  async function readUrl (file: File): Promise<string> {
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        resolve(String(reader.result))
-      }
-      reader.onerror = () => {
-        reject(new Error($t('图片读取失败')))
-      }
-      reader.readAsDataURL(file)
-    })
-  }
   async function recognize (): Promise<void> {
     if (!configured || front === undefined || busy) return
     busy = true
     error = ''
     review = []
     try {
-      const images = await Promise.all(
-        [front, ...(back === undefined ? [] : [back])].map(async (file) => await readUrl(await compressed(file)))
-      )
-      const res = await fetch('/prospects-api/recognize', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({ images })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : $t('识别服务连不上'))
+      const data = await recognizeCard([front, ...(back === undefined ? [] : [back])])
       draft = { ...draft, ...data.values }
       review = data.needsReview
       model = data.model
       recognizedAt = data.recognizedAt
       recognized = true
     } catch (e) {
-      error = e instanceof Error ? e.message : $t('识别服务连不上')
+      const internal = ['canvas', 'compress', 'read', 'recognize']
+      error = e instanceof Error && !internal.includes(e.message) ? e.message : $t('识别服务连不上')
     } finally {
       busy = false
     }

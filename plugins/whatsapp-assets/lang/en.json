@@ -30,6 +30,7 @@
     "ChooseEmployee": "Choose an employee",
     "SupervisionDate": "Date",
     "SupervisionSearch": "Search customer name or phone",
+    "SupervisionNoDepartment": "No department",
     "ServiceSavedWarning": "Settings saved, but WAHA or a session webhook could not be verified.",
     "ServiceSaved": "Settings saved",
     "WahaAttachment": "Download attachment",

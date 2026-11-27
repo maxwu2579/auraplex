@@ -1,7 +1,7 @@
 <!-- Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0. -->
 <script lang="ts">
-  import { AccountRole, getCurrentAccount } from '@hcengineering/core'
-  import contact from '@hcengineering/contact'
+  import { AccountRole, getCurrentAccount, type Class, type Doc, type Ref } from '@hcengineering/core'
+  import contact, { formatName } from '@hcengineering/contact'
   import { getClient } from '@hcengineering/presentation'
   import { Button, Label, ModernCheckbox, SearchInput } from '@hcengineering/ui'
   import whatsapp from '@hcengineering/whatsapp'
@@ -101,7 +101,8 @@
         days = settings.historyDays
         supervisors = new Set(settings.supervisors)
         const people = await getClient().findAll(contact.mixin.Employee, {})
-        names = new Map(people.flatMap((person) => person.personUuid === undefined ? [] : [[person.personUuid, person.name]]))
+        names = new Map(people.flatMap((person) => person.personUuid === undefined ? [] : [[person.personUuid, formatName(person.name)]]))
+        departments = await loadDepartments()
       } else {
         employees = await request<Employee[]>('supervision/employees')
       }
@@ -157,6 +158,41 @@
     }
   }
 
+  // Departments live in the departments plugin (a mixin on hr departments); referenced by id to avoid a package cycle.
+  const departmentAccess = 'departments:mixin:DepartmentAccess' as Ref<Class<Doc>>
+  interface DepartmentRow { name: string, archived?: boolean, administrators?: string[], supervisors?: string[], employees?: string[], readers?: string[] }
+  async function loadDepartments (): Promise<Array<{ name: string, members: string[] }>> {
+    try {
+      const rows = (await getClient().findAll(departmentAccess, {})) as unknown as DepartmentRow[]
+      return rows
+        .filter((row) => row.archived !== true)
+        .map((row) => ({
+          name: row.name,
+          members: [...new Set([...(row.administrators ?? []), ...(row.supervisors ?? []), ...(row.employees ?? []), ...(row.readers ?? [])])]
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    } catch {
+      return []
+    }
+  }
+  let departments: Array<{ name: string, members: string[] }> = []
+  let expanded = new Set<string>()
+  const noDepartment = '\u0000none'
+  $: roster = settings?.members?.map((member) => member.person) ?? []
+  $: groups = [
+    ...departments
+      .map((group) => ({ key: group.name, name: group.name, people: roster.filter((id) => group.members.includes(id)) }))
+      .filter((group) => group.people.length > 0),
+    { key: noDepartment, name: '', people: roster.filter((id) => !departments.some((group) => group.members.includes(id))) }
+  ]
+    .filter((group) => group.people.length > 0)
+    .map((group) => ({ ...group, people: [...group.people].sort((a, b) => (names.get(a) ?? a).localeCompare(names.get(b) ?? b)) }))
+  function expand (key: string): void {
+    if (expanded.has(key)) expanded.delete(key)
+    else expanded.add(key)
+    expanded = new Set(expanded)
+  }
+
   function toggle (id: string): void {
     if (supervisors.has(id)) supervisors.delete(id)
     else supervisors.add(id)
@@ -186,9 +222,21 @@
         <label><Label label={s.WahaHistoryDays} /><input type="number" min="0" max="90" bind:value={days} /></label>
         <h3><Label label={s.Supervision} /></h3>
         <div class="roster">
-          {#each settings.members ?? [] as member (member.person)}
-            <ModernCheckbox label={names.get(member.person) ?? member.person} checked={supervisors.has(member.person)}
-              disabled={busy} on:change={() => toggle(member.person)} />
+          {#each groups as group (group.key)}
+            {@const chosen = group.people.filter((id) => supervisors.has(id)).length}
+            <button type="button" class="group" on:click={() => { expand(group.key) }}>
+              <span>{expanded.has(group.key) ? '▾' : '▸'}</span>
+              {#if group.key === noDepartment}<Label label={s.SupervisionNoDepartment} />{:else}{group.name}{/if}
+              <span class="count">{chosen} / {group.people.length}</span>
+            </button>
+            {#if expanded.has(group.key)}
+              <div class="people">
+                {#each group.people as person (person)}
+                  <ModernCheckbox label={names.get(person) ?? person} checked={supervisors.has(person)}
+                    disabled={busy} on:change={() => toggle(person)} />
+                {/each}
+              </div>
+            {/if}
           {/each}
         </div>
         <Button label={s.Save} kind="primary" disabled={busy} on:click={() => save({ wahaUrl: url.trim() || null, mediaLimitMb: limit, historyDays: days, supervisors: [...supervisors], ...(key === '' ? {} : { wahaApiKey: key }) })} />
@@ -262,5 +310,9 @@
   form, .roster, label { display: flex; flex-direction: column; align-items: flex-start; gap: var(--spacing-1); }
   .buttons, .conversations { display: flex; flex-wrap: wrap; gap: var(--spacing-1); }
   input, select { max-width: 100%; color: var(--theme-content-color); background: var(--theme-popup-color); border: 1px solid var(--theme-divider-color); }
+  .roster { width: 100%; }
+  .group { display: flex; align-items: center; gap: var(--spacing-1); padding: 0.3rem 0; background: none; border: none; color: inherit; cursor: pointer; font-weight: 500; }
+  .count { opacity: 0.6; font-weight: 400; }
+  .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(10rem, 100%), 1fr)); gap: var(--spacing-1) var(--spacing-2); width: 100%; padding: 0 0 var(--spacing-1) 1.2rem; }
   article { border-bottom: 1px solid var(--theme-divider-color); padding-block: var(--spacing-1); overflow-wrap: anywhere; }
 </style>
