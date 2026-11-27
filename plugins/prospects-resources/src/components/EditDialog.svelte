@@ -245,6 +245,8 @@
         }
         await ops.update(value, {
           ...data,
+          // Saving a card that was waiting for review means a person has now checked it.
+          ...((value.review?.length ?? 0) > 0 ? { review: [], recognitionConfirmed: true } : {}),
           ...(photoChanged && !recognized ? { recognitionConfirmed: false } : {})
         })
         // The server ignores $unset when it is mixed with plain fields, so send it on its own.

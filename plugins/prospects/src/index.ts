@@ -1,6 +1,7 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import type { AccountUuid, AttachedDoc, Class, Doc, Ref } from '@hcengineering/core'
 import type { MailAutomation } from './automation'
+import type { MergeRecord } from './review'
 import type { Lead } from '@hcengineering/lead'
 import { plugin, type Asset, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
@@ -51,6 +52,13 @@ export interface Prospect extends Doc {
   recognizedAt?: number
   recognitionBy?: AccountUuid
   recognitionConfirmed: boolean
+  /** Why a person should check this card (see review.ts); empty or missing = nothing to check. */
+  review?: string[]
+  /** SHA-256 of the uploaded front photo, so the same picture is not saved twice. */
+  photoHash?: string
+  /** Cards a person said are not the same as this one. */
+  notDuplicate?: Array<Ref<Prospect>>
+  mergedFrom?: MergeRecord[]
 }
 export interface ProspectMail extends AttachedDoc<Prospect> {
   direction: 'outgoing' | 'incoming' | 'forward'
@@ -83,9 +91,10 @@ export default plugin(prospectsId, {
   ids: { MailAutomation: '' as Ref<MailAutomation> },
   template: { Default: '' as Ref<ProspectTemplate> },
   app: { Prospects: '' as Ref<Doc> },
-  component: { ProspectPanel: '' as AnyComponent, Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent, MailAutomation: '' as AnyComponent },
+  component: { ProspectPanel: '' as AnyComponent, Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent, MailAutomation: '' as AnyComponent, ReviewQueue: '' as AnyComponent },
   icon: { Prospects: '' as Asset },
   string: {
+    ReviewPage: '' as IntlString,
     AutoMail: '' as IntlString,
     AutoMailSettings: '' as IntlString,
     AutoMailRefresh: '' as IntlString,
@@ -197,3 +206,4 @@ export * from './mailRules'
 export * from './template'
 
 export * from './automation'
+export * from './review'

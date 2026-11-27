@@ -162,12 +162,12 @@
     autoTotal = files.length
     autoReport = ''
     const left: File[] = []
-    const counts: Record<AutoSaveResult, number> = { saved: 0, empty: 0, duplicate: 0, failed: 0 }
+    const counts: Record<AutoSaveResult, number> = { saved: 0, review: 0, empty: 0, duplicate: 0, 'same-photo': 0, failed: 0 }
     const fields = cardFields(template?.fields, local)
     for (const file of files) {
-      const result = await autoSaveCard(file, fields)
+      const result = await autoSaveCard(file, fields, all)
       counts[result]++
-      if (result !== 'saved') left.push(file)
+      if (result !== 'saved' && result !== 'review' && result !== 'same-photo') left.push(file)
       autoDone++
     }
     queue = [...queue, ...left]
@@ -175,11 +175,15 @@
     backIndex = -1
     autoBusy = false
     autoReport = $chinese
-      ? `已自动存入 ${counts.saved} 张` +
+      ? `已自动存入 ${counts.saved + counts.review} 张` +
+        (counts.review > 0 ? `（其中 ${counts.review} 张放进了"待核对"）` : '') +
+        (counts['same-photo'] > 0 ? `；${counts['same-photo']} 张照片以前存过，没有再存` : '') +
         (left.length > 0
           ? `；${left.length} 张要人工核对（读不出名字 ${counts.empty}，邮箱已存在 ${counts.duplicate}，出错 ${counts.failed}），在下面选正面后点"核对这张名片"。`
           : '。')
-      : `Saved ${counts.saved} automatically` +
+      : `Saved ${counts.saved + counts.review} automatically` +
+        (counts.review > 0 ? ` (${counts.review} put on the review list)` : '') +
+        (counts['same-photo'] > 0 ? `; ${counts['same-photo']} photos were saved before and skipped` : '') +
         (left.length > 0
           ? `; ${left.length} need checking (no name read ${counts.empty}, email exists ${counts.duplicate}, errors ${counts.failed}). Pick them below and check them.`
           : '.')
@@ -371,6 +375,7 @@
               {#if campaignQueued.has(item._id) && marketingEmail(item) !== undefined && !introQueued.has(item._id)}
                 <span class="mail-state"><Label label={prospects.string.AutoMailQueuedCampaign} /></span>
               {/if}
+              {#if (item.review?.length ?? 0) > 0}<span class="reply-pending">{$chinese ? '待核对' : 'To review'}</span>{/if}
               {#if autoSent.has(item._id)}<span class="mail-state"><Label label={prospects.string.AutoMailSent} /></span>{/if}
             </td
             ><td

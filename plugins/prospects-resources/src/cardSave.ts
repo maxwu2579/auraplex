@@ -5,7 +5,7 @@ import core, { generateId, getCurrentAccount } from '@hcengineering/core'
 import { getMetadata, type IntlString } from '@hcengineering/platform'
 import presentation, { getClient, uploadFile } from '@hcengineering/presentation'
 import prospects, {
-  builtinProspectFields, normalizeEmail, prospectWriteScope, readRecognizedProspectFields, visibleProspectFields,
+  builtinProspectFields, normalizeEmail, reviewReasons, prospectWriteScope, readRecognizedProspectFields, visibleProspectFields,
   type BuiltinProspectField, type Prospect, type ProspectFieldDef, type RecognitionFieldSpec
 } from '@hcengineering/prospects'
 import { prospectFieldLabel } from './templateFields'
@@ -96,14 +96,25 @@ export async function recognize (files: File[], fields: readonly RecognitionFiel
   return data
 }
 
-export type AutoSaveResult = 'saved' | 'empty' | 'duplicate' | 'failed'
+export type AutoSaveResult = 'saved' | 'review' | 'empty' | 'duplicate' | 'same-photo' | 'failed'
+
+/** SHA-256 of the photo file as uploaded, to spot the same picture uploaded twice. */
+export async function photoHash (file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
 
 /**
  * Recognize one card front and save it straight away.
  * Leaves it for a person to check when nothing useful was read or the email already exists.
  */
-export async function autoSaveCard (front: File, fields: readonly RecognitionFieldSpec[]): Promise<AutoSaveResult> {
+export async function autoSaveCard (
+  front: File, fields: readonly RecognitionFieldSpec[], others: readonly Prospect[] = []
+): Promise<AutoSaveResult> {
   try {
+    const hash = await photoHash(front)
+    if (others.some((card) => card.photoHash === hash) ||
+      (await getClient().findOne(prospects.class.Prospect, { photoHash: hash })) !== undefined) return 'same-photo'
     const recognition = await recognize([front], fields)
     const { builtin, custom } = readRecognizedProspectFields(fields, recognition.values)
     const draft = cardDraft(builtin)
@@ -113,6 +124,8 @@ export async function autoSaveCard (front: File, fields: readonly RecognitionFie
     if (normalizedEmail !== '' && (await client.findOne(prospects.class.Prospect, { normalizedEmail })) !== undefined) {
       return 'duplicate'
     }
+    // Doubtful cards are still saved, but wait on the review page with the reasons.
+    const review = reviewReasons({ ...draft, normalizedEmail }, recognition.needsReview ?? [], others)
     const id = generateId<Prospect>()
     const ops = client.apply(prospectWriteScope)
     if (normalizedEmail !== '') ops.notMatch(prospects.class.Prospect, { normalizedEmail })
@@ -129,6 +142,8 @@ export async function autoSaveCard (front: File, fields: readonly RecognitionFie
         photos: 0,
         // Nobody looked at it yet, so it is not confirmed.
         recognitionConfirmed: false,
+        photoHash: hash,
+        ...(review.length > 0 ? { review } : {}),
         ...(recognition.model !== undefined
           ? { recognitionModel: recognition.model, recognizedAt: recognition.recognizedAt, recognitionBy: getCurrentAccount().uuid }
           : {})
@@ -146,7 +161,7 @@ export async function autoSaveCard (front: File, fields: readonly RecognitionFie
       metadata
     })
     if (!(await ops.commit()).result) return 'duplicate'
-    return 'saved'
+    return review.length > 0 ? 'review' : 'saved'
   } catch {
     return 'failed'
   }

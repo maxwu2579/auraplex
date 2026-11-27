@@ -66,6 +66,10 @@ export class TProspect extends TDoc implements Prospect {
   @Prop(TypeTimestamp(), prospects.string.Prospects) recognizedAt?: number
   @Prop(TypeAccountUuid(), prospects.string.Prospects) recognitionBy?: Prospect['recognitionBy']
   @Prop(TypeBoolean(), prospects.string.Prospects) recognitionConfirmed!: boolean
+  @Hidden() review?: Prospect['review']
+  @Hidden() photoHash?: string
+  @Hidden() notDuplicate?: Prospect['notDuplicate']
+  @Hidden() mergedFrom?: Prospect['mergedFrom']
 }
 @Model(prospects.class.ProspectMail, core.class.AttachedDoc, DOMAIN_PROSPECTS)
 @UX(prospects.string.Prospects, prospects.icon.Prospects)
@@ -135,6 +139,13 @@ export function createModel (builder: Builder): void {
             label: prospects.string.Statistics,
             icon: prospects.icon.Prospects,
             component: prospects.component.Statistics
+          },
+          {
+            id: 'review',
+            label: prospects.string.ReviewPage,
+            icon: prospects.icon.Prospects,
+            component: prospects.component.ReviewQueue,
+            editModule: 'prospects'
           },
           {
             id: 'mail-automation',

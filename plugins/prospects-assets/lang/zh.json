@@ -1,5 +1,6 @@
 {
   "string": {
+    "ReviewPage": "待核对",
     "AutoMail": "邮件发送",
     "AutoMailSettings": "名片自动邮件",
     "AutoMailRefresh": "刷新",
