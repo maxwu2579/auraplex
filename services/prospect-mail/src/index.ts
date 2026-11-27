@@ -9,11 +9,14 @@ import { getClient } from '@hcengineering/account-client'
 import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import { readConfig } from './config'
+import { AutomatedMail } from './automatedMail'
+import { campaignCompletion } from './automationRunner'
+import { canManageAutomation } from './prospectPermissions'
 import { Forwarder } from './forwarder'
 import { pollInbox, type Cursor } from './poller'
 import { Receiver } from './receiver'
 import { Sender } from './sender'
-import { createApp, type TaskMailBackend } from './server'
+import { createApp, type TaskMailBackend, type AutomationBackend } from './server'
 import { singaporeClock, startScheduledChecks, workdays } from './schedule'
 import { ScheduledRecords } from './scheduledRecords'
 import { digestIsDue, formatDigest, sendDailyDigest } from './taskDigest'
@@ -78,7 +81,7 @@ const mailConfigured = (value: typeof config): boolean => Boolean(value.address 
 
 function taskSender (client: TxOperations, active: typeof config): SendTaskMail | undefined {
   const address = active.address
-  if (!address || !active.password || config.taskFrontUrl === undefined) return undefined
+  if (!address || !active.password) return undefined
   const transport = nodemailer.createTransport({
     host: active.smtp.host, port: active.smtp.port, secure: active.smtp.secure,
     auth: { user: address, pass: active.password },
@@ -124,7 +127,7 @@ async function checkScheduledTasks (now: number): Promise<void> {
       return undefined
     })
   ])
-  const send = active === undefined ? undefined : taskSender(client, active)
+  const send = active === undefined || config.taskFrontUrl === undefined ? undefined : taskSender(client, active)
   const includeDigest = shouldDigest && send !== undefined
   if (!shouldRemind && !includeDigest) return
   const snapshot = await taskSnapshot(client, workbenchLink(info.url), includeDigest ? day.end : now, includeDigest)
@@ -158,7 +161,7 @@ const taskMail: TaskMailBackend = {
         workspaceClient(workspace), workspaceSettings(workspace), taskAccount(workspace).getWorkspaceInfo()
       ])
       const send = taskSender(client, active)
-      if (send === undefined) throw new Error('Task mail not configured')
+      if (send === undefined || config.taskFrontUrl === undefined) throw new Error('Task mail not configured')
       const { text, html } = formatDigest([{ title: taskMailLabel('TaskMailExampleTask'), href: workbenchLink(info.url), section: 0 }])
       await send(actor, `Auraplex · ${taskMailLabel('TaskMailTestSubject')}`, text, html)
     } catch (err) {
@@ -166,6 +169,32 @@ const taskMail: TaskMailBackend = {
       throw err
     }
   }
+}
+
+async function automationFor (workspace: WorkspaceUuid): Promise<AutomatedMail> {
+  return new AutomatedMail(await workspaceClient(workspace), new ScheduledRecords(workspace, taskAccount(workspace)))
+}
+
+const automation: AutomationBackend = {
+  access: async (workspace, actor, role) => await canManageAutomation(await workspaceClient(workspace), actor, role),
+  get: async (workspace) => await (await automationFor(workspace)).dashboard(),
+  action: async (workspace, actor, input) => { await (await automationFor(workspace)).action(actor, input) }
+}
+
+async function checkAutomatedMail (now: number): Promise<void> {
+  if (config.workspace === undefined) return
+  const day = singaporeClock(now)
+  if (!workdays.includes(day.weekday) || day.time < '09:00' || day.time >= '17:00') return
+  const workspace = config.workspace as WorkspaceUuid
+  const active = await workspaceSettings(workspace)
+  if (!active.address || !active.password) return
+  const client = await workspaceClient(workspace)
+  const account = taskAccount(workspace)
+  const records = new ScheduledRecords(workspace, account)
+  await new AutomatedMail(client, records).check(
+    now, new Sender(client, smtp(active), active.address), () => { recordTaskFailure('prospect-auto-smtp') },
+    async (campaign, count) => { await campaignCompletion(client, account, records, taskSender(client, active), campaign, count) }
+  )
 }
 
 let lastPoll: { at: number, ok: boolean, error?: string } | undefined
@@ -233,8 +262,10 @@ createApp(
   },
   () => ({ lastPoll }),
   workspaceSettings,
-  taskMail
+  taskMail,
+  automation
 ).listen(config.port)
 schedule(5000)
+startScheduledChecks(checkAutomatedMail, () => { recordTaskFailure('prospect-auto-scan') })
 startScheduledChecks(checkScheduledTasks, () => { recordTaskFailure('scan') })
 console.info(JSON.stringify({ event: 'started', configured: config.address !== undefined }))

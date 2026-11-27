@@ -124,6 +124,7 @@ export async function autoSaveCard (front: File, fields: readonly RecognitionFie
         ...(Object.keys(custom).length > 0 ? { custom } : {}),
         normalizedEmail,
         status: 'new',
+        owner: getCurrentAccount().uuid,
         emailCount: 0,
         photos: 0,
         // Nobody looked at it yet, so it is not confirmed.

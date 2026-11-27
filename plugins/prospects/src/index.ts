@@ -1,5 +1,6 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import type { AccountUuid, AttachedDoc, Class, Doc, Ref } from '@hcengineering/core'
+import type { MailAutomation } from './automation'
 import type { Lead } from '@hcengineering/lead'
 import { plugin, type Asset, type IntlString, type Plugin } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
@@ -45,6 +46,8 @@ export interface Prospect extends Doc {
   emailCount: number
   owner?: AccountUuid
   mailMessages?: number
+  followUp?: Ref<Doc>
+  replyPending?: boolean
   recognitionModel?: string
   recognizedAt?: number
   recognitionBy?: AccountUuid
@@ -61,6 +64,8 @@ export interface ProspectMail extends AttachedDoc<Prospect> {
   sentAt: number
   actor?: AccountUuid
   replyTo?: Ref<ProspectMail>
+  automation?: 'intro' | 'campaign'
+  campaign?: string
 }
 export interface ProspectMailCursor extends Doc {
   uidValidity: string
@@ -71,13 +76,53 @@ export default plugin(prospectsId, {
     Prospect: '' as Ref<Class<Prospect>>,
     ProspectTemplate: '' as Ref<Class<ProspectTemplate>>,
     ProspectMail: '' as Ref<Class<ProspectMail>>,
+    MailAutomation: '' as Ref<Class<MailAutomation>>,
     ProspectMailCursor: '' as Ref<Class<ProspectMailCursor>>
   },
+  ids: { MailAutomation: '' as Ref<MailAutomation> },
   template: { Default: '' as Ref<ProspectTemplate> },
   app: { Prospects: '' as Ref<Doc> },
-  component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent },
+  component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent, MailAutomation: '' as AnyComponent },
   icon: { Prospects: '' as Asset },
   string: {
+    AutoMail: '' as IntlString,
+    AutoMailSettings: '' as IntlString,
+    AutoMailRefresh: '' as IntlString,
+    AutoMailFailed: '' as IntlString,
+    AutoMailQuota: '' as IntlString,
+    AutoMailEnabled: '' as IntlString,
+    AutoMailLimit: '' as IntlString,
+    AutoMailWait: '' as IntlString,
+    AutoMailLanguage: '' as IntlString,
+    AutoMailVariables: '' as IntlString,
+    AutoMailSave: '' as IntlString,
+    AutoMailIntro: '' as IntlString,
+    AutoMailOldest: '' as IntlString,
+    AutoMailEstimate: '' as IntlString,
+    AutoMailRemove: '' as IntlString,
+    AutoMailCampaign: '' as IntlString,
+    AutoMailProgress: '' as IntlString,
+    AutoMailRunning: '' as IntlString,
+    AutoMailPaused: '' as IntlString,
+    AutoMailDone: '' as IntlString,
+    AutoMailStopped: '' as IntlString,
+    AutoMailDaysLeft: '' as IntlString,
+    AutoMailResume: '' as IntlString,
+    AutoMailPause: '' as IntlString,
+    AutoMailStop: '' as IntlString,
+    AutoMailCreate: '' as IntlString,
+    AutoMailCampaignName: '' as IntlString,
+    AutoMailStart: '' as IntlString,
+    AutoMailHistory: '' as IntlString,
+    AutoMailUncertain: '' as IntlString,
+    AutoMailQueuedIntro: '' as IntlString,
+    AutoMailQueuedCampaign: '' as IntlString,
+    AutoMailSent: '' as IntlString,
+    AutoMailReplyPending: '' as IntlString,
+    AutoMailCancel: '' as IntlString,
+    AutoMailCustomerReply: '' as IntlString,
+    AutoMailOptOut: '' as IntlString,
+
     PageLibrary: '' as IntlString,
     PageStatistics: '' as IntlString,
     PageProspects: '' as IntlString,
@@ -149,3 +194,5 @@ export default plugin(prospectsId, {
 export * from './rules'
 export * from './mailRules'
 export * from './template'
+
+export * from './automation'

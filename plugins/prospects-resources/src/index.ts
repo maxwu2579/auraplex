@@ -1,5 +1,6 @@
 import type { Resources } from '@hcengineering/platform'
 import Directory from './components/Directory.svelte'
 import Statistics from './components/Statistics.svelte'
+import MailAutomation from './components/MailAutomation.svelte'
 import TemplateSettings from './components/TemplateSettings.svelte'
-export default async (): Promise<Resources> => ({ component: { Directory, Statistics, TemplateSettings } })
+export default async (): Promise<Resources> => ({ component: { Directory, Statistics, TemplateSettings, MailAutomation } })

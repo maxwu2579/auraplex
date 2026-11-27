@@ -232,7 +232,7 @@
         await ops.createDoc(
           prospects.class.Prospect,
           core.space.Workspace,
-          { ...stored, ...data, normalizedEmail, status, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
+          { ...stored, ...data, normalizedEmail, status, owner: getCurrentAccount().uuid, emailCount: 0, recognitionConfirmed: recognized, photos: 0 },
           id
         )
       } else {

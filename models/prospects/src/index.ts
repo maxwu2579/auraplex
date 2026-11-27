@@ -28,6 +28,7 @@ import prospects, {
   type Prospect,
   type ProspectMail,
   type ProspectMailCursor,
+  type MailAutomation,
   type ProspectStatus
 } from '@hcengineering/prospects'
 export { prospectsId } from '@hcengineering/prospects'
@@ -80,6 +81,8 @@ export class TProspectMail extends TAttachedDoc implements ProspectMail {
   @Prop(TypeString(), prospects.string.Prospects) body!: string
   @Prop(TypeTimestamp(), prospects.string.Prospects) sentAt!: number
   @Prop(TypeAccountUuid(), prospects.string.Prospects) actor?: ProspectMail['actor']
+  @Hidden() automation?: ProspectMail['automation']
+  @Hidden() campaign?: string
   @Prop(TypeRef(prospects.class.ProspectMail), prospects.string.Prospects) replyTo?: ProspectMail['replyTo']
 }
 @Model(prospects.class.ProspectMailCursor, core.class.Doc, DOMAIN_PROSPECTS)
@@ -93,8 +96,17 @@ export class TProspectTemplate extends TDoc implements ProspectTemplate {
   @Prop(ArrOf(TypeRecord()), prospects.string.Prospects) removedFields?: ProspectTemplate['removedFields']
 }
 
+@Model(prospects.class.MailAutomation, core.class.Doc, DOMAIN_PROSPECTS)
+export class TMailAutomation extends TDoc implements MailAutomation {
+  @Hidden() settings!: MailAutomation['settings']
+  @Hidden() enrolledFrom?: number
+  @Hidden() releasedThrough?: number
+  @Hidden() removed!: MailAutomation['removed']
+  @Hidden() campaign?: MailAutomation['campaign']
+}
+
 export function createModel (builder: Builder): void {
-  builder.createModel(TProspect, TProspectMail, TProspectMailCursor, TProspectTemplate)
+  builder.createModel(TProspect, TProspectMail, TProspectMailCursor, TProspectTemplate, TMailAutomation)
   builder.createDoc(prospects.class.ProspectTemplate, core.space.Model, { fields: [...defaultProspectFields] },
     prospects.template.Default)
   builder.createDoc(
@@ -118,6 +130,13 @@ export function createModel (builder: Builder): void {
             label: prospects.string.Statistics,
             icon: prospects.icon.Prospects,
             component: prospects.component.Statistics
+          },
+          {
+            id: 'mail-automation',
+            label: prospects.string.AutoMail,
+            icon: prospects.icon.Prospects,
+            component: prospects.component.MailAutomation,
+            editModule: 'prospects'
           },
           {
             id: 'template',

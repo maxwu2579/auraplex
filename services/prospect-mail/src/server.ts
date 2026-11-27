@@ -34,6 +34,12 @@ export interface TaskMailBackend {
   test: (workspace: WorkspaceUuid, actor: AccountUuid) => Promise<void>
 }
 
+export interface AutomationBackend {
+  access: (workspace: WorkspaceUuid, actor: AccountUuid, role: AccountRole) => Promise<boolean>
+  get: (workspace: WorkspaceUuid) => Promise<Record<string, unknown>>
+  action: (workspace: WorkspaceUuid, actor: AccountUuid, input: unknown) => Promise<void>
+}
+
 const requestIdPattern = /^[a-f0-9-]{36}$/i
 const objectIdPattern = /^[a-zA-Z0-9:_-]{1,150}$/
 export function createApp (
@@ -41,7 +47,8 @@ export function createApp (
   backend: MailBackend,
   status: () => Record<string, unknown> = () => ({}),
   resolve?: (workspace: WorkspaceUuid) => Promise<MailConfig>,
-  taskMail?: TaskMailBackend
+  taskMail?: TaskMailBackend,
+  automation?: AutomationBackend
 ): express.Express {
   const app = express()
   app.disable('x-powered-by')
@@ -125,6 +132,27 @@ export function createApp (
     })
     app.post('/api/task-mail/test', (_req, res) => {
       void taskMail.test(res.locals.workspace, res.locals.actor).then(() => res.json({ ok: true })).catch(() => res.sendStatus(503))
+    })
+  }
+  if (automation !== undefined) {
+    app.use('/api/mail-automation', (_req, res, next) => {
+      if (config.workspace === undefined || res.locals.workspace !== config.workspace) {
+        res.sendStatus(503)
+        return
+      }
+      void automation.access(res.locals.workspace, res.locals.actor, res.locals.role).then((allowed) => {
+        if (allowed) next()
+        else res.sendStatus(403)
+      }).catch(() => res.sendStatus(503))
+    })
+    app.get('/api/mail-automation', (_req, res) => {
+      void automation.get(res.locals.workspace).then((state) => {
+        res.set('Cache-Control', 'no-store').json(state)
+      }).catch(() => res.sendStatus(503))
+    })
+    app.post('/api/mail-automation', (req, res) => {
+      void automation.action(res.locals.workspace, res.locals.actor, req.body).then(() => res.json({ ok: true }))
+        .catch((err) => res.sendStatus(err instanceof MailUserError ? 400 : 503))
     })
   }
   app.post('/api/send', (req, res) => {

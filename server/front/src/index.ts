@@ -313,7 +313,7 @@ export function start (
   app.use(cors())
   // Keep this allowlist in sync with the prospect-mail API routes used by the browser.
   app.use('/prospect-mail-api', (req, res) => {
-    if (!['/status', '/send', '/forward', '/task-mail', '/task-mail/test'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
+    if (!['/status', '/send', '/forward', '/task-mail', '/task-mail/test', '/mail-automation'].includes(req.path) || !['GET', 'POST'].includes(req.method)) {
       res.sendStatus(404)
       return
     }
