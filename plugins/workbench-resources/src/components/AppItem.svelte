@@ -50,6 +50,7 @@
     </div>
     {#if showLabel}<span class="app-label"><Label {label} /></span>{/if}
     {#if notify}<div class="marker" />{/if}
+    <slot />
   {/if}
 </button>
 

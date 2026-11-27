@@ -1,5 +1,14 @@
 {
   "string": {
+    "TodayTasks": "Today’s tasks",
+    "MyDepartmentTasks": "My departments",
+    "TaskEmpty": "No tasks today 🎉",
+    "TaskOverdueCount": "{count} overdue",
+    "TaskTypeOrder": "Order",
+    "TaskTypeIssue": "Issue",
+    "TaskTypeTodo": "To-do",
+    "TaskTypeApproval": "Approval",
+    "TaskFinishTodo": "Finish to-do",
     "ApplicationAssignmentsError": "Could not save the application form assignment.",
     "ApplicationAssignments": "Application forms this department manages",
     "ApplicationAssignmentsHint": "Ticked forms are approved by this department's admin, whoever applies; its admins and supervisors also see all such requests company-wide. Employees only see their own.",

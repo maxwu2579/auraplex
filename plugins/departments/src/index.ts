@@ -6,6 +6,7 @@ import { plugin, type IntlString, type Plugin, type Resource } from '@hcengineer
 import type { AnyComponent } from '@hcengineering/ui'
 
 export { primaryStaffDepartments } from './staffDepartment'
+export * from './tasks'
 
 export type DepartmentPermission = 'create' | 'update' | 'delete' | 'comment' | 'invite' | 'manageMembers'
 export interface DepartmentAccess extends Department {
@@ -182,7 +183,7 @@ export default plugin(departmentsId, {
     TrackingSettings: '' as Ref<Class<TrackingSettings>>
   },
   ids: { ModuleSettings: '' as Ref<ModuleSettings>, OrderFlow: '' as Ref<OrderFlow>, TrackingSettings: '' as Ref<TrackingSettings> },
-  app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc>, Tracking: '' as Ref<Doc> },
+  app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc>, Tracking: '' as Ref<Doc>, TodayTasks: '' as Ref<Doc> },
   component: {
     Directory: '' as AnyComponent,
     Orders: '' as AnyComponent,
@@ -191,12 +192,23 @@ export default plugin(departmentsId, {
     Workload: '' as AnyComponent,
     TrackingSettingsPage: '' as AnyComponent,
     TodayActivity: '' as AnyComponent,
+    TodayTasks: '' as AnyComponent,
+    TaskBadge: '' as AnyComponent,
     OrderPanel: '' as AnyComponent
   },
   function: {
     OrderTitle: '' as Resource<(client: Client, ref: Ref<Doc>, doc?: Doc) => Promise<string>>
   },
   string: {
+    TodayTasks: '' as IntlString,
+    MyDepartmentTasks: '' as IntlString,
+    TaskEmpty: '' as IntlString,
+    TaskOverdueCount: '' as IntlString,
+    TaskTypeOrder: '' as IntlString,
+    TaskTypeIssue: '' as IntlString,
+    TaskTypeTodo: '' as IntlString,
+    TaskTypeApproval: '' as IntlString,
+    TaskFinishTodo: '' as IntlString,
     TrackingPageSystem: '' as IntlString,
     TrackingPageLogin: '' as IntlString,
     TrackingPageOpen: '' as IntlString,

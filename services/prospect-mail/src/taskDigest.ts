@@ -1,7 +1,8 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import type { AccountUuid } from '@hcengineering/core'
 import { taskMailLabel } from './taskMailLabels'
-import { isOverdue, workdays, type singaporeClock } from './schedule'
+import { taskSection } from '@hcengineering/departments'
+import { workdays, type singaporeClock } from './schedule'
 import type { ScheduledRecords } from './scheduledRecords'
 import type { SendTaskMail } from './taskReminders'
 import type { ScheduledTask } from './taskSnapshot'
@@ -39,13 +40,7 @@ export interface DigestRow { title: string, href: string, section: 0 | 1 | 2 | 3
 export function digestRows (tasks: ScheduledTask[], employee: AccountUuid, now: number, endOfDay: number): DigestRow[] {
   const rows: DigestRow[] = []
   for (const item of tasks) {
-    const assigned = item.assignee === employee
-    const approver = item.approvers?.includes(employee) === true
-    if (!assigned && !approver) continue
-    const section = isOverdue(item.due, false, now) ? 0
-      : item.due !== undefined && item.due < endOfDay ? 1
-        : item.order?.stage.status === 'active' && assigned ? 2
-          : approver ? 3 : undefined
+    const section = taskSection(item, employee, now, endOfDay)
     if (section !== undefined) rows.push({ title: item.title, href: item.href, section })
   }
   return rows.sort((a, b) => a.section - b.section)

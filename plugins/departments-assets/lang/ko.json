@@ -1,5 +1,14 @@
 {
   "string": {
+    "TodayTasks": "Today’s tasks",
+    "MyDepartmentTasks": "My departments",
+    "TaskEmpty": "No tasks today 🎉",
+    "TaskOverdueCount": "{count} overdue",
+    "TaskTypeOrder": "Order",
+    "TaskTypeIssue": "Issue",
+    "TaskTypeTodo": "To-do",
+    "TaskTypeApproval": "Approval",
+    "TaskFinishTodo": "Finish to-do",
     "Administrators": "Department administrators",
     "Supervisors": "Supervisors",
     "Employees": "Employees",

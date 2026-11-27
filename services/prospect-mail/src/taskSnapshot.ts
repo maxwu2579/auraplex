@@ -1,27 +1,13 @@
 // Copyright © 2026 Auraplex. Licensed under the Eclipse Public License, Version 2.0.
 import contact, { type Employee, type Person, type PersonSpace } from '@hcengineering/contact'
 import core, { type AccountUuid, type Doc, type Ref, type TxOperations } from '@hcengineering/core'
-import departments, { type DepartmentAccess, type Order, type OrderStage } from '@hcengineering/departments'
+import departments, { type DepartmentAccess, issueTask, orderTask, todoTask, type ScheduledTask } from '@hcengineering/departments'
 import hr from '@hcengineering/hr'
 import processModel from '@hcengineering/process'
 import task from '@hcengineering/task'
 import time from '@hcengineering/time'
 import tracker from '@hcengineering/tracker'
-import { orderDeadline } from './schedule'
-
-export interface ScheduledTask {
-  source: Doc
-  title: string
-  assignee?: AccountUuid
-  approvers?: AccountUuid[]
-  due?: number
-  href: string
-  order?: { doc: Order, stage: OrderStage }
-}
-
-export function panelLink (base: string, component: string, doc: Doc): string {
-  return base + '#' + encodeURIComponent([component, doc._id, doc._class, 'content'].join('|'))
-}
+export type { ScheduledTask } from '@hcengineering/departments'
 
 export async function taskSnapshot (client: TxOperations, base: string, dueBefore: number, includeApprovals = false): Promise<{
   tasks: ScheduledTask[], teams: Map<string, DepartmentAccess>, employees: Employee[], spaces: Map<Ref<Person>, PersonSpace>
@@ -46,35 +32,17 @@ export async function taskSnapshot (client: TxOperations, base: string, dueBefor
     .map((team) => [team._id, hierarchy.as(team, departments.mixin.DepartmentAccess)]))
   const awaiting = new Map(approvals.filter((approval) => approval.actionType !== 'review').map((approval) => [approval._id as string, approval]))
   for (const order of orders) {
-    const stage = order.stages[order.current]
-    if (stage?.status !== 'active' && stage?.status !== 'approval') continue
-    const team = stage.department === undefined ? undefined : teamById.get(stage.department)
-    const approvers = stage.status !== 'approval' ? undefined
-      : stage.approval?.by === 'person' ? [stage.approval.person]
-        : team !== undefined && !team.archived ? team.administrators : undefined
-    tasks.push({
-      approvers,
-      source: order, title: `${order.number} ${order.title} · ${stage.name}`, assignee: stage.assignee,
-      due: orderDeadline(stage), href: panelLink(base, 'departments:component:OrderPanel', order), order: { doc: order, stage }
-    })
+    const item = orderTask(base, order, teamById)
+    if (item !== undefined) tasks.push(item)
   }
   for (const issue of issues) {
     if (closedStatuses.has(issue.status)) continue
-    tasks.push({
-      source: issue, title: `${issue.identifier} ${issue.title}`, due: issue.dueDate ?? undefined,
-      assignee: issue.assignee == null ? undefined : byPerson.get(issue.assignee),
-      href: `${base}/tracker/${encodeURIComponent(issue.identifier)}`
-    })
+    tasks.push(issueTask(base, issue, issue.assignee == null ? undefined : byPerson.get(issue.assignee), false))
   }
   const addTodo = (todo: (typeof todos)[number]): void => {
-    const assignee = byPerson.get(todo.user)
-    const approval = awaiting.get(todo._id)
+    const approval = awaiting.has(todo._id)
     awaiting.delete(todo._id)
-    tasks.push({
-      source: todo, title: todo.title, due: todo.dueDate ?? undefined, assignee,
-      approvers: approval !== undefined && assignee !== undefined ? [assignee] : undefined,
-      href: panelLink(base, 'time:component:EditToDo', todo)
-    })
+    tasks.push(todoTask(base, todo, byPerson.get(todo.user), approval))
   }
   for (const todo of todos) addTodo(todo)
   for (const approval of awaiting.values()) addTodo(approval)

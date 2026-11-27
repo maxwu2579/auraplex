@@ -1,5 +1,14 @@
 {
   "string": {
+    "TodayTasks": "今日任务",
+    "MyDepartmentTasks": "我的部门",
+    "TaskEmpty": "今天没有任务 🎉",
+    "TaskOverdueCount": "过期 {count} 项",
+    "TaskTypeOrder": "订单",
+    "TaskTypeIssue": "任务",
+    "TaskTypeTodo": "待办",
+    "TaskTypeApproval": "审批",
+    "TaskFinishTodo": "完成待办",
     "ApplicationAssignmentsError": "未能保存申请表分配。",
     "ApplicationAssignments": "负责的申请表",
     "ApplicationAssignmentsHint": "勾上的申请表由这个部门的管理员审批（谁申请都一样），这个部门的管理员和主管还能看到全公司这类申请。普通员工只能看到自己的。",

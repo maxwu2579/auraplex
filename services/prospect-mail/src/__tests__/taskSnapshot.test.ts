@@ -18,7 +18,7 @@ test('uses order stages, unfinished tracker issues and open planner items includ
   }
   const fixture = new Map([
     [departments.class.Order as string, [{
-      _id: 'order-1', _class: departments.class.Order, title: 'Widget', number: 'ORD-0001',
+      _id: 'order-1', _class: departments.class.Order, title: 'Widget', state: 'active', number: 'ORD-0001',
       stages: [{ status: 'active', name: 'Design', assignee: person.personUuid, startedOn: yesterday - 1, limitDays: 1 }],
       current: 0
     }]],

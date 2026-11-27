@@ -15,8 +15,8 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
   import core, { AccountRole, getCurrentAccount, type ModulePermissionGroup, type Ref } from '@hcengineering/core'
-  import { createNotificationsQuery, createQuery } from '@hcengineering/presentation'
-  import { Scroller, deviceOptionsStore as deviceInfo } from '@hcengineering/ui'
+  import { createNotificationsQuery, createQuery, hasResource } from '@hcengineering/presentation'
+  import { Component, type AnyComponent, Scroller, deviceOptionsStore as deviceInfo } from '@hcengineering/ui'
   import { NavLink } from '@hcengineering/view-resources'
   import type { Application } from '@hcengineering/workbench'
   import workbench from '@hcengineering/workbench'
@@ -35,6 +35,7 @@
   export let direction: 'vertical' | 'horizontal' = 'vertical'
   export let customAppProps: Map<string, any> = new Map<string, any>()
 
+  const todayTaskBadge = 'departments:component:TaskBadge' as AnyComponent
   const dispatch = createEventDispatcher()
 
   function getClickHandler (app: Application, customProps: any): () => void {
@@ -188,7 +189,9 @@
             dataId={`app-sidebar-${app.alias}`}
             showLabel={$appBarLabels && direction === 'vertical'}
             on:click={getClickHandler(app, customProps)}
-          />
+          >
+            {#if app.alias === 'today-tasks' && hasResource(todayTaskBadge)}<Component is={todayTaskBadge} />{/if}
+          </AppItem>
         </NavLink>
       {/each}
       {#if topApps.length > 0}

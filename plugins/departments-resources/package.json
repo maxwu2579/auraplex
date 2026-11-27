@@ -34,6 +34,8 @@
     "fflate": "0.8.3",
     "@hcengineering/tracker": "workspace:^0.7.0",
     "@hcengineering/task": "workspace:^0.7.0",
+    "@hcengineering/process": "workspace:^0.7.0",
+    "@hcengineering/time": "workspace:^0.7.0",
     "jsqr": "1.4.0",
     "qrcode": "1.5.4",
     "@hcengineering/document": "workspace:*",

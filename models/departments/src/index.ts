@@ -177,6 +177,15 @@ export function createModel (builder: Builder): void {
     component: departments.component.OrderPanel
   })
   builder.createDoc(workbench.class.Application, core.space.Model, {
+    label: departments.string.TodayTasks,
+    icon: icon('view:icon:TodoList'),
+    alias: 'today-tasks',
+    hidden: false,
+    position: 'top',
+    order: -100,
+    component: departments.component.TodayTasks
+  }, departments.app.TodayTasks)
+  builder.createDoc(workbench.class.Application, core.space.Model, {
     label: departments.string.Tracking,
     icon: icon('view:icon:Eye'),
     alias: 'tracking',
