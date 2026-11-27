@@ -118,6 +118,13 @@ export function createModel (builder: Builder): void {
             label: prospects.string.Statistics,
             icon: prospects.icon.Prospects,
             component: prospects.component.Statistics
+          },
+          {
+            id: 'template',
+            label: prospects.string.TemplateSettings,
+            icon: prospects.icon.Prospects,
+            component: prospects.component.TemplateSettings,
+            editModule: 'prospects'
           }
         ],
         spaces: []

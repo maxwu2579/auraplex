@@ -75,7 +75,7 @@ export default plugin(prospectsId, {
   },
   template: { Default: '' as Ref<ProspectTemplate> },
   app: { Prospects: '' as Ref<Doc> },
-  component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent },
+  component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent },
   icon: { Prospects: '' as Asset },
   string: {
     PageLibrary: '' as IntlString,
@@ -144,7 +144,7 @@ export default plugin(prospectsId, {
     PageWeek: '' as IntlString,
     PageMonth: '' as IntlString,
     PageSearch: '' as IntlString,
- Prospects: '' as IntlString, Directory: '' as IntlString, Statistics: '' as IntlString }
+ Prospects: '' as IntlString, Directory: '' as IntlString, Statistics: '' as IntlString, TemplateSettings: '' as IntlString }
 })
 export * from './rules'
 export * from './mailRules'

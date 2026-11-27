@@ -168,6 +168,7 @@ export interface SpecialNavModel {
   label: IntlString
   icon?: Asset
   accessLevel?: AccountRole
+  editModule?: string
   component: AnyComponent
   componentProps?: Record<string, any>
   // If not top and bottom, position will be sorted alphabetically.

@@ -16,7 +16,7 @@
   import core, { Doc, Ref, SortingOrder, Space, getCurrentAccount, hasAccountRole } from '@hcengineering/core'
   import { getResource } from '@hcengineering/platform'
   import preference, { SpacePreference } from '@hcengineering/preference'
-  import { createQuery, getClient, isAdminUser } from '@hcengineering/presentation'
+  import { createQuery, departmentModuleLevel, getClient, isAdminUser } from '@hcengineering/presentation'
   import { Scroller, NavItem, Component } from '@hcengineering/ui'
   import { NavLink } from '@hcengineering/view-resources'
   import type { Application, NavigatorModel, SpecialNavModel } from '@hcengineering/workbench'
@@ -80,11 +80,12 @@
   })
 
   let requestIndex = 0
-  async function update (model: NavigatorModel, spaces: Space[], preferences: Map<Ref<Doc>, SpacePreference>) {
+  async function update (model: NavigatorModel, spaces: Space[], preferences: Map<Ref<Doc>, SpacePreference>,
+    moduleLevel: (alias: string) => string) {
     shownSpaces = spaces.filter((sp) => !sp.archived && (model.hideStarred || !preferences.has(sp._id)))
     starred = model.hideStarred ? [] : spaces.filter((sp) => preferences.has(sp._id))
     if (model.specials !== undefined) {
-      const [sp, resIndex] = await updateSpecials(model.specials, spaces, ++requestIndex)
+      const [sp, resIndex] = await updateSpecials(model.specials, spaces, ++requestIndex, moduleLevel)
       if (resIndex !== requestIndex) return
       const topSpecials = sp.get('top') ?? []
       const bottomSpecials = sp.get('bottom') ?? []
@@ -104,12 +105,13 @@
     }
   }
 
-  $: if (model) update(model, spaces, preferences)
+  $: if (model) update(model, spaces, preferences, $departmentModuleLevel)
 
   async function updateSpecials (
     specials: SpecialNavModel[],
     spaces: Space[],
-    requestIndex: number
+    requestIndex: number,
+    moduleLevel: (alias: string) => string
   ): Promise<[Map<string, SpecialNavModel[]>, number]> {
     const me = getCurrentAccount()
     const result = new Map<string, SpecialNavModel[]>()
@@ -117,7 +119,7 @@
     const spHandlers = await Promise.all(
       specials.map(async (sp) => {
         const pos = sp.position ?? 'top'
-        let visible = true
+        let visible = sp.editModule === undefined || moduleLevel(sp.editModule) === 'edit'
         if (sp.accessLevel !== undefined && !hasAccountRole(me, sp.accessLevel)) {
           visible = false
         }
