@@ -52,8 +52,12 @@ export function taskSection (item: ScheduledTask, employee: AccountUuid, now: nu
   if (approver) return 3
 }
 
+// The app has to be in the path, or the workbench opens the last app and ignores the panel.
+const panelApps: Record<string, string> = { departments: 'orders', time: 'time' }
+
 export function panelLink (base: string, component: string, doc: Doc): string {
-  return base + '#' + encodeURIComponent([component, doc._id, doc._class, 'content'].join('|'))
+  const app = panelApps[component.split(':')[0]]
+  return base + (app !== undefined ? '/' + app : '') + '#' + encodeURIComponent([component, doc._id, doc._class, 'content'].join('|'))
 }
 
 export function orderTask (base: string, order: Order, teams: ReadonlyMap<string, DepartmentAccess>): ScheduledTask | undefined {

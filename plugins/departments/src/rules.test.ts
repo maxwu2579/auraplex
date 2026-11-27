@@ -3,6 +3,7 @@ import type { AccountUuid, Ref } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
 import type { Order } from './index'
 import { boardPlace } from './board'
+import { panelLink } from './tasks'
 import {
   addWorkdays, applicationRuleEvent, orderRuleEvent, ruleApplies, ruleRecipients, ruleRunId, ruleText, validRule,
   type OrderRule
@@ -92,4 +93,11 @@ test('rule shape check', () => {
   expect(validRule(rule({ action: { kind: 'todo', target: 'applicant', title: 'x' } }))).toBe(false)
   expect(validRule(rule({ action: { kind: 'notify', target: 'person', title: 'x' } }))).toBe(false)
   expect(validRule(rule({ action: { kind: 'todo', target: 'salesOwner', title: 'x', dueDays: -1 } }))).toBe(false)
+})
+
+test('task links name the app so the workbench opens the panel', () => {
+  const doc = { _id: 'fake-id', _class: 'departments:class:Order' } as any
+  expect(panelLink('/workbench/ws', 'departments:component:OrderPanel', doc)).toBe(
+    '/workbench/ws/orders#' + encodeURIComponent('departments:component:OrderPanel|fake-id|departments:class:Order|content'))
+  expect(panelLink('/workbench/ws', 'time:component:EditToDo', doc).startsWith('/workbench/ws/time#')).toBe(true)
 })

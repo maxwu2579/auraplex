@@ -10,7 +10,7 @@
   } from '@hcengineering/departments'
   import hr, { type Department } from '@hcengineering/hr'
   import { createQuery, getClient } from '@hcengineering/presentation'
-  import { getCurrentLocation, languageStore } from '@hcengineering/ui'
+  import { getCurrentLocation, languageStore, showPanel } from '@hcengineering/ui'
 
   const me = getCurrentAccount().uuid
   const owner = isOwnerOrMaintainer()
@@ -65,6 +65,10 @@
     const found = id === undefined ? undefined : staff.find((it) => it.personUuid === id)
     return found === undefined ? '—' : formatName(found.name)
   }
+  // Open the order in the side panel, like the inbox does (a plain link is not followed inside the app).
+  function open (order: Order): void {
+    showPanel(departments.component.OrderPanel, order._id, order._class, 'content')
+  }
   $: deptName = (id: string | undefined): string => teams.find((it) => it._id === id)?.name ?? L('未指定部门', 'No department')
 </script>
 
@@ -87,7 +91,7 @@
         <h2>{titles[column]} <span class="count">{items.length}</span></h2>
         {#each items as { order, place } (order._id)}
           {@const stage = place.stage}
-          <a class="card" href={panelLink(base, 'departments:component:OrderPanel', order)}>
+          <a class="card" href={panelLink(base, 'departments:component:OrderPanel', order)} on:click|preventDefault={() => { open(order) }}>
             <b>{order.number} {order.title}</b>
             <span>{order.customer}</span>
             <span>{stage?.name ?? '—'} · {deptName(stage?.department)}</span>
