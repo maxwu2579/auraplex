@@ -43,6 +43,7 @@ import { notificationOperation } from '@hcengineering/model-notification'
 import { preferenceOperation } from '@hcengineering/model-preference'
 import { processId, processOperation } from '@hcengineering/model-process'
 import { productsOperation } from '@hcengineering/model-products'
+import { prospectsId, prospectsOperation } from '@hcengineering/model-prospects'
 import { questionsOperation } from '@hcengineering/model-questions'
 import { ratingOperation } from '@hcengineering/model-rating'
 import { recorderId, recorderOperation } from '@hcengineering/model-recorder'
@@ -89,6 +90,7 @@ export const migrateOperations: [string, MigrateOperation][] = [
   ['training', trainingOperation],
   ['request', requestOperation],
   ['products', productsOperation],
+  [prospectsId, prospectsOperation],
   ['board', boardOperation],
   ['hr', hrOperation],
   ['document', documentOperation],

@@ -13,6 +13,8 @@ import {
   TypeBoolean,
   TypeAccountUuid,
   TypeRef,
+  TypeRecord,
+  ArrOf,
   Collection
 } from '@hcengineering/model'
 import core, { TAttachedDoc, TDoc } from '@hcengineering/model-core'
@@ -20,7 +22,9 @@ import attachment from '@hcengineering/model-attachment'
 import lead from '@hcengineering/lead'
 import workbench from '@hcengineering/model-workbench'
 import prospects, {
+  defaultProspectFields,
   prospectsId,
+  type ProspectTemplate,
   type Prospect,
   type ProspectMail,
   type ProspectMailCursor,
@@ -28,11 +32,13 @@ import prospects, {
 } from '@hcengineering/prospects'
 export { prospectsId } from '@hcengineering/prospects'
 export default prospects
+export { prospectsOperation } from './migration'
 export const DOMAIN_PROSPECTS = 'prospects' as Domain
 
 @Model(prospects.class.Prospect, core.class.Doc, DOMAIN_PROSPECTS)
 @UX(prospects.string.Prospects, prospects.icon.Prospects, undefined, 'name')
 export class TProspect extends TDoc implements Prospect {
+  @Hidden() @Prop(TypeRecord(), prospects.string.Prospects) custom?: Prospect['custom']
   @Prop(TypeString(), prospects.string.Prospects) name!: string
   @Prop(TypeString(), prospects.string.Prospects) company!: string
   @Prop(TypeString(), prospects.string.Prospects) title!: string
@@ -81,8 +87,16 @@ export class TProspectMailCursor extends TDoc implements ProspectMailCursor {
   @Prop(TypeString(), prospects.string.Prospects) uidValidity!: string
   @Prop(TypeNumber(), prospects.string.Prospects) uid!: number
 }
+@Model(prospects.class.ProspectTemplate, core.class.Doc, DOMAIN_PROSPECTS)
+export class TProspectTemplate extends TDoc implements ProspectTemplate {
+  @Prop(ArrOf(TypeRecord()), prospects.string.Prospects) fields!: ProspectTemplate['fields']
+  @Prop(ArrOf(TypeRecord()), prospects.string.Prospects) removedFields?: ProspectTemplate['removedFields']
+}
+
 export function createModel (builder: Builder): void {
-  builder.createModel(TProspect, TProspectMail, TProspectMailCursor)
+  builder.createModel(TProspect, TProspectMail, TProspectMailCursor, TProspectTemplate)
+  builder.createDoc(prospects.class.ProspectTemplate, core.space.Model, { fields: [...defaultProspectFields] },
+    prospects.template.Default)
   builder.createDoc(
     workbench.class.Application,
     core.space.Model,

@@ -662,6 +662,19 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const level = (await this.moduleAccess(ctx))?.(alias) ?? 'edit'
       if (level === 'none' || (level === 'view' && cud.objectClass !== orderActionClass)) forbidden()
     }
+    if (cud.objectClass === 'prospects:class:ProspectTemplate') {
+      // The workspace upgrade creates the singleton. Editors may only replace its field definitions.
+      if (cud.objectId !== 'prospects:template:Default' || cud.objectSpace !== core.space.Workspace ||
+        cud._class !== core.class.TxUpdateDoc) forbidden()
+      const operations = (cud as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+      const { fields, removedFields } = operations
+      if (Object.keys(operations).some((key) => key !== 'fields' && key !== 'removedFields') ||
+        !Array.isArray(fields) || !['name', 'company'].every((key) =>
+          fields.filter((field) => field?.key === key).length === 1 &&
+          fields.some((field) => field?.key === key && field.builtin === true && field.hidden === false)) ||
+        (removedFields !== undefined && !Array.isArray(removedFields))) forbidden()
+      return
+    }
     if (cud.objectClass === trackingSettingsClass) {
       await this.checkAudit(ctx, cud)
       return

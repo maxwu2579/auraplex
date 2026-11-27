@@ -369,3 +369,30 @@ test('application reads and writes respect department, author and historical app
   await guard.tx(context('owner', AccountRole.Owner), [archive])
   expect((await read('admin')).map((row) => row._id)).toEqual(['normal-card'])
 })
+
+test('prospect template writes require edit access and cannot hide either identity field', async () => {
+  const cls = 'prospects:class:ProspectTemplate' as Ref<Class<Doc>>
+  const ctx = { contextData: { account: { uuid: 'reader', role: AccountRole.User }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  const pipeline = { hierarchy: { hasClass: () => true } } as unknown as PipelineContext
+  const next = {
+    findAll: jest.fn(async (_ctx, cls) => {
+      if (cls === 'departments:class:ModuleSettings') return [{ enabled: true }]
+      if (cls === 'departments:class:ModuleGrant') return [{ extra: { prospects: 'view' }, blocked: [] }]
+      return []
+    }),
+    tx: jest.fn(async () => [])
+  } as unknown as Middleware
+  const guard = await DepartmentGuardMiddleware.create(ctx, pipeline, next)
+  const tx = (hidden: boolean) => ({
+    ...update({ fields: [{ key: 'name', builtin: true, hidden }, { key: 'company', builtin: true, hidden: false }] }),
+    objectClass: cls,
+    objectSpace: core.space.Workspace,
+    objectId: 'prospects:template:Default' as Ref<Doc>
+  })
+  await expect(guard.tx(ctx, [tx(false)])).rejects.toThrow()
+  expect(next.tx).not.toHaveBeenCalled()
+
+  const owner = { contextData: { account: { uuid: 'owner', role: AccountRole.Owner }, broadcast: { txes: [] } } } as unknown as MeasureContext<SessionData>
+  await expect(guard.tx(owner, [tx(true)])).rejects.toThrow()
+  await expect(guard.tx(owner, [tx(false)])).resolves.toBeDefined()
+})

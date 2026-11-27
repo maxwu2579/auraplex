@@ -8,7 +8,21 @@ export const prospectsId = 'prospects' as Plugin
 /** Serialize conditional writes to the prospect and its related records. */
 export const prospectWriteScope = 'prospect-write'
 export type ProspectStatus = 'new' | 'sent' | 'replied' | 'do-not-send' | 'bounced' | 'converted'
+export interface ProspectFieldDef {
+  key: string
+  builtin: boolean
+  label: string
+  type: 'text' | 'date' | 'select'
+  options?: string[]
+  hidden: boolean
+  order: number
+}
+export interface ProspectTemplate extends Doc {
+  fields: ProspectFieldDef[]
+  removedFields?: ProspectFieldDef[]
+}
 export interface Prospect extends Doc {
+  custom?: Record<string, string | number>
   name: string
   company: string
   title: string
@@ -55,9 +69,11 @@ export interface ProspectMailCursor extends Doc {
 export default plugin(prospectsId, {
   class: {
     Prospect: '' as Ref<Class<Prospect>>,
+    ProspectTemplate: '' as Ref<Class<ProspectTemplate>>,
     ProspectMail: '' as Ref<Class<ProspectMail>>,
     ProspectMailCursor: '' as Ref<Class<ProspectMailCursor>>
   },
+  template: { Default: '' as Ref<ProspectTemplate> },
   app: { Prospects: '' as Ref<Doc> },
   component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent },
   icon: { Prospects: '' as Asset },
@@ -132,3 +148,4 @@ export default plugin(prospectsId, {
 })
 export * from './rules'
 export * from './mailRules'
+export * from './template'
