@@ -55,7 +55,7 @@ async function act (
   for (const employee of employees) {
     const space = spaces.find((it) => it.person === employee._id)
     if (space === undefined || employee.personUuid === undefined) continue
-    await inbox(client, employee.personUuid, space, { source: order, title: `${text}\n${event.label}`, href: '' }, now)
+    await inbox(client, employee.personUuid, space, { source: order, title: `${text}\n${event.label}`, href: '' }, now, departments.string.OrderRules)
   }
   return {}
 }

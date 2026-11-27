@@ -11,7 +11,8 @@ import type { ScheduledTask, taskSnapshot } from './taskSnapshot'
 export type SendTaskMail = (user: AccountUuid, subject: string, text: string, html?: string) => Promise<void>
 
 export async function inbox (
-  client: TxOperations, user: AccountUuid, space: PersonSpace, item: ScheduledTask, now: number
+  client: TxOperations, user: AccountUuid, space: PersonSpace, item: ScheduledTask, now: number,
+  header = departments.string.TaskOverdueReminder
 ): Promise<void> {
   const source = item.source
   const ops = client.apply(`task-inbox:${source._id}:${user}`)
@@ -27,7 +28,7 @@ export async function inbox (
   }
   await ops.createDoc(notification.class.CommonInboxNotification, space._id, {
     user, objectId: source._id, objectClass: source._class, docNotifyContext: contextId,
-    header: departments.string.TaskOverdueReminder, isViewed: false, archived: false, types: [],
+    header, isViewed: false, archived: false, types: [],
     messageHtml: JSON.stringify({
       type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: item.title }] }]
     })
