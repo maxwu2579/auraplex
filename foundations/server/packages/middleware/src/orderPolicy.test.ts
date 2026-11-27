@@ -185,3 +185,19 @@ test('payment is required when starting or returning to a gated stage', () => {
   expect(canOrderAction(value, back, 'ming', false, roleOf)).toBe(false)
   expect(canOrderAction({ ...value, paidOn: 1 }, back, 'ming', false, roleOf)).toBe(true)
 })
+
+test('current assignee and department members can record scans without gaining completion or approval rights', () => {
+  const value = order()
+  const current = value.stages[value.current]
+  const scan = { kind: 'scan', stage: current.id }
+  expect(canOrderAction(value, scan, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(value, scan, 'zhao', false, roleOf)).toBe(true)
+  expect(canOrderAction(value, scan, 'wang', false, roleOf)).toBe(false)
+  expect(canOrderAction(value, { kind: 'scan', stage: value.stages[0].id }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(value, { ...scan, kind: 'complete' }, 'zhao', false, roleOf)).toBe(false)
+  current.status = 'approval'
+  Object.assign(current, { approval: { by: 'deptAdmins' } })
+  expect(canOrderAction(value, scan, 'li', false, roleOf)).toBe(true)
+  expect(canOrderAction(value, { ...scan, kind: 'complete' }, 'li', false, roleOf)).toBe(false)
+  expect(canOrderAction(value, { ...scan, kind: 'approve' }, 'li', false, roleOf)).toBe(false)
+})

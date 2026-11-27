@@ -52,8 +52,8 @@
   let qrImage = ''
   let scannedId: Ref<Order> | undefined
   let pendingScan: string | undefined = getCurrentLocation().query?.scan ?? undefined
-  $: canScan = owner || me.role === AccountRole.Maintainer || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
-  $: canStart = selected !== undefined && selected.state === 'pending' && (canScan || selected.salesOwner === me.uuid)
+  $: canScanGlobally = owner || me.role === AccountRole.Maintainer || depts.some((d) => !d.archived && d.administrators.includes(me.uuid))
+  $: canStart = selected !== undefined && selected.state === 'pending' && (canScanGlobally || selected.salesOwner === me.uuid)
   // Auraplex: super admins and company admins cancel an order that is not finished, with a reason.
   $: canCancel = selected !== undefined && (selected.state === 'pending' || selected.state === 'active') &&
     (owner || me.role === AccountRole.Maintainer)
@@ -129,6 +129,19 @@
     const match = /ORD-\d+/.exec(text)
     return match?.[0]
   }
+  function canScanOrder (order: Order, global: boolean, lookup: typeof roleOf): boolean {
+    const current = order.stages[order.current]
+    return global || (current !== undefined &&
+      (current.assignee === me.uuid || lookup(current.department, me.uuid) !== undefined))
+  }
+
+  $: canScan = canScanGlobally || orders.some((order) => canScanOrder(order, canScanGlobally, roleOf))
+  $: scanNext = selected?.stages[(selected?.current ?? -1) + 1]
+  $: scanCanFinish = selected?.state === 'active' && stage?.status === 'active' && (lead || inCharge) &&
+    $departmentModuleLevel('orders') !== 'none'
+  $: scanNeedsPayment = selected?.paidOn === undefined && scanNext !== undefined &&
+    (scanNext.waitForPayment ?? (selected?.current === 0))
+
   async function handleScan (number: string): Promise<void> {
     const found = orders.find((it) => it.number === number)
     if (found === undefined) {
@@ -136,24 +149,27 @@
       return
     }
     open(found)
-    scannedId = found._id
-    if (!canScan) return
+    if (!canScanOrder(found, canScanGlobally, roleOf)) return
     try {
       // D: keep who scanned and when in the order history.
-      const ops = client.apply(undefined, 'order-scan')
+      const ops = client.apply(found._id, 'order-scan')
       await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
         order: found._id, kind: 'scan', stage: found.stages[Math.min(found.current, found.stages.length - 1)]?.id ?? '', actor: me.uuid
       })
       // B: scanning a pending order starts its flow straight away.
-      const start = found.state === 'pending' && found.stages[0] !== undefined &&
+      const start = found.state === 'pending' && (canScanGlobally || found.salesOwner === me.uuid) && found.stages[0] !== undefined &&
         (found.stages[0].waitForPayment !== true || found.paidOn !== undefined)
       if (start) {
         await ops.createDoc(departments.class.OrderAction, core.space.Workspace, {
           order: found._id, kind: 'start', stage: found.stages[0].id, actor: me.uuid
         })
       }
-      if ((await ops.commit()).result && start) notice = L('扫码成功，流程已开始。', 'Scanned - the order has started.')
-    } catch {}
+      if (!(await ops.commit()).result) throw new Error('Scan refused')
+      scannedId = found._id
+      if (start) notice = L('扫码成功，流程已开始。', 'Scanned - the order has started.')
+    } catch {
+      error = local(departments.string.OrderActionDenied)
+    }
   }
   $: if (pendingScan !== undefined && orders.length > 0) {
     const number = pendingScan
@@ -566,7 +582,29 @@
             </div>
           </div>
         {:else}
-          {#if scannedId === selected._id}<p class="scanned">📷 {L('扫码打开', 'Opened by scan')}</p>{/if}
+          {#if scannedId === selected._id}
+            <section class="scan-handoff">
+              <strong><Label label={departments.string.OrderScanRecorded} /></strong>
+              {#if stage !== undefined}
+                <div>{stage.name} · {name(stage.assignee)}</div>
+                {#if scanCanFinish}
+                  <div><Label label={departments.string.OrderElapsed} params={{ duration: days(stage.startedOn) }} />
+                    · <Label label={departments.string.OrderScanRemaining} params={{ count: stage.steps.filter((step) => !step.done).length }} />
+                  </div>
+                  {#if scanNeedsPayment}<p class="hint"><Label label={departments.string.OrderPaymentRequired} /></p>{/if}
+                  <button disabled={busy} on:click={() => act('complete')}>
+                    {#if stage.approval}
+                      <Label label={departments.string.OrderSubmitApproval} />
+                    {:else if scanNext === undefined || scanNeedsPayment}
+                      <Label label={departments.string.OrderCompleteStage} />
+                    {:else}
+                      <Label label={departments.string.OrderScanHandoff} params={{ next: deptName(scanNext.department) || scanNext.name }} />
+                    {/if}
+                  </button>
+                {/if}
+              {/if}
+            </section>
+          {/if}
           <h3>{selected.number} {selected.title}{#if canEditInfo}<Button kind="regular" label={departments.string.OrderPage17} on:click={startEdit} />{/if}
             <button class="qr-btn" on:click={() => { showQr = !showQr }}>{L('二维码', 'QR code')}</button>
             {#if canCancel}<button class="qr-btn" on:click={() => { cancelOpen = !cancelOpen }}>{L('取消订单', 'Cancel order')}</button>{/if}</h3>
@@ -790,6 +828,8 @@
   .cancel-box { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
   .cancel-box .hint { flex-basis: 100%; margin: 0; }
   .scan-btn, .qr-btn { margin-left: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 0.375rem; border: 1px solid var(--theme-divider-color); background: var(--theme-button-default); color: var(--theme-caption-color); cursor: pointer; font-size: 0.8rem; font-weight: 500; }
+  .scan-handoff { padding: 1rem; border: 1px solid var(--theme-divider-color); border-radius: 0.5rem; display: grid; gap: 0.5rem; }
+  .scan-handoff button { min-height: 3rem; font-weight: 600; color: var(--theme-link-color); }
   .start-later { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
   .qr-box { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
   .qr-box img { width: 9rem; height: 9rem; background: #fff; padding: 0.25rem; border-radius: 0.25rem; }

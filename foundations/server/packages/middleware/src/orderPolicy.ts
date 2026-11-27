@@ -76,7 +76,11 @@ export function canOrderAction (
 ): boolean {
   // Scanning an order's QR code: company admins, department admins and super admins.
   const scanner = owner || extra.adminSomewhere === true || extra.maintainer === true
-  if (action.kind === 'scan') return scanner && order.stages.some((it) => it.id === action.stage)
+  if (action.kind === 'scan') {
+    if (scanner) return order.stages.some((stage) => stage.id === action.stage)
+    const stage = order.stages[order.current]
+    return stage?.id === action.stage && (stage.assignee === actor || roleOf(stage.department, actor) !== undefined)
+  }
   if (action.kind === 'paid' || action.kind === 'unpaid') {
     const sales = order.stages[0]
     if (sales === undefined || action.stage !== sales.id || order.state === 'cancelled') return false
