@@ -44,7 +44,7 @@ export async function pollInbox (client: ImapFlow, storage: PollStorage): Promis
         )
         const raw = item === false ? undefined : large ? item.headers : item.source
         if (raw === undefined) throw new Error('Message unavailable')
-        const mail = await simpleParser(raw, { skipHtmlToText: true, skipTextToHtml: true })
+        const mail = await simpleParser(raw, { skipTextToHtml: true })
         const from = mail.from?.value[0]?.address ?? ''
         const refs = [
           mail.inReplyTo ?? '',

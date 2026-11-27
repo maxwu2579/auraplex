@@ -1,5 +1,5 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
-import core, { SocialIdType, TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
+import core, { AccountRole, SocialIdType, TxOperations, systemAccountUuid, type Client, type Ref, type WorkspaceUuid, type IntegrationKind, type PersonId } from '@hcengineering/core'
 import contact from '@hcengineering/contact'
 import { setMetadata } from '@hcengineering/platform'
 import prospects, { type ProspectMailCursor } from '@hcengineering/prospects'
@@ -11,9 +11,10 @@ import nodemailer from 'nodemailer'
 import { readConfig } from './config'
 import { AutomatedMail } from './automatedMail'
 import { campaignCompletion } from './automationRunner'
-import { canManageAutomation } from './prospectPermissions'
+import { canManageAutomation, prospectDepartments, prospectLeads } from './prospectPermissions'
 import { Forwarder } from './forwarder'
 import { pollInbox, type Cursor } from './poller'
+import { forwardPendingReplies } from './replyForwarder'
 import { Receiver } from './receiver'
 import { Sender } from './sender'
 import { createApp, type TaskMailBackend, type AutomationBackend } from './server'
@@ -202,8 +203,16 @@ async function pollOnce (): Promise<void> {
   if (config.workspace === undefined) return
   const active = await workspaceSettings(config.workspace as WorkspaceUuid)
   if (active.address === undefined || active.password === undefined) return
-  const client = await workspaceClient(config.workspace as WorkspaceUuid)
-  const receiver = new Receiver(client)
+  const workspace = config.workspace as WorkspaceUuid
+  const client = await workspaceClient(workspace)
+  const account = taskAccount(workspace)
+  const records = new ScheduledRecords(workspace, account)
+  const receiver = new Receiver(client, async () => {
+    const teams = await prospectDepartments(client)
+    if (teams.some((team) => !team.archived && team.modules?.includes('prospects'))) return prospectLeads(teams)
+    const members = await account.getWorkspaceMembers()
+    return prospectLeads(teams, members.filter((member) => member.role === AccountRole.Owner).map((member) => member.person))
+  })
   const imap = new ImapFlow({
     host: active.imap.host,
     port: active.imap.port,
@@ -227,6 +236,7 @@ async function pollOnce (): Promise<void> {
     },
     accept: async (reply) => await receiver.accept(reply)
   })
+  await forwardPendingReplies(client, records, new Forwarder(client, smtp(active), active.address), recordTaskFailure)
 }
 function schedule (delay = Math.min(config.pollMs, 60_000)): void {
   setTimeout(() => {

@@ -33,13 +33,24 @@ export class ScheduledRecords {
     await this.account.updateIntegrationSecret(record)
   }
 
+  private claimKey (kind: string, date: string, parts: string[]): IntegrationSecretKey {
+    const hash = createHash('sha256').update(JSON.stringify([kind, date, ...parts])).digest('hex')
+    return this.key('task-mail:claim:' + hash)
+  }
+
+  async claimedOn (kind: string, date: string, ...parts: string[]): Promise<number | undefined> {
+    const record = await this.account.getIntegrationSecret(this.claimKey(kind, date, parts))
+    if (record == null) return undefined
+    const timestamp = Number(record.secret)
+    return Number.isFinite(timestamp) ? timestamp : 0
+  }
+
   /** The account database's unique key arbitrates sends even across separate workers. */
   async claim (kind: string, date: string, ...parts: string[]): Promise<boolean> {
-    const hash = createHash('sha256').update(JSON.stringify([kind, date, ...parts])).digest('hex')
-    const key = this.key('task-mail:claim:' + hash)
+    const key = this.claimKey(kind, date, parts)
     if (await this.account.getIntegrationSecret(key) != null) return false
     try {
-      await this.account.addIntegrationSecret({ ...key, secret: date })
+      await this.account.addIntegrationSecret({ ...key, secret: String(Date.now()) })
       return true
     } catch (err) {
       if (await this.account.getIntegrationSecret(key) != null) return false

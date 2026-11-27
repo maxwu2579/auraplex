@@ -83,6 +83,8 @@ export class TProspectMail extends TAttachedDoc implements ProspectMail {
   @Prop(TypeAccountUuid(), prospects.string.Prospects) actor?: ProspectMail['actor']
   @Hidden() automation?: ProspectMail['automation']
   @Hidden() campaign?: string
+  @Hidden() forwardRecipients?: ProspectMail['forwardRecipients']
+  @Hidden() forwardedOn?: number
   @Prop(TypeRef(prospects.class.ProspectMail), prospects.string.Prospects) replyTo?: ProspectMail['replyTo']
 }
 @Model(prospects.class.ProspectMailCursor, core.class.Doc, DOMAIN_PROSPECTS)
@@ -107,6 +109,9 @@ export class TMailAutomation extends TDoc implements MailAutomation {
 
 export function createModel (builder: Builder): void {
   builder.createModel(TProspect, TProspectMail, TProspectMailCursor, TProspectTemplate, TMailAutomation)
+  builder.mixin(prospects.class.Prospect, core.class.Class, 'view:mixin:ObjectPanel' as any, {
+    component: prospects.component.ProspectPanel
+  })
   builder.createDoc(prospects.class.ProspectTemplate, core.space.Model, { fields: [...defaultProspectFields] },
     prospects.template.Default)
   builder.createDoc(

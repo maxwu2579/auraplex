@@ -12,6 +12,7 @@ import type { Sender } from './sender'
 import { MailUserError } from './errors'
 
 const dayMs = 86_400_000
+const hourMs = 3_600_000
 export function mailSlots (now: number, limit: number): number[] {
   const day = singaporeClock(now)
   const hour = Number(day.time.slice(0, 2)) - 9
@@ -21,9 +22,15 @@ export function mailSlots (now: number, limit: number): number[] {
   return Array.from({ length: stop - first }, (_, index) => index + first)
 }
 
+function nextSlot (time: number, limit: number): number {
+  let timestamp = time
+  while (mailSlots(timestamp, limit).length === 0) timestamp = Math.floor(timestamp / hourMs) * hourMs + hourMs
+  return timestamp
+}
+
 type Control = Pick<MailAutomation, 'settings' | 'enrolledFrom' | 'releasedThrough' | 'removed' | 'campaign'>
 const defaultControl: Control = { settings: defaultAutomation, removed: [] }
-const campaignRunning = (campaign: MailCampaign | undefined): campaign is MailCampaign =>
+const campaignRunning = (campaign: MailCampaign | undefined): campaign is MailCampaign & { status: 'active' | 'paused' } =>
   campaign !== undefined && (campaign.status === 'active' || campaign.status === 'paused')
 
 function startDate (value: unknown): value is string {
@@ -126,9 +133,10 @@ export class AutomatedMail {
     const sent = mail.filter((entry) => entry.automation !== undefined && entry.delivery === 'sent' &&
       singaporeClock(entry.sentAt).date === singaporeClock(now).date).length
     const oldest = intro[0]?.createdOn
-    const due = oldest === undefined ? undefined
-      : (intro.length >= state.settings.limit || oldest <= (state.releasedThrough ?? -1)) ? now
-        : oldest + state.settings.waitDays * dayMs
+    const due = oldest === undefined || !state.settings.enabled ? undefined : nextSlot(
+      (intro.length >= state.settings.limit || oldest <= (state.releasedThrough ?? -1)) ? now
+        : Math.max(now, oldest + state.settings.waitDays * dayMs), state.settings.limit
+    )
     return {
       settings: state.settings, sent, oldest, due,
       intro: intro.map(({ _id, name }) => ({ id: _id, name })),
@@ -159,10 +167,10 @@ export class AutomatedMail {
     let control = await this.read()
     if (control === undefined) return
     const { customers, intro, mail } = await this.snapshot(control)
-    if (control.settings.enabled && (intro.length >= control.settings.limit ||
-      (intro[0] !== undefined && now - (intro[0].createdOn ?? now) >= control.settings.waitDays * dayMs &&
-        (intro[0].createdOn ?? now) > (control.releasedThrough ?? -1)))) {
-      await this.change(() => ({ releasedThrough: now }))
+    const unreleased = intro.filter((candidate) => (candidate.createdOn ?? now) > (control?.releasedThrough ?? -1))
+    if (control.settings.enabled && (unreleased.length >= control.settings.limit ||
+      (unreleased[0] !== undefined && now - (unreleased[0].createdOn ?? now) >= control.settings.waitDays * dayMs))) {
+      await this.change((state) => ({ releasedThrough: Math.max(now, state.releasedThrough ?? 0) }))
       control = await this.read()
       if (control === undefined) return
     }
@@ -220,17 +228,27 @@ export class AutomatedMail {
     const person = await this.client.findOne(contact.class.Person, { personUuid: actor })
     const message = formatMarketingMail(template, fresh, person === undefined ? '' : formatName(person.name))
     const key = kind === 'intro' ? 'once' : campaign?.id ?? ''
-    if (!await this.records.claim(`prospect-${kind}`, key, email)) return false
+    if (!await this.records.claim(`prospect-${kind}`, key, email)) {
+      const claimed = await this.records.claimedOn(`prospect-${kind}`, key, email)
+      if (claimed !== undefined && Date.now() - claimed > 300_000) {
+        await this.removeAttempt(kind, fresh._id, campaign?.id)
+      }
+      return false
+    }
     try {
       // A deterministic request ID is recorded by Sender before contacting SMTP.
       await sender.send(actor, fresh._id, `${key}-${fresh._id}`, message.subject, message.body, { kind, campaign: campaign?.id && kind === 'campaign' ? campaign.id : undefined })
     } catch {
       onFailure()
-      if (kind === 'intro') await this.change((state) => ({ removed: [...new Set([...state.removed, fresh._id])] }))
-      else await this.change((state) => state.campaign?.id !== campaign?.id || state.campaign === undefined ? {}
-        : { campaign: { ...state.campaign, removed: [...new Set([...state.campaign.removed, fresh._id])] } })
+      await this.removeAttempt(kind, fresh._id, campaign?.id)
     }
     return true
+  }
+
+  private async removeAttempt (kind: 'intro' | 'campaign', id: Ref<Prospect>, campaign?: string): Promise<void> {
+    if (kind === 'intro') await this.change((state) => ({ removed: [...new Set([...state.removed, id])] }))
+    else await this.change((state) => state.campaign?.id !== campaign || state.campaign === undefined ? {}
+      : { campaign: { ...state.campaign, removed: [...new Set([...state.campaign.removed, id])] } })
   }
 
   private async finishCampaign (

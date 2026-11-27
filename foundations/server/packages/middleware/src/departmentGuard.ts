@@ -663,6 +663,22 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       if (level === 'none' || (level === 'view' && cud.objectClass !== orderActionClass)) forbidden()
     }
     if (cud.objectClass === 'prospects:class:MailAutomation') forbidden()
+    if (cud.objectClass === 'prospects:class:ProspectMail') {
+      if (cud._class !== core.class.TxUpdateDoc) forbidden()
+      const ops = (cud as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+      const entry = await this.findOne(ctx, cud.objectClass, cud.objectId) as (Doc & {
+        direction?: string, delivery?: string
+      }) | undefined
+      if (Object.keys(ops).length !== 1 || (ops.delivery !== 'sent' && ops.delivery !== 'failed') ||
+        entry?.direction !== 'outgoing' || (entry.delivery !== 'sending' && entry.delivery !== 'uncertain')) forbidden()
+    }
+    if (cud.objectClass === 'prospects:class:Prospect') {
+      const payload = cud._class === core.class.TxCreateDoc ? (cud as TxCreateDoc<Doc>).attributes
+        : cud._class === core.class.TxUpdateDoc ? (cud as TxUpdateDoc<Doc>).operations : undefined
+      const fields = Object.entries(payload ?? {}).flatMap(([key, value]) =>
+        key.startsWith('$') && value !== null && typeof value === 'object' ? Object.keys(value) : [key])
+      if (fields.some((field) => field.split('.')[0] === 'followUp')) forbidden()
+    }
     if (cud.objectClass === 'prospects:class:ProspectTemplate') {
       // The workspace upgrade creates the singleton. Editors may only replace its field definitions.
       if (cud.objectId !== 'prospects:template:Default' || cud.objectSpace !== core.space.Workspace ||

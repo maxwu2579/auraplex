@@ -47,7 +47,6 @@ export interface Prospect extends Doc {
   owner?: AccountUuid
   mailMessages?: number
   followUp?: Ref<Doc>
-  replyPending?: boolean
   recognitionModel?: string
   recognizedAt?: number
   recognitionBy?: AccountUuid
@@ -66,6 +65,8 @@ export interface ProspectMail extends AttachedDoc<Prospect> {
   replyTo?: Ref<ProspectMail>
   automation?: 'intro' | 'campaign'
   campaign?: string
+  forwardRecipients?: AccountUuid[]
+  forwardedOn?: number
 }
 export interface ProspectMailCursor extends Doc {
   uidValidity: string
@@ -82,7 +83,7 @@ export default plugin(prospectsId, {
   ids: { MailAutomation: '' as Ref<MailAutomation> },
   template: { Default: '' as Ref<ProspectTemplate> },
   app: { Prospects: '' as Ref<Doc> },
-  component: { Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent, MailAutomation: '' as AnyComponent },
+  component: { ProspectPanel: '' as AnyComponent, Directory: '' as AnyComponent, Statistics: '' as AnyComponent, TemplateSettings: '' as AnyComponent, MailAutomation: '' as AnyComponent },
   icon: { Prospects: '' as Asset },
   string: {
     AutoMail: '' as IntlString,

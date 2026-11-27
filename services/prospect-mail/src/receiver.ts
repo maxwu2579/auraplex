@@ -1,9 +1,12 @@
 // Copyright © 2026 Auraplex. Licensed under EPL-2.0.
-import { createHash } from 'crypto'
-import contact, { type PersonSpace } from '@hcengineering/contact'
-import { type AccountUuid, type Doc, type Ref, type TxOperations } from '@hcengineering/core'
-import notification, { type DocNotifyContext } from '@hcengineering/notification'
-import prospects, { matchReply, prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type ProspectMail } from '@hcengineering/prospects'
+import contact, { type Employee } from '@hcengineering/contact'
+import { type AccountUuid, type Ref, type TxOperations } from '@hcengineering/core'
+import prospects, {
+  isOptOutReply, matchReply, normalizeEmail, prospectMailStatus, prospectWriteScope, updateProspectMailStatus, type ProspectMail
+} from '@hcengineering/prospects'
+import time, { ToDoPriority, type ToDo } from '@hcengineering/time'
+import { addProspectNotice } from './prospectNotice'
+import { replyPeople, nextWorkdayEnd, followUpTitle } from './replyFollowUp'
 import { stableMailId } from './sender'
 
 export interface ParsedReply {
@@ -16,14 +19,11 @@ export interface ParsedReply {
   sentAt: number
   references: string[]
 }
-function contextId (prospectId: string, user: string): Ref<DocNotifyContext> {
-  return ('prospect-mail-context-' +
-    createHash('sha256')
-      .update(JSON.stringify([prospectId, user]))
-      .digest('hex')) as Ref<DocNotifyContext>
-}
 export class Receiver {
-  constructor (private readonly client: TxOperations) {}
+  constructor (
+    private readonly client: TxOperations,
+    private readonly leads: () => Promise<AccountUuid[]> = async () => []
+  ) {}
   async accept (reply: ParsedReply): Promise<'recorded' | 'duplicate' | 'unmatched'> {
     const id = stableMailId('in', reply.uidValidity, String(reply.uid))
     if ((await this.client.findOne(prospects.class.ProspectMail, { _id: id })) !== undefined) return 'duplicate'
@@ -44,8 +44,12 @@ export class Receiver {
     // A reply cannot be older than the mail it answers (allow 10 minutes of clock difference).
     const earlier = outgoing.filter((item) => item.sentAt <= reply.sentAt + 10 * 60000)
     const matched = matchReply(reply.from, reply.references, earlier, customers)
-    if (matched.kind !== 'matched') return 'unmatched'
-    const user = matched.outgoing.actor
+    if (matched.kind !== 'matched' || normalizeEmail(reply.from) === '' ||
+      normalizeEmail(reply.from) !== normalizeEmail(matched.outgoing.recipient)) return 'unmatched'
+    const prospect = matched.prospect
+    const optOut = isOptOutReply(reply.text, reply.subject)
+    const recipients = replyPeople(prospect.owner, matched.outgoing.actor, optOut ? [] : await this.leads(), optOut)
+    const now = Date.now()
     const ops = this.client.apply(prospectWriteScope)
     ops.notMatch(prospects.class.ProspectMail, { _id: id })
     if (reply.messageId !== '') {
@@ -66,73 +70,36 @@ export class Receiver {
         subject: reply.subject.slice(0, 200),
         body: reply.text.slice(0, 4000),
         sentAt: reply.sentAt,
-        replyTo: matched.outgoing._id
+        replyTo: matched.outgoing._id,
+        ...(!optOut && recipients.length > 0 ? { forwardRecipients: recipients } : {})
       },
       id
     )
-    // Keep a prior opt-out or bounce in force; receiving a reply must not re-enable marketing mail.
-    const mailStatus = prospectMailStatus(matched.prospect)
-    if (mailStatus !== 'do-not-send' && mailStatus !== 'bounced') {
-      ops.match(prospects.class.Prospect, { _id: matched.prospect._id, modifiedOn: matched.prospect.modifiedOn })
-      await ops.update(matched.prospect, updateProspectMailStatus(matched.prospect, 'replied'))
+    ops.match(prospects.class.Prospect, { _id: prospect._id, modifiedOn: prospect.modifiedOn })
+    const mailStatus = prospectMailStatus(prospect)
+    const changes = optOut
+      ? (prospect.status === 'converted' ? { mailStatus: 'do-not-send' as const } : { status: 'do-not-send' as const })
+      : mailStatus === 'do-not-send' || mailStatus === 'bounced' ? {} : updateProspectMailStatus(prospect, 'replied')
+    if (!optOut && prospect.owner !== undefined) {
+      const employee = await this.client.findOne(contact.mixin.Employee, { personUuid: prospect.owner, active: true })
+      if (employee !== undefined) {
+        const followUp = stableMailId('follow-up', id) as unknown as Ref<ToDo>
+        await ops.createDoc(time.class.ToDo, time.space.ToDos, {
+          user: employee._id as Ref<Employee>, title: followUpTitle(prospect), description: '',
+          dueDate: nextWorkdayEnd(now), doneOn: null, workslots: 0, priority: ToDoPriority.NoPriority,
+          visibility: 'private', rank: '0|hzzzzz:',
+          attachedTo: prospect._id, attachedToClass: prospect._class, attachedSpace: prospect.space, collection: 'replyFollowUps'
+        }, followUp)
+        Object.assign(changes, { followUp })
+      }
     }
-    if (user !== undefined) await this.addNotification(ops, matched.prospect, user, id, reply.sentAt)
+    if (Object.keys(changes).length > 0) await ops.update(prospect, changes)
+    for (const user of recipients) {
+      await addProspectNotice(this.client, ops, prospect, user, id, now,
+        optOut ? prospects.string.AutoMailOptOut : prospects.string.AutoMailCustomerReply,
+        optOut ? prospect.name : [prospect.name, reply.subject, reply.text.slice(0, 400)].filter(Boolean).join(' · '))
+    }
     if (!(await ops.commit()).result) throw new Error('Reply was concurrently processed or customer changed')
     return 'recorded'
-  }
-
-  private async addNotification (
-    ops: ReturnType<TxOperations['apply']>,
-    prospect: Doc,
-    user: AccountUuid,
-    reply: Ref<ProspectMail>,
-    time: number
-  ): Promise<void> {
-    const employee = await this.client.findOne(contact.mixin.Employee, { personUuid: user, active: true })
-    if (employee === undefined) return
-    const space = await this.client.findOne(contact.class.PersonSpace, { person: employee._id })
-    if (space === undefined) throw new Error('Notification space missing')
-    const existing = await this.client.findOne(notification.class.DocNotifyContext, { objectId: prospect._id, user })
-    const ctxId = existing?._id ?? contextId(prospect._id, user)
-    if (existing === undefined) {
-      await ops.createDoc(
-        notification.class.DocNotifyContext,
-        space._id,
-        {
-          user,
-          objectId: prospect._id,
-          objectClass: prospect._class,
-          objectSpace: prospect.space,
-          hidden: false,
-          isPinned: false,
-          lastUpdateTimestamp: time
-        },
-        ctxId
-      )
-    } else {
-      await ops.update(existing, {
-        hidden: false,
-        lastUpdateTimestamp: Math.max(existing.lastUpdateTimestamp ?? 0, time)
-      })
-    }
-    await ops.createDoc(
-      notification.class.CommonInboxNotification,
-      space._id as Ref<PersonSpace>,
-      {
-        user,
-        objectId: prospect._id,
-        objectClass: prospect._class,
-        docNotifyContext: ctxId,
-        isViewed: false,
-        archived: false,
-        header: prospects.string.Prospects,
-        messageHtml: JSON.stringify({
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: '客户回复了邮件，请打开客户资料查看。' }] }]
-        }),
-        types: []
-      },
-      stableMailId('notification', reply, user) as any
-    )
   }
 }

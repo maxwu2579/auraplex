@@ -14,18 +14,19 @@ export class Forwarder {
     private readonly address: string
   ) {}
 
-  async ownerEmail (owner: AccountUuid): Promise<string | undefined> {
+  async ownerEmail (owner: AccountUuid, requireVerified = false): Promise<string | undefined> {
     const person = await this.client.findOne(contact.class.Person, { personUuid: owner })
     if (person === undefined) return undefined
     const ids = await this.client.findAll(contact.class.SocialIdentity, {
       attachedTo: person._id,
       type: SocialIdType.EMAIL
     })
-    const id = ids.find((it) => it.verifiedOn !== undefined) ?? ids[0]
+    const available = ids.filter((it) => it.isDeleted !== true)
+    const id = available.find((it) => it.verifiedOn != null && it.verifiedOn > 0) ?? (requireVerified ? undefined : available[0])
     return id?.value
   }
 
-  async forward (actor: AccountUuid, prospectId: string, replyId: string, requestId: string): Promise<void> {
+  async forward (actor: AccountUuid, prospectId: string, replyId: string, requestId: string, automaticRecipient?: AccountUuid): Promise<void> {
     const id = stableMailId('fwd', requestId)
     const existing = await this.client.findOne(prospects.class.ProspectMail, { _id: id })
     if (existing !== undefined) {
@@ -39,9 +40,10 @@ export class Forwarder {
       direction: 'incoming'
     })
     if (prospect === undefined || reply === undefined) throw new MailUserError('找不到这封回复')
-    if (prospect.owner === undefined) throw new MailUserError('请先选择负责人')
-    const to = await this.ownerEmail(prospect.owner)
-    if (to === undefined || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw new MailUserError('负责人没有邮箱')
+    const recipient = automaticRecipient ?? prospect.owner
+    if (recipient === undefined) throw new MailUserError('请先选择负责人')
+    const to = await this.ownerEmail(recipient, automaticRecipient !== undefined)
+    if (to === undefined || !/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(to)) throw new MailUserError('负责人没有邮箱')
     const subject = `Fwd: ${reply.subject}`.slice(0, 200)
     const body = [
       `客户 ${prospect.name}（${prospect.company}，${prospect.email}）回复了邮件，由 Auraplex 转给你。`,
