@@ -314,27 +314,40 @@
       <button disabled={busy} on:click={() => dispatch('close')}><Label label={prospects.string.PageClose} /></button>
     </header>
     <div class="images">
-      <label
-        ><Label label={prospects.string.PageRequiredFront} /><input
-          disabled={busy}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          on:change={(e) => {
-            choose('front', e.currentTarget.files?.[0])
-          }}
-        /></label
-      ><label
-        ><Label label={prospects.string.PageOptionalBack} /><input
-          disabled={busy}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          on:change={(e) => {
-            choose('back', e.currentTarget.files?.[0])
-          }}
-        /></label
-      >
+      <div class="pick">
+        <Label label={prospects.string.PageRequiredFront} />
+        <label class="file" class:disabled={busy}
+          >{front !== undefined || photos.some((p) => p.name === 'front.jpg') ? $t('更换照片') : $t('选择照片')}<input
+            disabled={busy}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            on:change={(e) => {
+              choose('front', e.currentTarget.files?.[0])
+            }}
+          /></label
+        >
+        <span class="picked"
+          >{front?.name ?? (photos.some((p) => p.name === 'front.jpg') ? $t('已有照片') : $t('还没选'))}</span
+        >
+      </div>
+      <div class="pick">
+        <Label label={prospects.string.PageOptionalBack} />
+        <label class="file" class:disabled={busy}
+          >{back !== undefined || photos.some((p) => p.name === 'back.jpg') ? $t('更换照片') : $t('选择照片')}<input
+            disabled={busy}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            on:change={(e) => {
+              choose('back', e.currentTarget.files?.[0])
+            }}
+          /></label
+        >
+        <span class="picked"
+          >{back?.name ?? (photos.some((p) => p.name === 'back.jpg') ? $t('已有照片') : $t('还没选'))}</span
+        >
+      </div>
       {#if frontPreview}<button on:click={() => (preview = frontPreview)}
           ><img class="thumb" src={frontPreview} alt={$t('待核对的正面')} /></button
         >{/if}{#if backPreview}<button on:click={() => (preview = backPreview)}
@@ -343,7 +356,6 @@
       {#each photos as photo (photo._id)}{#await getBlobRef(photo.file, photo.name) then image}<button
             on:click={() => (preview = image.src)}>{photo.name === 'front.jpg' ? $t('查看正面') : $t('查看背面')}</button
           >{/await}{/each}
-      {#if front}<span>正面已选择：{front.name}</span>{/if}{#if back}<span>背面已选择：{back.name}</span>{/if}
     </div>
     <button disabled={busy || !configured || front === undefined} on:click={recognize}><Label label={prospects.string.PageRecognize} /></button
     >{#if statusMessage !== ''}<span>{statusMessage}</span>{/if}
@@ -466,6 +478,35 @@
     max-width: 90vw;
     max-height: 80vh;
     object-fit: contain;
+  }
+  .pick {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 12rem;
+  }
+  .file {
+    display: inline-block;
+    width: fit-content;
+    cursor: pointer;
+    background: var(--theme-button-default);
+    border: 1px solid var(--theme-button-border);
+    padding: 0.45rem 0.8rem;
+    border-radius: 0.3rem;
+  }
+  .file.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .file input {
+    display: none;
+  }
+  .picked {
+    max-width: 16rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.8;
   }
   .thumb {
     max-width: 14rem;
