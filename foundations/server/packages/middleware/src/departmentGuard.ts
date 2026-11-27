@@ -59,6 +59,7 @@ import {
   type DepartmentPermission,
   type DepartmentPolicy
 } from './departmentPolicy'
+import { ruleDepartments, validRule, type RuleLike } from './ruleShape'
 import { canChangeFlow, canCreateOrder, canEditOrder, canOrderAction, orderPaymentBlocksAction, type OrderLike, type RoleOf } from './orderPolicy'
 import { isOwner, isSystem } from './utils'
 import {
@@ -82,6 +83,8 @@ export const departmentAccessMixin = 'departments:mixin:DepartmentAccess' as Ref
 export const orderClass = 'departments:class:Order' as Ref<Class<Doc>>
 export const orderActionClass = 'departments:class:OrderAction' as Ref<Class<Doc>>
 export const orderFlowClass = 'departments:class:OrderFlow' as Ref<Class<Doc>>
+export const orderRuleClass = 'departments:class:OrderRule' as Ref<Class<Doc>>
+export const ruleRunClass = 'departments:class:RuleRun' as Ref<Class<Doc>>
 export const auditEventClass = 'departments:class:AuditEvent' as Ref<Class<Doc>>
 export const trackingSettingsClass = 'departments:class:TrackingSettings' as Ref<Class<Doc>>
 const auditKinds = ['login', 'view', 'export', 'search']
@@ -255,7 +258,7 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   }
 
   private protectedModule (_class: Ref<Class<Doc>>): string | undefined {
-    if ([orderClass, orderActionClass, orderFlowClass].includes(_class)) return 'orders'
+    if ([orderClass, orderActionClass, orderFlowClass, orderRuleClass, ruleRunClass].includes(_class)) return 'orders'
     if ([auditEventClass, trackingSettingsClass].includes(_class)) return 'tracking'
     if (_class === 'whatsapp:class:Message') return 'whatsapp'
     const alias = _class.split(':')[0]
@@ -662,10 +665,19 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
       const level = (await this.moduleAccess(ctx))?.(alias) ?? 'edit'
       if (level === 'none' || (level === 'view' && cud.objectClass !== orderActionClass)) forbidden()
     }
+    // Automation rules: run records are written by the server only; rules by admins (see checkRule).
+    if (cud.objectClass === ruleRunClass) forbidden()
+    if (cud.objectClass === orderRuleClass) {
+      await this.checkRule(ctx, cud)
+      return
+    }
     if (cud.objectClass === 'prospects:class:MailAutomation') forbidden()
     if (cud.objectClass === 'prospects:class:ProspectMail') {
       if (cud._class !== core.class.TxUpdateDoc) forbidden()
       const ops = (cud as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+      // Merging two cards moves the mail history onto the card that is kept (module editors only, checked above).
+      if (Object.keys(ops).length === 1 && typeof ops.attachedTo === 'string' &&
+        await this.findOne(ctx, 'prospects:class:Prospect' as Ref<Class<Doc>>, ops.attachedTo as Ref<Doc>) !== undefined) return
       const entry = await this.findOne(ctx, cud.objectClass, cud.objectId) as (Doc & {
         direction?: string, delivery?: string
       }) | undefined
@@ -868,6 +880,36 @@ export class DepartmentGuardMiddleware extends BaseMiddleware implements Middlew
   }
 
   /** Orders move only through checked OrderAction records; the system applies them. */
+  /** Super admins and company admins manage every rule; department admins only rules limited to their departments. */
+  private async checkRule (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
+    const account = ctx.contextData.account
+    if (isOwner(account, ctx) || account.role === AccountRole.Maintainer) {
+      if (tx._class === core.class.TxCreateDoc && !validRule((tx as TxCreateDoc<Doc>).attributes as any)) forbidden()
+      return
+    }
+    const adminOf = new Set<string>(this.departments.filter((d) => !d.archived && d.members.admin.includes(account.uuid)).map((d) => d._id))
+    const inside = (rule: Partial<RuleLike> | undefined): boolean => {
+      if (rule === undefined) return false
+      const limited = ruleDepartments({ condition: rule.condition ?? {}, action: rule.action ?? ({} as any) })
+      return limited.length > 0 && limited.every((id) => adminOf.has(id))
+    }
+    if (tx._class === core.class.TxCreateDoc) {
+      const rule = (tx as TxCreateDoc<Doc>).attributes as unknown as RuleLike
+      if (!validRule(rule as any) || !inside(rule)) forbidden()
+      return
+    }
+    const existing = await this.findOne(ctx, orderRuleClass, tx.objectId) as unknown as RuleLike | undefined
+    if (!inside(existing)) forbidden()
+    if (tx._class === core.class.TxUpdateDoc) {
+      const ops = (tx as TxUpdateDoc<Doc>).operations as Record<string, unknown>
+      if (Object.keys(ops).some((key) => !['name', 'enabled', 'trigger', 'condition', 'action'].includes(key))) forbidden()
+      const after = { ...existing, ...ops } as unknown as RuleLike
+      if (!validRule(after as any) || !inside(after)) forbidden()
+      return
+    }
+    if (tx._class !== core.class.TxRemoveDoc) forbidden()
+  }
+
   private async checkOrders (ctx: MeasureContext<SessionData>, tx: TxCUD<Doc>): Promise<void> {
     const owner = isOwner(ctx.contextData.account, ctx)
     const actor = ctx.contextData.account.uuid

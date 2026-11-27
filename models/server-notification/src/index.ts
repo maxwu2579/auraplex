@@ -99,6 +99,15 @@ export function createModel (builder: Builder): void {
     }
   })
 
+  // Auraplex automation rules: react when an application is approved or rejected.
+  builder.createDoc(serverCore.class.Trigger, core.space.Model, {
+    trigger: serverNotification.trigger.OnApplicationRule,
+    txMatch: {
+      _class: core.class.TxUpdateDoc,
+      objectClass: { $in: ['process:class:Execution', 'process:class:ApproveRequest'] as any }
+    }
+  })
+
   builder.createDoc(serverCore.class.Trigger, core.space.Model, {
     trigger: serverNotification.trigger.OnAttributeCreate,
     txMatch: {

@@ -29,7 +29,9 @@ import departments, {
   type OrderAction,
   type TrackingSettings,
   type OrderActionKind,
-  type OrderFlow
+  type OrderFlow,
+  type OrderRule,
+  type RuleRun
 } from '@hcengineering/departments'
 
 export const DOMAIN_ORDERS = 'orders' as Domain
@@ -121,6 +123,30 @@ export class TOrderAction extends TDoc implements OrderAction {
   @Prop(TypeString(), departments.string.Note) reason?: string
 }
 
+@Model(departments.class.OrderRule, core.class.Doc, DOMAIN_ORDERS)
+export class TOrderRule extends TDoc implements OrderRule {
+  @Prop(TypeString(), departments.string.OrderRules) name!: string
+  @Hidden() enabled!: boolean
+  @Hidden() trigger!: OrderRule['trigger']
+  @Hidden() condition!: OrderRule['condition']
+  @Hidden() action!: OrderRule['action']
+}
+
+@Model(departments.class.RuleRun, core.class.Doc, DOMAIN_ORDERS)
+export class TRuleRun extends TDoc implements RuleRun {
+  @Hidden() rule!: RuleRun['rule']
+  @Hidden() target!: RuleRun['target']
+  @Hidden() targetClass!: string
+  @Hidden() label!: string
+  @Hidden() key!: string
+  @Hidden() at!: number
+  @Hidden() result!: RuleRun['result']
+  @Hidden() reason?: string
+  @Hidden() recipients?: RuleRun['recipients']
+  @Hidden() mail?: RuleRun['mail']
+  @Hidden() mailState?: RuleRun['mailState']
+}
+
 @Model(departments.class.AuditEvent, core.class.Doc, DOMAIN_AUDIT)
 @UX(departments.string.AuditEvent, hr.icon.Department, undefined, 'label')
 export class TAuditEvent extends TDoc implements AuditEvent {
@@ -164,7 +190,7 @@ class TDepartmentAutoMembers extends TSpace implements DepartmentAutoMembers {
 }
 
 export function createModel (builder: Builder): void {
-  builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
+  builder.createModel(TDepartmentAccess, TDepartmentAutoMembers, TOrderFlow, TOrder, TOrderAction, TOrderRule, TRuleRun, TAuditEvent, TTrackingSettings, TModuleSettings, TModuleGrant)
   // Inbox: show orders by number and title, and open them on the orders page.
   // Mixin ids are written out so this model does not need the view model package.
   builder.mixin(departments.class.Order, core.class.Class, 'view:mixin:ObjectTitle' as any, {
@@ -207,7 +233,9 @@ export function createModel (builder: Builder): void {
     navigatorModel: {
       specials: [
         { id: 'orders', label: departments.string.Orders, icon: icon('view:icon:List'), component: departments.component.Orders },
-        { id: 'flow', label: departments.string.OrderFlow, icon: icon('view:icon:Tree'), component: departments.component.OrderFlowSettings }
+        { id: 'board', label: departments.string.OrderBoard, icon: icon('view:icon:Table'), component: departments.component.OrderBoard },
+        { id: 'flow', label: departments.string.OrderFlow, icon: icon('view:icon:Tree'), component: departments.component.OrderFlowSettings },
+        { id: 'rules', label: departments.string.OrderRules, icon: icon('setting:icon:Setting'), component: departments.component.OrderRules }
       ],
       spaces: []
     }

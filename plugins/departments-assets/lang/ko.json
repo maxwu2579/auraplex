@@ -42,6 +42,8 @@
     "InviteHelp": "Invitations are added as read-only members.",
     "Orders": "Orders",
     "OrderFlow": "Order flow",
+    "OrderBoard": "Board",
+    "OrderRules": "Automation rules",
     "Order": "Order",
     "OrderNumber": "Order number",
     "OrderTitle": "Order",

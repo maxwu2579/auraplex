@@ -18,6 +18,18 @@ import activity, { ActivityMessage, DocUpdateMessage } from '@hcengineering/acti
 import { getClient as getAccountClient } from '@hcengineering/account-client'
 import materials, { shouldAlertLowStock, type StockMovement } from '@hcengineering/materials'
 import departments, {
+  addWorkdays,
+  applicationRuleEvent,
+  memberDepartments,
+  orderRuleEvent,
+  ruleApplies,
+  ruleRecipients,
+  ruleRunId,
+  ruleText,
+  type DepartmentAccess,
+  type OrderRule,
+  type RuleEvent,
+  type RuleRun,
   defaultOrderStages,
   defaultTrackingSettings,
   type AuditEvent,
@@ -2122,6 +2134,137 @@ async function applyOrderAction (control: TriggerControl, tx: TxCreateDoc<OrderA
   results.unshift(
     control.txFactory.createTxUpdateDoc(departments.class.Order, order.space, order._id, { stages, current, state })
   )
+  // Automation rules react to what this action changed.
+  const after = { ...order, stages, current, state } as Order
+  const events: RuleEvent[] = []
+  stages.forEach((item, i) => {
+    const before = order.stages.find((original) => original.id === item.id)
+    if (item.status === 'done' && before?.status !== 'done') events.push(orderRuleEvent('stageDone', after, i, tx.objectId))
+    if (item.status === 'active' && before?.status !== 'active' && before?.status !== 'approval') {
+      events.push(orderRuleEvent('stageStart', after, i, tx.objectId))
+    }
+  })
+  if (action.kind === 'paid' && order.paidOn === undefined) events.push(orderRuleEvent('paid', after, 0, tx.objectId))
+  await runRules(control, results, tx, events)
+  return results
+}
+
+// Auraplex automation rules: "when → if → do". The decisions are the shared helpers in
+// @hcengineering/departments (the settings page uses the same ones for its dry run).
+// Each rule runs once per occurrence: the run record id is derived from the rule and the occurrence.
+async function runRules (control: TriggerControl, results: Tx[], tx: TxCUD<Doc>, events: RuleEvent[]): Promise<void> {
+  if (events.length === 0) return
+  const rules = await control.findAll(control.ctx, departments.class.OrderRule, { enabled: true })
+  if (rules.length === 0) return
+  const teams = await ruleTeams(control)
+  for (const event of events) {
+    for (const rule of rules) {
+      if (!ruleApplies(rule, event).ok) continue
+      const id = ruleRunId(rule._id, event.key) as Ref<RuleRun>
+      if ((await control.findAll(control.ctx, departments.class.RuleRun, { _id: id }, { limit: 1 })).length > 0) continue
+      results.push(...await ruleActionTxes(control, tx, rule, event, teams, id))
+    }
+  }
+}
+
+async function ruleTeams (control: TriggerControl): Promise<DepartmentAccess[]> {
+  const docs = await control.findAll(control.ctx, hr.class.Department, {})
+  return docs.filter((doc) => control.hierarchy.hasMixin(doc, departments.mixin.DepartmentAccess))
+    .map((doc) => control.hierarchy.as(doc, departments.mixin.DepartmentAccess)).filter((doc) => !doc.archived)
+}
+
+async function ruleActionTxes (
+  control: TriggerControl, tx: TxCUD<Doc>, rule: OrderRule, event: RuleEvent, teams: DepartmentAccess[], id: Ref<RuleRun>
+): Promise<Tx[]> {
+  const results: Tx[] = []
+  const now = tx.modifiedOn
+  const people = ruleRecipients(rule.action, event, (team) => teams.find((it) => it._id === team))
+  const text = ruleText(rule.action.title, event)
+  const run: Partial<RuleRun> = {
+    rule: rule._id,
+    target: event.target._id,
+    targetClass: event.target._class,
+    label: event.label,
+    key: event.key,
+    at: now,
+    result: 'done',
+    recipients: people
+  }
+  if (people.length === 0) {
+    run.result = 'skipped'
+    run.reason = '找不到要通知的人'
+  } else if (rule.action.kind === 'todo') {
+    const employees = await control.findAll(control.ctx, contact.mixin.Employee, { personUuid: { $in: people }, active: true })
+    for (const employee of employees) {
+      results.push(control.txFactory.createTxCreateDoc(orderTodoClass, orderTodoSpace, {
+        attachedTo: event.target._id,
+        attachedToClass: event.target._class,
+        attachedSpace: event.target.space,
+        collection: 'ruleTodos',
+        user: employee._id,
+        title: text,
+        description: '',
+        workslots: 0,
+        priority: 3,
+        visibility: 'private',
+        doneOn: null,
+        dueDate: addWorkdays(now, rule.action.dueDays ?? 1),
+        rank: '0|hzzzzz:'
+      } as any, generateId()))
+    }
+    if (employees.length === 0) {
+      run.result = 'skipped'
+      run.reason = '这些人没有员工账号'
+    }
+  } else if (rule.action.kind === 'notify') {
+    await notifyOrder(control, results, tx, event.target as any, people, departments.string.OrderRules, `${text}\n${event.label}`)
+  } else {
+    // The mail service sends it on its next check (it holds the company mailbox settings).
+    run.mail = { to: people, subject: 'Auraplex · ' + text, text: `${text}\n${event.label}` }
+    run.mailState = 'pending'
+  }
+  results.push(control.txFactory.createTxCreateDoc(departments.class.RuleRun, core.space.Workspace, run as any, id))
+  return results
+}
+
+/**
+ * Applications: rules for "approved" (the approval process finished with no rejection) and
+ * "rejected" (an approver said no).
+ */
+export async function OnApplicationRule (txes: Tx[], control: TriggerControl): Promise<Tx[]> {
+  const results: Tx[] = []
+  const requestClass = 'process:class:ApproveRequest' as Ref<Class<Doc>>
+  for (const tx of txes) {
+    if (tx._class !== core.class.TxUpdateDoc) continue
+    const update = tx as TxUpdateDoc<Doc>
+    const operations = update.operations as Record<string, any>
+    let kind: 'appApproved' | 'appRejected' | undefined
+    let cardId: Ref<Doc> | undefined
+    if (update.objectClass === requestClass && operations.approved === false) {
+      const request = (await control.findAll(control.ctx, requestClass, { _id: update.objectId }, { limit: 1 }))[0] as any
+      kind = 'appRejected'
+      cardId = request?.card
+    } else if (update.objectClass === ('process:class:Execution' as Ref<Class<Doc>>) && operations.status === 'done') {
+      const requests = (await control.findAll(control.ctx, requestClass, { execution: update.objectId } as any)) as any[]
+      if (requests.length === 0 || requests.some((it) => it.approved === false)) continue
+      kind = 'appApproved'
+      cardId = requests[0].card
+    }
+    if (kind === undefined || cardId === undefined) continue
+    const rules = await control.findAll(control.ctx, departments.class.OrderRule, { enabled: true })
+    if (!rules.some((rule) => rule.trigger.kind === kind)) continue
+    const card = (await control.findAll(control.ctx, 'card:class:Card' as Ref<Class<Doc>>, { _id: cardId }, { limit: 1 }))[0] as any
+    if (card === undefined) continue
+    const applicant = card.createdBy === undefined ? undefined : (await getAccountBySocialId(control, card.createdBy)) ?? undefined
+    const teams = await ruleTeams(control)
+    const event = applicationRuleEvent(kind, card, applicant, memberDepartments(teams, applicant), update.objectId)
+    for (const rule of rules) {
+      if (!ruleApplies(rule, event).ok) continue
+      const id = ruleRunId(rule._id, event.key) as Ref<RuleRun>
+      if ((await control.findAll(control.ctx, departments.class.RuleRun, { _id: id }, { limit: 1 })).length > 0) continue
+      results.push(...await ruleActionTxes(control, update, rule, event, teams, id))
+    }
+  }
   return results
 }
 
@@ -2351,6 +2494,7 @@ export default async () => ({
     OnMaterialStockMovement,
     OnOrder,
     OnApplicationCancelled,
+    OnApplicationRule,
     OnAuditLogin,
     OnAuditView,
     PushNotificationsHandler

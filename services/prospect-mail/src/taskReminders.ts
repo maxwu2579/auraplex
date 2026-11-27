@@ -10,7 +10,7 @@ import type { ScheduledTask, taskSnapshot } from './taskSnapshot'
 
 export type SendTaskMail = (user: AccountUuid, subject: string, text: string, html?: string) => Promise<void>
 
-async function inbox (
+export async function inbox (
   client: TxOperations, user: AccountUuid, space: PersonSpace, item: ScheduledTask, now: number
 ): Promise<void> {
   const source = item.source

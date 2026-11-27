@@ -2,11 +2,14 @@
 import type { MasterTag } from '@hcengineering/card'
 import type { CompanyModuleDefaults, AccountUuid, Class, Client, Doc, Mixin, ModuleAccess, ModuleExtra, Ref, Space } from '@hcengineering/core'
 import type { Department } from '@hcengineering/hr'
+import type { OrderRule, RuleRun } from './rules'
 import { plugin, type IntlString, type Plugin, type Resource } from '@hcengineering/platform'
 import type { AnyComponent } from '@hcengineering/ui'
 
 export { primaryStaffDepartments } from './staffDepartment'
 export * from './tasks'
+export * from './board'
+export * from './rules'
 
 export type DepartmentPermission = 'create' | 'update' | 'delete' | 'comment' | 'invite' | 'manageMembers'
 export interface DepartmentAccess extends Department {
@@ -180,7 +183,9 @@ export default plugin(departmentsId, {
     OrderFlow: '' as Ref<Class<OrderFlow>>,
     OrderAction: '' as Ref<Class<OrderAction>>,
     AuditEvent: '' as Ref<Class<AuditEvent>>,
-    TrackingSettings: '' as Ref<Class<TrackingSettings>>
+    TrackingSettings: '' as Ref<Class<TrackingSettings>>,
+    OrderRule: '' as Ref<Class<OrderRule>>,
+    RuleRun: '' as Ref<Class<RuleRun>>
   },
   ids: { ModuleSettings: '' as Ref<ModuleSettings>, OrderFlow: '' as Ref<OrderFlow>, TrackingSettings: '' as Ref<TrackingSettings> },
   app: { Departments: '' as Ref<Doc>, Orders: '' as Ref<Doc>, Tracking: '' as Ref<Doc>, TodayTasks: '' as Ref<Doc> },
@@ -194,12 +199,16 @@ export default plugin(departmentsId, {
     TodayActivity: '' as AnyComponent,
     TodayTasks: '' as AnyComponent,
     TaskBadge: '' as AnyComponent,
-    OrderPanel: '' as AnyComponent
+    OrderPanel: '' as AnyComponent,
+    OrderBoard: '' as AnyComponent,
+    OrderRules: '' as AnyComponent
   },
   function: {
     OrderTitle: '' as Resource<(client: Client, ref: Ref<Doc>, doc?: Doc) => Promise<string>>
   },
   string: {
+    OrderBoard: '' as IntlString,
+    OrderRules: '' as IntlString,
     TaskMailOverdue: '' as IntlString,
     TaskMailDueToday: '' as IntlString,
     TaskMailActiveOrders: '' as IntlString,

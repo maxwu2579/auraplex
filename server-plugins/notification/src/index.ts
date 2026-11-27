@@ -125,6 +125,7 @@ export default plugin(serverNotificationId, {
     OnMaterialStockMovement: '' as Resource<TriggerFunc>,
     OnOrder: '' as Resource<TriggerFunc>,
     OnApplicationCancelled: '' as Resource<TriggerFunc>,
+    OnApplicationRule: '' as Resource<TriggerFunc>,
     OnAuditLogin: '' as Resource<TriggerFunc>,
     OnAuditView: '' as Resource<TriggerFunc>,
     PushNotificationsHandler: '' as Resource<TriggerFunc>

@@ -23,6 +23,7 @@ import { ScheduledRecords } from './scheduledRecords'
 import { digestIsDue, formatDigest, sendDailyDigest } from './taskDigest'
 import { taskMailLabel } from './taskMailLabels'
 import { taskSnapshot } from './taskSnapshot'
+import { runOverdueRules, sendRuleMails } from './ruleJobs'
 import { recordTaskFailure, sendOverdueReminders, type SendTaskMail } from './taskReminders'
 
 const config = readConfig(process.env)
@@ -106,6 +107,14 @@ function workbenchLink (workspaceUrl: string): string {
 
 let lastDigestRun: string | undefined
 
+/** Automation rules: overdue-stage rules on working days, and emails rules asked for at any time. */
+async function ruleJobs (workspace: WorkspaceUuid, records: ScheduledRecords, now: number, workday: boolean): Promise<void> {
+  const client = await workspaceClient(workspace)
+  if (workday) await runOverdueRules(client, records, now)
+  const active = await workspaceSettings(workspace).catch(() => undefined)
+  await sendRuleMails(client, records, active === undefined ? undefined : taskSender(client, active))
+}
+
 async function checkScheduledTasks (now: number): Promise<void> {
   if (config.workspace === undefined) return
   const day = singaporeClock(now)
@@ -119,6 +128,7 @@ async function checkScheduledTasks (now: number): Promise<void> {
   const runKey = settings === undefined ? '' : `${day.date}:${settings.time}`
   const shouldDigest = settings !== undefined && lastDigestRun !== runKey && digestIsDue(settings, day)
   const shouldRemind = workdays.includes(day.weekday)
+  await ruleJobs(workspace, records, now, shouldRemind).catch(() => { recordTaskFailure('rules') })
   if (!shouldRemind && !shouldDigest) return
   const [client, info, active] = await Promise.all([
     workspaceClient(workspace),

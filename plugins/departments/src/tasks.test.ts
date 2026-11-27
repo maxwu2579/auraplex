@@ -23,7 +23,7 @@ test('only includes people in departments the actor leads, even when the person 
     { supervisors: [actor], employees: [member] },
     { employees: [actor, unrelated] },
     { administrators: [actor], employees: [unrelated], archived: true }
-  ] as DepartmentAccess[]
+  ] as unknown as DepartmentAccess[]
   expect(managedTaskPeople(teams, actor)).toEqual({ manages: true, people: new Set([actor, member]) })
   expect(managedTaskPeople(teams, unrelated)).toEqual({ manages: false, people: new Set() })
 })

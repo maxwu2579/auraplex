@@ -46,6 +46,8 @@
     "InviteHelp": "邀请的成员默认只能查看和评论。",
     "Orders": "订单",
     "OrderFlow": "订单流程",
+    "OrderBoard": "看板",
+    "OrderRules": "自动化规则",
     "Order": "订单",
     "OrderNumber": "订单编号",
     "OrderTitle": "订单名称",

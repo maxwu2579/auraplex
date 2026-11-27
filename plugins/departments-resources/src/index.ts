@@ -10,6 +10,8 @@ import TodayActivity from './components/TodayActivity.svelte'
 import TodayTasks from './components/TodayTasks.svelte'
 import TaskBadge from './components/TaskBadge.svelte'
 import OrderPanel from './components/OrderPanel.svelte'
+import OrderBoard from './components/OrderBoard.svelte'
+import OrderRules from './components/OrderRules.svelte'
 import departments, { type Order } from '@hcengineering/departments'
 import type { Client, Doc, Ref } from '@hcengineering/core'
 
@@ -20,6 +22,6 @@ async function orderTitle (client: Client, ref: Ref<Doc>, doc?: Doc): Promise<st
 }
 
 export default async (): Promise<Resources> => ({
-  component: { Directory, Orders, OrderFlowSettings, ActivityLog, Workload, TrackingSettingsPage, TodayActivity, OrderPanel, TodayTasks, TaskBadge },
+  component: { Directory, Orders, OrderFlowSettings, ActivityLog, Workload, TrackingSettingsPage, TodayActivity, OrderPanel, TodayTasks, TaskBadge, OrderBoard, OrderRules },
   function: { OrderTitle: orderTitle }
 })

@@ -11,7 +11,7 @@ function fixture () {
   const tx = jest.fn().mockResolvedValue({})
   const context = { hierarchy: { isDerived: (actual: string, expected: string) => actual === expected } }
   const next = { findAll, tx } as unknown as Middleware
-  return { middleware: new ApplyTxMiddleware(context as unknown as PipelineContext, next), findAll, tx }
+  return { middleware: new (ApplyTxMiddleware as any)(context as unknown as PipelineContext, next) as ApplyTxMiddleware, findAll, tx }
 }
 
 function conditional (key: 'match' | 'notMatch', name = 'test'): TxApplyIf {
