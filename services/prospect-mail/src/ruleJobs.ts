@@ -4,11 +4,13 @@
 import contact from '@hcengineering/contact'
 import core, { type AccountUuid, type Ref, type TxOperations } from '@hcengineering/core'
 import departments, {
-  addWorkdays, orderDeadline, orderRuleEvent, ruleApplies, ruleRecipients, ruleRunId, ruleText,
+  addWorkdays, applicationRuleEvent, memberDepartments, orderDeadline, orderRuleEvent, ruleApplies, ruleRecipients, ruleRunId, ruleText,
   type DepartmentAccess, type Order, type OrderRule, type RuleEvent, type RuleRun
 } from '@hcengineering/departments'
 import hr from '@hcengineering/hr'
 import time from '@hcengineering/time'
+import processModel from '@hcengineering/process'
+import card from '@hcengineering/card'
 import type { ScheduledRecords } from './scheduledRecords'
 import { inbox, type SendTaskMail } from './taskReminders'
 
@@ -34,7 +36,7 @@ async function act (
   client: TxOperations, rule: OrderRule, event: RuleEvent, people: AccountUuid[], now: number
 ): Promise<Partial<RuleRun>> {
   const text = ruleText(rule.action.title, event)
-  const order = event.target as Order
+  const order = event.target
   if (rule.action.kind === 'mail') {
     return { mail: { to: people, subject: 'Auraplex · ' + text, text: text + '\n' + event.label }, mailState: 'pending' }
   }
@@ -64,8 +66,58 @@ export async function runOverdueRules (client: TxOperations, records: ScheduledR
     .filter((rule) => rule.trigger.kind === 'stageOverdue')
   if (rules.length === 0) return
   const events = overdueEvents(await client.findAll(departments.class.Order, { state: 'active' }), now)
-  if (events.length === 0) return
+  await runEvents(client, records, rules, events, now)
+}
+
+const recentMs = 3 * 86_400_000
+
+/**
+ * Applications approved (the approval flow finished with no rejection) or rejected in the last days.
+ * Checked here rather than in a server trigger: the process service finishes flows in batched writes
+ * that do not reach server triggers. Keys match the trigger's, so a run never happens twice.
+ */
+export async function runApplicationRules (client: TxOperations, records: ScheduledRecords, now: number): Promise<void> {
+  const rules = (await client.findAll(departments.class.OrderRule, { enabled: true }))
+    .filter((rule) => rule.trigger.kind === 'appApproved' || rule.trigger.kind === 'appRejected')
+  if (rules.length === 0) return
+  const since = now - recentMs
   const allTeams = await teams(client)
+  const applicantOf = async (doc: { createdBy?: string }): Promise<AccountUuid | undefined> => {
+    if (doc.createdBy === undefined) return undefined
+    const identity = await client.findOne(contact.class.SocialIdentity, { _id: doc.createdBy as any })
+    if (identity === undefined) return undefined
+    return (await client.findOne(contact.mixin.Employee, { _id: identity.attachedTo as any }))?.personUuid
+  }
+  const events: RuleEvent[] = []
+  if (rules.some((rule) => rule.trigger.kind === 'appApproved')) {
+    const done = await client.findAll(processModel.class.Execution, { status: 'done' as any, modifiedOn: { $gt: since } })
+    for (const execution of done) {
+      const requests = await client.findAll(processModel.class.ApproveRequest, { execution: execution._id })
+      if (requests.length === 0 || requests.some((it) => it.approved === false)) continue
+      const doc = await client.findOne(card.class.Card, { _id: execution.card })
+      if (doc === undefined) continue
+      const applicant = await applicantOf(doc)
+      events.push(applicationRuleEvent('appApproved', doc, applicant, memberDepartments(allTeams, applicant), execution._id))
+    }
+  }
+  if (rules.some((rule) => rule.trigger.kind === 'appRejected')) {
+    const rejected = await client.findAll(processModel.class.ApproveRequest, { approved: false, modifiedOn: { $gt: since } })
+    for (const request of rejected) {
+      const doc = await client.findOne(card.class.Card, { _id: request.card })
+      if (doc === undefined) continue
+      const applicant = await applicantOf(doc)
+      events.push(applicationRuleEvent('appRejected', doc, applicant, memberDepartments(allTeams, applicant), request._id))
+    }
+  }
+  await runEvents(client, records, rules, events, now, allTeams)
+}
+
+async function runEvents (
+  client: TxOperations, records: ScheduledRecords, rules: OrderRule[], events: RuleEvent[], now: number,
+  known?: DepartmentAccess[]
+): Promise<void> {
+  if (events.length === 0) return
+  const allTeams = known ?? await teams(client)
   for (const event of events) {
     for (const rule of rules) {
       if (!ruleApplies(rule, event).ok) continue

@@ -23,7 +23,7 @@ import { ScheduledRecords } from './scheduledRecords'
 import { digestIsDue, formatDigest, sendDailyDigest } from './taskDigest'
 import { taskMailLabel } from './taskMailLabels'
 import { taskSnapshot } from './taskSnapshot'
-import { runOverdueRules, sendRuleMails } from './ruleJobs'
+import { runApplicationRules, runOverdueRules, sendRuleMails } from './ruleJobs'
 import { recordTaskFailure, sendOverdueReminders, type SendTaskMail } from './taskReminders'
 
 const config = readConfig(process.env)
@@ -111,6 +111,7 @@ let lastDigestRun: string | undefined
 async function ruleJobs (workspace: WorkspaceUuid, records: ScheduledRecords, now: number, workday: boolean): Promise<void> {
   const client = await workspaceClient(workspace)
   if (workday) await runOverdueRules(client, records, now)
+  await runApplicationRules(client, records, now)
   const active = await workspaceSettings(workspace).catch(() => undefined)
   await sendRuleMails(client, records, active === undefined ? undefined : taskSender(client, active))
 }
